@@ -71,20 +71,6 @@
         </div>
       </article>
 
-      <div class="grid-two">
-        <article class="card panel">
-          <h2>Contributi delle coordinate</h2>
-          <p class="panel-sub" id="bar-subtitle">Ogni barra rappresenta |xⱼ − yⱼ|².</p>
-          <div class="bars" id="bars"></div>
-        </article>
-
-        <article class="card panel">
-          <h2>Vista geometrica</h2>
-          <p class="panel-sub">Disponibile quando i vettori appartengono a ℝ².</p>
-          <svg class="plot" id="plot" viewBox="0 0 420 320" role="img" aria-label="Rappresentazione dei due vettori nel piano"></svg>
-        </article>
-      </div>
-
       <article class="card explanation">
         <h2 class="measure-title">Come leggere il risultato</h2>
         <div class="explanation-grid">
@@ -93,6 +79,20 @@
           <div class="note"><b>Proprietà</b><span>È una metrica: non negativa, simmetrica e soddisfa la disuguaglianza triangolare.</span></div>
         </div>
       </article>
+
+      <div class="grid-two" id="visual-panels">
+        <article class="card panel">
+          <h2>Contributi delle coordinate</h2>
+          <p class="panel-sub" id="bar-subtitle">Ogni barra rappresenta |xⱼ − yⱼ|².</p>
+          <div class="bars" id="bars"></div>
+        </article>
+
+        <article class="card panel" id="geometry-panel">
+          <h2>Vista geometrica</h2>
+          <p class="panel-sub">Rappresentazione dei vettori nel piano ℝ².</p>
+          <svg class="plot" id="plot" viewBox="0 0 420 320" role="img" aria-label="Rappresentazione dei due vettori nel piano"></svg>
+        </article>
+      </div>
     </section>
   </main>
 
