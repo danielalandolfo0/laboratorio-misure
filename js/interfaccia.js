@@ -57,8 +57,14 @@
 
   function disegnaPiano(x, y, tipo) {
     const svg = $("plot");
-    if (x.length !== 2) {
-      svg.innerHTML = '<text x="210" y="150" text-anchor="middle" fill="#61706c" font-size="14">Vista disponibile soltanto in ℝ²</text>';
+    const pannello = $("geometry-panel");
+    const contenitore = $("visual-panels");
+    const disponibile = x.length === 2;
+
+    pannello.hidden = !disponibile;
+    contenitore.classList.toggle("geometry-hidden", !disponibile);
+    if (!disponibile) {
+      svg.replaceChildren();
       return;
     }
 
@@ -82,17 +88,17 @@
     const Y = { x: scalaX(y[0]), y: scalaY(y[1]) };
 
     const collegamento = tipo === "manhattan"
-      ? `<polyline points="${X.x},${X.y} ${Y.x},${X.y} ${Y.x},${Y.y}" fill="none" stroke="#dd6b35" stroke-width="3" stroke-dasharray="7 5"/>`
-      : `<line x1="${X.x}" y1="${X.y}" x2="${Y.x}" y2="${Y.y}" stroke="#dd6b35" stroke-width="3"/>`;
+      ? `<polyline points="${X.x},${X.y} ${Y.x},${X.y} ${Y.x},${Y.y}" fill="none" stroke="#7657ff" stroke-width="3" stroke-dasharray="7 5"/>`
+      : `<line x1="${X.x}" y1="${X.y}" x2="${Y.x}" y2="${Y.y}" stroke="#7657ff" stroke-width="3"/>`;
 
     svg.innerHTML = `
-      <line x1="${margine}" y1="${scalaY(0)}" x2="${larghezza - margine}" y2="${scalaY(0)}" stroke="#c9c5ba"/>
-      <line x1="${scalaX(0)}" y1="${margine}" x2="${scalaX(0)}" y2="${altezza - margine}" stroke="#c9c5ba"/>
+      <line x1="${margine}" y1="${scalaY(0)}" x2="${larghezza - margine}" y2="${scalaY(0)}" stroke="#b8c5d9"/>
+      <line x1="${scalaX(0)}" y1="${margine}" x2="${scalaX(0)}" y2="${altezza - margine}" stroke="#b8c5d9"/>
       ${collegamento}
-      <circle cx="${X.x}" cy="${X.y}" r="7" fill="#176b67"/>
-      <text x="${X.x + 10}" y="${X.y - 10}" fill="#17211f" font-size="14" font-weight="700">x</text>
-      <circle cx="${Y.x}" cy="${Y.y}" r="7" fill="#dd6b35"/>
-      <text x="${Y.x + 10}" y="${Y.y - 10}" fill="#17211f" font-size="14" font-weight="700">y</text>`;
+      <circle cx="${X.x}" cy="${X.y}" r="7" fill="#087cff"/>
+      <text x="${X.x + 10}" y="${X.y - 10}" fill="#172033" font-size="14" font-weight="700">x</text>
+      <circle cx="${Y.x}" cy="${Y.y}" r="7" fill="#7657ff"/>
+      <text x="${Y.x + 10}" y="${Y.y - 10}" fill="#172033" font-size="14" font-weight="700">y</text>`;
   }
 
   function eseguiCalcolo() {
