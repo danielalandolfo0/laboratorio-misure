@@ -6,6 +6,16 @@
   <meta name="description" content="Laboratorio interattivo per calcolare e comprendere le distanze tra vettori.">
   <title>Calcolo delle misure tra due elementi</title>
   <link rel="stylesheet" href="css/stile.css">
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [["\\(", "\\)"]],
+        displayMath: [["\\[", "\\]"]]
+      },
+      startup: { typeset: false }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
 </head>
 <body>
   <header class="shell">
@@ -53,7 +63,7 @@
         <div>
           <p class="section-label">Risultato</p>
           <h2 class="measure-title" id="measure-title">Distanza euclidea</h2>
-          <div class="formula" id="formula">d₂(x,y) = (Σ |xⱼ − yⱼ|²)¹⁄²</div>
+          <div class="formula" id="formula">\(d_2(x,y)=\left(\sum_j |x_j-y_j|^2\right)^{1/2}\)</div>
         </div>
         <div class="number">
           <small>d(x,y)</small>

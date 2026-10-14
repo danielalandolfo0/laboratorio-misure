@@ -4,6 +4,20 @@
 
   const $ = id => document.getElementById(id);
   const M = window.Misure;
+  let timerFormula;
+
+  function scriviFormula(tex) {
+    const elemento = $("formula");
+    if (window.MathJax?.typesetClear) window.MathJax.typesetClear([elemento]);
+    elemento.textContent = `\\[${tex}\\]`;
+
+    clearTimeout(timerFormula);
+    timerFormula = setTimeout(() => {
+      if (window.MathJax?.typesetPromise) {
+        window.MathJax.typesetPromise([elemento]).catch(errore => console.error("Errore MathJax:", errore));
+      }
+    }, 70);
+  }
 
   function parametroCorrente() {
     const tipo = $("measure").value;
@@ -17,9 +31,10 @@
 
     $("q-panel").hidden = tipo !== "minkowski";
     $("measure-title").textContent = info.nome;
-    $("formula").textContent = tipo === "minkowski"
-      ? `d_q(x,y) = (Σ |xⱼ − yⱼ|^q)^(1/q),  q = ${M.formatta(q)}`
+    const formula = tipo === "minkowski"
+      ? `${info.formula},\\qquad q=${M.formatta(q)}`
       : info.formula;
+    scriviFormula(formula);
     $("bar-subtitle").textContent = info.contributo.replace("^q", `^${M.formatta(q)}`);
     $("interpretation").textContent = info.interpretazione;
   }
@@ -121,4 +136,5 @@
   });
 
   eseguiCalcolo();
+  window.addEventListener("load", aggiornaTesti);
 })();
