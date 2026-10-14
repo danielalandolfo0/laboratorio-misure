@@ -8,9 +8,12 @@ Applicazione didattica per calcolare, confrontare e visualizzare misure di dista
 - distanza euclidea;
 - distanza di Manhattan;
 - distanza di Chebyshev;
+- distanze binarie di Jaccard, Dice, Ochiai e Hamming normalizzata;
+- selezione del tipo di dato e delle sole misure compatibili;
 - contributi delle singole coordinate;
-- rappresentazione geometrica per vettori in due dimensioni;
-- controlli sulla validità degli input.
+- rappresentazione geometrica per vettori numerici in due dimensioni;
+- conteggi \(n_{11}, n_{10}, n_{01}, n_{00}\) per dati di presenza/assenza;
+- controlli sulla validità degli input numerici e binari.
 
 ## Struttura del progetto
 
