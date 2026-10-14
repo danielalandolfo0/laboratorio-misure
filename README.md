@@ -4,11 +4,9 @@ Applicazione didattica per calcolare, confrontare e visualizzare misure di dista
 
 ## Funzionalità disponibili
 
-- distanza di Minkowski con parametro `q ≥ 1`;
-- distanza euclidea;
-- distanza di Manhattan;
-- distanza di Chebyshev;
-- distanze binarie di Jaccard, Dice, Ochiai e Hamming normalizzata;
+- famiglia di Minkowski: forma generale, Manhattan, Euclidea, Chebyshev, versione pesata ed Euclidea standardizzata;
+- somma delle potenze δq, Mahalanobis, Canberra, Bray–Curtis e χ² simmetrica;
+- coefficienti binari simmetrici, asimmetrici, pesati e di associazione descritti nell’atlante;
 - selezione del tipo di dato e delle sole misure compatibili;
 - contributi delle singole coordinate;
 - rappresentazione geometrica per vettori numerici in due dimensioni;

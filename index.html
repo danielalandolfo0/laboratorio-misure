@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Laboratorio interattivo per calcolare e comprendere misure tra dati numerici e binari.">
   <title>Calcolo delle misure tra due elementi</title>
-  <link rel="stylesheet" href="css/stile.css?v=20261014-3">
+  <link rel="stylesheet" href="css/stile.css?v=20261014-4">
   <script>
     window.MathJax = {
       tex: {
@@ -55,7 +55,29 @@
       <div class="q-panel" id="q-panel" hidden>
         <label for="q"><span>Parametro q</span><strong id="q-value">3</strong></label>
         <input id="q" type="range" min="1" max="10" step="0.5" value="3">
-        <p class="hint">Per ottenere una metrica occorre q ≥ 1.</p>
+        <p class="hint" id="q-help">Per ottenere una metrica occorre q ≥ 1.</p>
+      </div>
+
+      <div class="parameter-panel" id="vector-parameter-panel" hidden>
+        <label for="vector-parameter" id="vector-parameter-label">Pesi w</label>
+        <input id="vector-parameter" value="1, 1" inputmode="decimal">
+        <p class="hint" id="vector-parameter-help"></p>
+      </div>
+
+      <div class="parameter-panel" id="matrix-panel" hidden>
+        <label for="matrix-s">Matrice S</label>
+        <textarea id="matrix-s" rows="3">1, 0; 0, 1</textarea>
+        <p class="hint">Separa le righe con un punto e virgola; S deve essere simmetrica definita positiva.</p>
+      </div>
+
+      <div class="parameter-panel" id="binary-weights-panel" hidden>
+        <p class="parameter-title">Pesi della famiglia binaria</p>
+        <div class="parameter-grid">
+          <label for="lambda">λ<input id="lambda" type="number" min="0" step="0.1" value="1"></label>
+          <label for="mu">μ<input id="mu" type="number" min="0" step="0.1" value="1"></label>
+          <label for="nu">ν<input id="nu" type="number" min="0" step="0.1" value="1"></label>
+        </div>
+        <p class="hint">λ pesa n₁₁, μ pesa n₀₀ e ν pesa i disaccordi.</p>
       </div>
 
       <button class="action" id="calculate">Calcola la distanza</button>
@@ -70,7 +92,7 @@
           <div class="formula" id="formula">\(d_2(x,y)=\left(\sum_j |x_j-y_j|^2\right)^{1/2}\)</div>
         </div>
         <div class="number">
-          <small>d(x,y)</small>
+          <small id="result-label">Distanza</small>
           <strong id="result">3,605551</strong>
         </div>
       </article>
@@ -108,7 +130,7 @@
   </main>
 
 
-  <script src="js/misure.js?v=20261014-3"></script>
-  <script src="js/interfaccia.js?v=20261014-3"></script>
+  <script src="js/misure.js?v=20261014-4"></script>
+  <script src="js/interfaccia.js?v=20261014-4"></script>
 </body>
 </html>

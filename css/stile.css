@@ -27,7 +27,7 @@ body {
 }
 
 
-button, input, select { font: inherit; }
+button, input, select, textarea { font: inherit; }
 .shell { width: min(1160px, calc(100% - 32px)); margin: 0 auto; }
 header { padding: 64px 0 34px; }
 
@@ -78,7 +78,8 @@ main { display: grid; grid-template-columns: 390px minmax(0, 1fr); gap: 22px; pa
 label { display: block; margin: 16px 0 7px; font-size: 0.86rem; font-weight: 650; }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   padding: 12px 13px;
   color: var(--ink);
@@ -91,7 +92,8 @@ select {
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: rgba(8, 124, 255, 0.58);
   box-shadow: 0 0 0 4px rgba(8, 124, 255, 0.13), 0 8px 24px rgba(50, 75, 110, 0.10);
 }
@@ -114,7 +116,8 @@ select:focus {
 
 .chip:hover { transform: translateY(-1px); background: rgba(255, 255, 255, 0.82); box-shadow: 0 6px 18px rgba(50, 75, 110, 0.11); }
 
-.q-panel {
+.q-panel,
+.parameter-panel {
   margin-top: 13px;
   padding: 12px 13px;
   background: rgba(225, 240, 255, 0.62);
@@ -123,6 +126,12 @@ select:focus {
 }
 
 .q-panel label { display: flex; justify-content: space-between; margin: 0 0 7px; }
+.parameter-panel > label { margin-top: 0; }
+.parameter-title { margin: 0 0 9px; font-size: 0.82rem; font-weight: 700; }
+.parameter-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.parameter-grid label { margin: 0; color: var(--muted); font-size: 0.76rem; }
+.parameter-grid input { margin-top: 4px; padding: 9px; }
+textarea { min-height: 78px; resize: vertical; }
 input[type="range"] { padding: 0; accent-color: var(--blue); box-shadow: none; }
 
 .action {
@@ -143,6 +152,7 @@ input[type="range"] { padding: 0; accent-color: var(--blue); box-shadow: none; }
 .action:active { transform: translateY(0); }
 
 .error { display: none; margin-top: 12px; padding: 10px 12px; color: var(--danger); background: rgba(255, 232, 229, 0.78); border-radius: 12px; font-size: 0.84rem; }
+.error.notice { color: #124f91; background: rgba(225, 240, 255, 0.78); }
 .results { min-width: 0; display: grid; gap: 18px; }
 
 .hero-result {
