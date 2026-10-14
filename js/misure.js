@@ -15,28 +15,28 @@
     euclidean: {
       nome: "Distanza euclidea",
       q: 2,
-      formula: "d₂(x,y) = (Σ |xⱼ − yⱼ|²)¹⁄²",
+      formula: String.raw`d_2(x,y)=\left(\sum_{j=1}^{p}|x_j-y_j|^2\right)^{1/2}`,
       contributo: "Ogni barra rappresenta |xⱼ − yⱼ|².",
       interpretazione: "È la lunghezza del segmento che congiunge i due punti. Differenze grandi incidono quadraticamente."
     },
     manhattan: {
       nome: "Distanza di Manhattan",
       q: 1,
-      formula: "d₁(x,y) = Σ |xⱼ − yⱼ|",
+      formula: String.raw`d_1(x,y)=\sum_{j=1}^{p}|x_j-y_j|`,
       contributo: "Ogni barra rappresenta |xⱼ − yⱼ|.",
       interpretazione: "Somma gli spostamenti lungo le coordinate, come un percorso composto da tratti paralleli agli assi."
     },
     chebyshev: {
       nome: "Distanza di Chebyshev",
       q: Infinity,
-      formula: "d∞(x,y) = maxⱼ |xⱼ − yⱼ|",
+      formula: String.raw`d_{\infty}(x,y)=\max_{1\leq j\leq p}|x_j-y_j|`,
       contributo: "Le barre mostrano |xⱼ − yⱼ|; conta soltanto il valore massimo.",
       interpretazione: "È determinata dalla coordinata nella quale i due vettori differiscono maggiormente."
     },
     minkowski: {
       nome: "Distanza di Minkowski",
       q: 3,
-      formula: "d_q(x,y) = (Σ |xⱼ − yⱼ|^q)^(1/q)",
+      formula: String.raw`d_q(x,y)=\left(\sum_{j=1}^{p}|x_j-y_j|^q\right)^{1/q}`,
       contributo: "Ogni barra rappresenta |xⱼ − yⱼ|^q.",
       interpretazione: "Il parametro q controlla quanto le differenze più grandi dominano il risultato."
     }
