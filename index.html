@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Laboratorio interattivo per calcolare e comprendere le distanze tra vettori.">
+  <title>Laboratorio delle misure</title>
+  <link rel="stylesheet" href="css/stile.css">
+</head>
+<body>
+  <header class="shell">
+    <div class="eyebrow">Atlante interattivo · Modulo 1</div>
+    <h1>Laboratorio delle misure</h1>
+    <p>Inserisci due vettori, scegli una distanza e osserva quali coordinate determinano il risultato.</p>
+    <div class="stepper" aria-label="Percorso di utilizzo">
+      <span class="step"><b>1</b> Inserisci</span>
+      <span class="step"><b>2</b> Scegli</span>
+      <span class="step"><b>3</b> Osserva</span>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="card controls" aria-labelledby="input-title">
+      <p class="section-label" id="input-title">Dati e misura</p>
+
+      <label for="vector-x">Vettore x</label>
+      <input id="vector-x" value="1, 4" inputmode="decimal" aria-describedby="vector-help">
+
+      <label for="vector-y">Vettore y</label>
+      <input id="vector-y" value="3, 1" inputmode="decimal">
+      <p class="hint" id="vector-help">Separa le coordinate con virgole, spazi o punti e virgola.</p>
+
+      <div class="example-row" aria-label="Esempi precaricati">
+        <button class="chip" data-x="1, 4" data-y="3, 1">Esempio 2D</button>
+        <button class="chip" data-x="1, 0, 2, 5" data-y="4, 1, 2, 1">Esempio 4D</button>
+        <button class="chip" data-x="-2, 1" data-y="3, 5">Con negativi</button>
+      </div>
+
+      <label for="measure">Misura</label>
+      <select id="measure">
+        <option value="euclidean">Distanza euclidea</option>
+        <option value="manhattan">Distanza di Manhattan</option>
+        <option value="chebyshev">Distanza di Chebyshev</option>
+        <option value="minkowski">Distanza di Minkowski</option>
+      </select>
+
+      <div class="q-panel" id="q-panel" hidden>
+        <label for="q"><span>Parametro q</span><strong id="q-value">3</strong></label>
+        <input id="q" type="range" min="1" max="10" step="0.5" value="3">
+        <p class="hint">Per ottenere una metrica occorre q ≥ 1.</p>
+      </div>
+
+      <button class="action" id="calculate">Calcola la distanza</button>
+      <div class="error" id="error" role="alert"></div>
+    </section>
+
+    <section class="results" aria-live="polite">
+      <article class="card hero-result">
+        <div>
+          <p class="section-label">Risultato</p>
+          <h2 class="measure-title" id="measure-title">Distanza euclidea</h2>
+          <div class="formula" id="formula">d₂(x,y) = (Σ |xⱼ − yⱼ|²)¹⁄²</div>
+        </div>
+        <div class="number">
+          <small>d(x,y)</small>
+          <strong id="result">3,605551</strong>
+        </div>
+      </article>
+
+      <div class="grid-two">
+        <article class="card panel">
+          <h2>Contributi delle coordinate</h2>
+          <p class="panel-sub" id="bar-subtitle">Ogni barra rappresenta |xⱼ − yⱼ|².</p>
+          <div class="bars" id="bars"></div>
+        </article>
+
+        <article class="card panel">
+          <h2>Vista geometrica</h2>
+          <p class="panel-sub">Disponibile quando i vettori appartengono a ℝ².</p>
+          <svg class="plot" id="plot" viewBox="0 0 420 320" role="img" aria-label="Rappresentazione dei due vettori nel piano"></svg>
+        </article>
+      </div>
+
+      <article class="card explanation">
+        <h2 class="measure-title">Come leggere il risultato</h2>
+        <div class="explanation-grid">
+          <div class="note"><b>Interpretazione</b><span id="interpretation"></span></div>
+          <div class="note"><b>Dominio</b><span>Vettori numerici della stessa dimensione, con coordinate commensurabili.</span></div>
+          <div class="note"><b>Proprietà</b><span>È una metrica: non negativa, simmetrica e soddisfa la disuguaglianza triangolare.</span></div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer class="shell">Prima versione · Il modulo successivo ordinerà un dataset rispetto a un nuovo dato.</footer>
+
+  <script src="js/misure.js"></script>
+  <script src="js/interfaccia.js"></script>
+</body>
+</html>
