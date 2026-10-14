@@ -72,8 +72,8 @@
     bray_curtis: {
       nome: "Dissimilarità di Bray–Curtis", tipoDati: "numeric",
       formula: String.raw`d_{BC}(x,y)=\frac{\sum_j|x_j-y_j|}{\sum_j(x_j+y_j)}`,
-      contributo: "Le barre mostrano |xⱼ − yⱼ|; il denominatore usa l'abbondanza complessiva.",
-      interpretazione: "Confronta le differenze assolute rispetto all'abbondanza complessiva e ignora le doppie assenze.",
+      contributo: "Le barre mostrano |xⱼ − yⱼ|.",
+      interpretazione: "Confronta le differenze assolute rispetto alla quantità complessiva e ignora le doppie assenze.",
       dominio: "Vettori non negativi della stessa dimensione, non entrambi nulli.",
       proprieta: "Assume valori in [0,1], ma non soddisfa in generale la disuguaglianza triangolare."
     },
