@@ -5,7 +5,7 @@ Applicazione didattica per calcolare, confrontare e visualizzare misure di dista
 ## Funzionalità disponibili
 
 - famiglia di Minkowski: forma generale, Manhattan, Euclidea, Chebyshev, versione pesata ed Euclidea standardizzata;
-- somma delle potenze δq, Mahalanobis, Canberra, Bray–Curtis e χ² simmetrica;
+- Mahalanobis, Canberra, Bray–Curtis e χ² simmetrica;
 - coefficienti binari simmetrici, asimmetrici, pesati e di associazione descritti nell’atlante;
 - selezione del tipo di dato e delle sole misure compatibili;
 - contributi delle singole coordinate;

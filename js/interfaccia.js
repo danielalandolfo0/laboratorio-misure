@@ -9,7 +9,7 @@
     numeric: {
       gruppi: [
         ["Famiglia di Minkowski", ["minkowski", "manhattan", "euclidean", "chebyshev", "weighted_minkowski", "standardized_euclidean"]],
-        ["Altre distanze basate sulle coordinate", ["power_sum", "mahalanobis", "canberra", "bray_curtis", "chi_square"]]
+        ["Altre distanze basate sulle coordinate", ["mahalanobis", "canberra", "bray_curtis", "chi_square"]]
       ],
       etichettaX: "Vettore x", etichettaY: "Vettore y",
       aiuto: "Separa le coordinate con virgole, spazi o punti e virgola.",
@@ -57,16 +57,15 @@
 
   function configuraParametri() {
     const tipo = misuraCorrente();
-    const usaQ = ["minkowski", "weighted_minkowski", "power_sum"].includes(tipo);
+    const usaQ = ["minkowski", "weighted_minkowski"].includes(tipo);
     $("q-panel").hidden = !usaQ;
     if (usaQ) {
-      const potenze = tipo === "power_sum";
-      $("q").min = potenze ? "0.1" : "1";
-      $("q").max = potenze ? "1" : "10";
-      $("q").step = potenze ? "0.1" : "0.5";
-      $("q").value = potenze ? "0.5" : "3";
+      $("q").min = "1";
+      $("q").max = "10";
+      $("q").step = "0.5";
+      $("q").value = "3";
       $("q-value").textContent = $("q").value.replace(".", ",");
-      $("q-help").textContent = potenze ? "Per δq occorre 0 < q ≤ 1." : "Per ottenere una metrica occorre q ≥ 1.";
+      $("q-help").textContent = "Per ottenere una metrica occorre q ≥ 1.";
     }
 
     const usaVettore = ["weighted_minkowski", "standardized_euclidean"].includes(tipo);
@@ -98,7 +97,7 @@
   function leggiParametri() {
     const tipo = misuraCorrente();
     const parametri = {};
-    if (["minkowski", "weighted_minkowski", "power_sum"].includes(tipo)) parametri.q = Number($("q").value);
+    if (["minkowski", "weighted_minkowski"].includes(tipo)) parametri.q = Number($("q").value);
     if (tipo === "weighted_minkowski") parametri.pesi = M.leggiVettore($("vector-parameter").value);
     if (tipo === "standardized_euclidean") parametri.scale = M.leggiVettore($("vector-parameter").value);
     if (tipo === "mahalanobis") parametri.matrice = M.leggiMatrice($("matrix-s").value);

@@ -54,14 +54,6 @@
       dominio: "Vettori numerici della stessa dimensione e scale sⱼ strettamente positive.",
       proprieta: "È una distanza euclidea pesata e quindi una metrica."
     },
-    power_sum: {
-      nome: "Somma delle potenze δq", tipoDati: "numeric",
-      formula: String.raw`\delta_q(x,y)=\sum_{j=1}^{p}|x_j-y_j|^q`,
-      contributo: "Ogni barra rappresenta |xⱼ − yⱼ|^q.",
-      interpretazione: "Usa la somma senza la radice 1/q; per q<1 attenua il peso relativo degli scarti grandi.",
-      dominio: "Vettori numerici della stessa dimensione e parametro 0<q≤1.",
-      proprieta: "Per 0<q≤1 è una metrica, grazie alla subadditività della potenza q."
-    },
     mahalanobis: {
       nome: "Distanza di Mahalanobis", tipoDati: "numeric",
       formula: String.raw`d_M(x,y)=\sqrt{(x-y)^\top S^{-1}(x-y)}`,
@@ -249,12 +241,7 @@
     if (tipo === "minkowski") return calcola(x, y, parametri.q);
     let contributi;
     let valore;
-    if (tipo === "power_sum") {
-      const q = parametri.q;
-      if (!Number.isFinite(q) || q <= 0 || q > 1) throw new Error("Per δq occorre 0 < q ≤ 1.");
-      contributi = scarti.map(s => Math.pow(s, q));
-      valore = contributi.reduce((a, b) => a + b, 0);
-    } else if (tipo === "weighted_minkowski") {
+    if (tipo === "weighted_minkowski") {
       const q = parametri.q;
       if (!Number.isFinite(q) || q < 1) throw new Error("Per Minkowski pesata occorre q ≥ 1.");
       validaPositivi(parametri.pesi, x.length, "Il vettore dei pesi");

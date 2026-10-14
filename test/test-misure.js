@@ -10,7 +10,6 @@ const y = [3, 1];
 quasiUguali(M.calcolaNumerica("minkowski", x, y, { q: 2 }).valore, Math.sqrt(13));
 quasiUguali(M.calcolaNumerica("manhattan", x, y).valore, 5);
 quasiUguali(M.calcolaNumerica("chebyshev", x, y).valore, 3);
-quasiUguali(M.calcolaNumerica("power_sum", x, y, { q: .5 }).valore, Math.sqrt(2) + Math.sqrt(3));
 quasiUguali(M.calcolaNumerica("weighted_minkowski", x, y, { q: 2, pesi: [2, 1] }).valore, Math.sqrt(17));
 quasiUguali(M.calcolaNumerica("standardized_euclidean", x, y, { scale: [2, 3] }).valore, Math.sqrt(2));
 quasiUguali(M.calcolaNumerica("mahalanobis", x, y, { matrice: [[2, 0], [0, 1]] }).valore, Math.sqrt(11));
