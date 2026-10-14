@@ -1,0 +1,9 @@
+{
+  "name": "laboratorio-misure",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Laboratorio interattivo delle misure di distanza e similarità",
+  "scripts": {
+    "test": "node test/test-misure.js"
+  }
+}
