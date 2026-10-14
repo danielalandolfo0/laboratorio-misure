@@ -68,7 +68,7 @@
       throw new Error("I vettori non possono essere vuoti.");
     }
     if (x.length !== y.length) {
-      throw new Error(`I vettori devono avere la stessa dimensione: x ne ha ${x.length}, y ne ha ${y.length}.`);
+      throw new Error(`I vettori devono avere la stessa dimensione.`);
     }
     if ([...x, ...y].some(valore => !Number.isFinite(valore))) {
       throw new Error("Tutte le coordinate devono essere numeri finiti.");
