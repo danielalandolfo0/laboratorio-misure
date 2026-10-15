@@ -152,7 +152,7 @@
       proprieta: "Con la convenzione per i vettori nulli è una metrica."
     },
     dice: {
-      nome: "Dissimilarità di Dice–Sørensen", tipoDati: "binary", risultato: "Dissimilarità",
+      nome: "Dissimilarità di Dice", tipoDati: "binary", risultato: "Dissimilarità",
       formula: String.raw`d_D(x,y)=\frac{n_{10}+n_{01}}{2n_{11}+n_{10}+n_{01}}`,
       interpretazione: "Pesa due volte le co-presenze e ignora le assenze comuni.",
       dominio: dominioBinario + " Non è definita quando entrambi i vettori sono nulli.",
@@ -450,7 +450,7 @@
     else if (tipo === "sokal_sneath_asym") valore = n11 + 2 * m === 0 ? 0 : 2 * m / (n11 + 2 * m);
     else if (tipo === "dice") {
       const den = 2 * n11 + m;
-      if (den === 0) return nonDefinita(c, "Dice–Sørensen non è definita per due vettori entrambi nulli.");
+      if (den === 0) return nonDefinita(c, "Dice non è definita per due vettori entrambi nulli.");
       valore = m / den;
     } else if (tipo === "ochiai") {
       const px = n11 + n10;
