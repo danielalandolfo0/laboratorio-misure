@@ -173,7 +173,7 @@
     },
     damerau_levenshtein: {
       nome: "Distanza di Damerau–Levenshtein", tipoDati: "string", risultato: "Distanza",
-      formula: String.raw`d_{DL}(x,y)=\min\!\left\{k:\;x\xrightarrow{k\text{ operazioni ammesse}}y\right\}`,
+      formula: String.raw`d_{DL}(x,y)=\min\!\left\{\begin{array}{l}\text{inserimenti}\\ \text{cancellazioni}\\ \text{sostituzioni}\\ \text{trasposizioni adiacenti}\end{array}\right\}`,
       interpretazione: "È il numero minimo di operazioni necessarie per trasformare una stringa nell’altra: inserimenti, cancellazioni, sostituzioni e trasposizioni di simboli adiacenti.",
       dominio: "Stringhe finite; inserimenti, cancellazioni, sostituzioni e trasposizioni adiacenti hanno costo unitario.",
       proprieta: "La versione completa implementata qui è una metrica."
