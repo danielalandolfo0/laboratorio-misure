@@ -1,6 +1,6 @@
 {
   "name": "laboratorio-misure",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "Laboratorio interattivo di distanze, dissimilarità e similarità",
   "scripts": {

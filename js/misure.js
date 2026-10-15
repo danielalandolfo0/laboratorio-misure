@@ -86,28 +86,28 @@
     },
     cosine: {
       nome: "Similarità coseno", tipoDati: "numeric", risultato: "Similarità",
-      formula: String.raw`s_{\\cos}(x,y)=\\frac{x^\\top y}{\\|x\\|_2\\,\\|y\\|_2}`,
+      formula: String.raw`s_{\cos}(x,y)=\frac{x^\top y}{\|x\|_2\,\|y\|_2}`,
       interpretazione: "Confronta la direzione dei vettori ignorandone la lunghezza; 1 indica stessa direzione, 0 ortogonalità e −1 direzioni opposte.",
       dominio: "Vettori numerici non nulli della stessa dimensione, con coordinate riferite alle stesse variabili.",
       proprieta: "Assume valori in [−1,1] ed è invariante rispetto a moltiplicazioni per scalari positivi; non è una distanza."
     },
     pearson: {
       nome: "Correlazione di Pearson", tipoDati: "numeric", risultato: "Correlazione",
-      formula: String.raw`r(x,y)=\\frac{\\sum_j(x_j-\\bar x)(y_j-\\bar y)}{\\sqrt{\\sum_j(x_j-\\bar x)^2}\\,\\sqrt{\\sum_j(y_j-\\bar y)^2}}`,
+      formula: String.raw`r(x,y)=\frac{\sum_j(x_j-\bar x)(y_j-\bar y)}{\sqrt{\sum_j(x_j-\bar x)^2}\,\sqrt{\sum_j(y_j-\bar y)^2}}`,
       interpretazione: "Confronta l'andamento lineare dei profili dopo aver sottratto a ciascuno la propria media.",
       dominio: "Vettori numerici non costanti della stessa dimensione; le coordinate devono riferirsi alle stesse variabili.",
       proprieta: "Assume valori in [−1,1]. È il coseno fra i profili centrati e non è definita se uno dei vettori è costante."
     },
     spearman: {
       nome: "Correlazione di Spearman", tipoDati: "numeric", risultato: "Correlazione",
-      formula: String.raw`\\rho_S(x,y)=r\\!\\left(R(x),R(y)\\right)`,
+      formula: String.raw`\rho_S(x,y)=r\!\left(R(x),R(y)\right)`,
       interpretazione: "È la correlazione di Pearson fra i ranghi e misura l'associazione monotona; ai pari merito assegna il rango medio.",
       dominio: "Vettori numerici della stessa dimensione, con almeno due valori e con ranghi non tutti uguali in ciascun vettore.",
       proprieta: "Assume valori in [−1,1] ed è invariata rispetto a trasformazioni strettamente crescenti."
     },
     kendall_tau_b: {
       nome: "Coefficiente di Kendall τb", tipoDati: "numeric", risultato: "Coefficiente",
-      formula: String.raw`\\tau_b=\\frac{C-D}{\\sqrt{(C+D+T_x)(C+D+T_y)}}`,
+      formula: String.raw`\tau_b=\frac{C-D}{\sqrt{(C+D+T_x)(C+D+T_y)}}`,
       interpretazione: "Confronta tutte le coppie di coordinate: C conta le coppie concordanti, D le discordanti e Tx, Ty correggono i pari merito.",
       dominio: "Vettori numerici della stessa dimensione con almeno due elementi; il denominatore deve essere positivo.",
       proprieta: "Assume valori in [−1,1]; τb=1 indica ordinamenti concordi e τb=−1 ordinamenti opposti."
