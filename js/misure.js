@@ -187,7 +187,7 @@
     },
     levenshtein: {
       nome: "Distanza di Levenshtein", tipoDati: "string", risultato: "Distanza",
-      formula: String.raw`\begin{aligned}D_{0j}&=j,\quad D_{i0}=i,\\ D_{ij}&=\min\!\left\{\begin{array}{l}D_{i-1,j}+1\\ D_{i,j-1}+1\\ D_{i-1,j-1}+\mathbf 1_{\{x_i\neq y_j\}}\end{array}\right.,\\ d_L(x,y)&=D_{nm}\end{aligned}`,
+      formula: String.raw`d_L(x,y)=\min\!\left\{\begin{array}{l}\text{inserimenti}\\ \text{cancellazioni}\\ \text{sostituzioni}\end{array}\right\}`,
       interpretazione: "È il numero minimo di inserimenti, cancellazioni e sostituzioni necessari per trasformare una stringa nell'altra.",
       dominio: "Stringhe finite, anche di lunghezza differente. Ogni operazione ha costo unitario.",
       proprieta: "Con costi unitari è una metrica."
@@ -537,3 +537,4 @@
     calcolaBinaria, calcolaStringa, matriceLevenshtein, matriceDamerauLevenshtein, cholesky, formatta
   };
 });
+
