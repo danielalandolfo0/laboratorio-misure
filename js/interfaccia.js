@@ -201,9 +201,7 @@
     $("rank-orders").innerHTML = creaRigaOrdine("Ordine secondo x", x, risultato.ranghiX)
       + creaRigaOrdine("Ordine secondo y", y, risultato.ranghiY);
     if (misuraCorrente() === "spearman") {
-      $("rank-details").innerHTML = `<div class="rank-differences">${risultato.ranghiX.map((rangoX, j) =>
-        `<div class="rank-detail" style="--rank-color:${coloreCoordinata(j, x.length)}"><b>j=${j + 1}</b><span>Rₓ=${M.formatta(rangoX)}</span><span>Rᵧ=${M.formatta(risultato.ranghiY[j])}</span><small>|ΔR|=${M.formatta(Math.abs(rangoX - risultato.ranghiY[j]))}</small></div>`
-      ).join("")}</div>`;
+      $("rank-details").replaceChildren();
     } else {
       const q = risultato.conteggiRango;
       const statistiche = [["C", q.C, "concordanti"], ["D", q.D, "discordanti"], ["Tₓ", q.Tx, "legate solo in x"], ["Tᵧ", q.Ty, "legate solo in y"]];
@@ -321,3 +319,4 @@
   eseguiCalcolo();
   window.addEventListener("load", () => aggiornaTesti(leggiParametri()));
 })();
+
