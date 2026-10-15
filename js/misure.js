@@ -156,6 +156,41 @@
       interpretazione: "È la correlazione di Pearson tra le due variabili binarie.",
       dominio: dominioBinario + " Tutti i totali marginali al denominatore devono essere positivi.",
       proprieta: "Assume valori in [-1,1]; non deve essere trasformato automaticamente in una distanza."
+    },
+    string_hamming: {
+      nome: "Distanza di Hamming", tipoDati: "string", risultato: "Distanza",
+      formula: String.raw`d_H(x,y)=\sum_{i=1}^{n}\mathbf 1_{\{x_i\neq y_i\}}`,
+      interpretazione: "Conta le posizioni nelle quali i simboli sono differenti.",
+      dominio: "Stringhe della stessa lunghezza, già allineate. Ogni carattere, spazi inclusi, è trattato come un simbolo.",
+      proprieta: "È una metrica sullo spazio delle stringhe di lunghezza fissata."
+    },
+    string_hamming_normalized: {
+      nome: "Distanza di Hamming normalizzata", tipoDati: "string", risultato: "Distanza",
+      formula: String.raw`d_H^{\mathrm{norm}}(x,y)=\frac{d_H(x,y)}{n}`,
+      interpretazione: "È la proporzione di posizioni discordanti e rende confrontabili risultati ottenuti su coppie di lunghezze differenti.",
+      dominio: "Stringhe non vuote della stessa lunghezza, già allineate.",
+      proprieta: "Assume valori in [0,1] ed è una metrica per ogni lunghezza fissata."
+    },
+    levenshtein: {
+      nome: "Distanza di Levenshtein", tipoDati: "string", risultato: "Distanza",
+      formula: String.raw`d_L(x,y)=D_{nm}`,
+      interpretazione: "È il numero minimo di inserimenti, cancellazioni e sostituzioni necessari per trasformare una stringa nell'altra.",
+      dominio: "Stringhe finite, anche di lunghezza differente. Ogni operazione ha costo unitario.",
+      proprieta: "Con costi unitari è una metrica."
+    },
+    levenshtein_normalized: {
+      nome: "Levenshtein normalizzata", tipoDati: "string", risultato: "Dissimilarità",
+      formula: String.raw`d_L^{\mathrm{norm}}(x,y)=\frac{d_L(x,y)}{\max\{n,m\}}`,
+      interpretazione: "Rapporta il numero minimo di modifiche alla lunghezza della stringa più lunga.",
+      dominio: "Stringhe finite non entrambe vuote, con costi unitari.",
+      proprieta: "Assume valori in [0,1], ma la normalizzazione può modificare le proprietà metriche."
+    },
+    damerau_levenshtein: {
+      nome: "Distanza di Damerau–Levenshtein", tipoDati: "string", risultato: "Distanza",
+      formula: String.raw`d_{DL}(x,y)=\min\{\text{inserimenti, cancellazioni, sostituzioni, trasposizioni adiacenti}\}`,
+      interpretazione: "Aggiunge a Levenshtein la trasposizione di due simboli adiacenti con costo unitario.",
+      dominio: "Stringhe finite; inserimenti, cancellazioni, sostituzioni e trasposizioni adiacenti hanno costo unitario.",
+      proprieta: "La versione completa implementata qui è una metrica."
     }
   };
 
@@ -174,6 +209,14 @@
     const matrice = righe.map(r => r.includes(",") ? r.split(",").map(Number) : r.split(/\s+/).map(Number));
     if (matrice.some(r => r.length !== matrice.length || r.some(v => !Number.isFinite(v)))) throw new Error("La matrice S deve essere quadrata e contenere soltanto numeri finiti.");
     return matrice;
+  }
+
+  function leggiStringa(testo) {
+    return Array.from(String(testo));
+  }
+
+  function validaStringhe(x, y) {
+    if (!Array.isArray(x) || !Array.isArray(y)) throw new TypeError("Le stringhe devono essere sequenze di simboli.");
   }
 
   function validaVettori(x, y) {
@@ -333,6 +376,68 @@
     return { definita: true, valore, distanza: valore, conteggi: c };
   }
 
+  function matriceLevenshtein(x, y) {
+    const D = Array.from({ length: x.length + 1 }, () => Array(y.length + 1).fill(0));
+    for (let i = 0; i <= x.length; i += 1) D[i][0] = i;
+    for (let j = 0; j <= y.length; j += 1) D[0][j] = j;
+    for (let i = 1; i <= x.length; i += 1) {
+      for (let j = 1; j <= y.length; j += 1) {
+        D[i][j] = Math.min(D[i - 1][j] + 1, D[i][j - 1] + 1, D[i - 1][j - 1] + (x[i - 1] === y[j - 1] ? 0 : 1));
+      }
+    }
+    return D;
+  }
+
+  function matriceDamerauLevenshtein(x, y) {
+    const n = x.length, p = y.length, infinito = n + p;
+    const H = Array.from({ length: n + 2 }, () => Array(p + 2).fill(0));
+    H[0][0] = infinito;
+    for (let i = 0; i <= n; i += 1) { H[i + 1][0] = infinito; H[i + 1][1] = i; }
+    for (let j = 0; j <= p; j += 1) { H[0][j + 1] = infinito; H[1][j + 1] = j; }
+    const ultimaRiga = new Map();
+    for (let i = 1; i <= n; i += 1) {
+      let ultimaColonna = 0;
+      for (let j = 1; j <= p; j += 1) {
+        const i1 = ultimaRiga.get(y[j - 1]) || 0, j1 = ultimaColonna;
+        let costo = 1;
+        if (x[i - 1] === y[j - 1]) { costo = 0; ultimaColonna = j; }
+        H[i + 1][j + 1] = Math.min(
+          H[i][j] + costo,
+          H[i + 1][j] + 1,
+          H[i][j + 1] + 1,
+          H[i1][j1] + (i - i1 - 1) + 1 + (j - j1 - 1)
+        );
+      }
+      ultimaRiga.set(x[i - 1], i);
+    }
+    return { valore: H[n + 1][p + 1], matrice: H.slice(1).map(riga => riga.slice(1)) };
+  }
+
+  function calcolaStringa(tipo, testoX, testoY) {
+    const x = Array.isArray(testoX) ? testoX.slice() : leggiStringa(testoX);
+    const y = Array.isArray(testoY) ? testoY.slice() : leggiStringa(testoY);
+    validaStringhe(x, y);
+    if (["string_hamming", "string_hamming_normalized"].includes(tipo)) {
+      if (x.length !== y.length) throw new Error("La distanza di Hamming richiede stringhe della stessa lunghezza.");
+      if (tipo === "string_hamming_normalized" && x.length === 0) throw new Error("La Hamming normalizzata non è definita per due stringhe vuote.");
+      const confronti = x.map((simbolo, i) => ({ simboloX: simbolo, simboloY: y[i], diverso: simbolo !== y[i] }));
+      const distanza = confronti.reduce((somma, confronto) => somma + Number(confronto.diverso), 0);
+      const valore = tipo === "string_hamming_normalized" ? distanza / x.length : distanza;
+      return { definita: true, valore, distanza: valore, simboliX: x, simboliY: y, confronti };
+    }
+    if (tipo === "levenshtein" || tipo === "levenshtein_normalized") {
+      const matrice = matriceLevenshtein(x, y), distanza = matrice[x.length][y.length];
+      if (tipo === "levenshtein_normalized" && Math.max(x.length, y.length) === 0) throw new Error("La Levenshtein normalizzata non è definita per due stringhe vuote.");
+      const valore = tipo === "levenshtein_normalized" ? distanza / Math.max(x.length, y.length) : distanza;
+      return { definita: true, valore, distanza: valore, simboliX: x, simboliY: y, matrice };
+    }
+    if (tipo === "damerau_levenshtein") {
+      const risultato = matriceDamerauLevenshtein(x, y);
+      return { definita: true, valore: risultato.valore, distanza: risultato.valore, simboliX: x, simboliY: y, matrice: risultato.matrice };
+    }
+    throw new Error("Misura per stringhe non riconosciuta.");
+  }
+
   function formatta(numero) {
     if (numero === null || numero === undefined || !Number.isFinite(numero)) return "Non definita";
     if (Math.abs(numero) < 1e-12) return "0";
@@ -340,8 +445,8 @@
   }
 
   return {
-    definizioni, leggiVettore, leggiMatrice, validaVettori, validaBinari,
+    definizioni, leggiVettore, leggiMatrice, leggiStringa, validaVettori, validaBinari, validaStringhe,
     minkowski, chebyshev, calcola, calcolaNumerica, conteggiBinari,
-    calcolaBinaria, cholesky, formatta
+    calcolaBinaria, calcolaStringa, matriceLevenshtein, matriceDamerauLevenshtein, cholesky, formatta
   };
 });

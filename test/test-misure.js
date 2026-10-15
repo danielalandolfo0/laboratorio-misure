@@ -54,4 +54,16 @@ assert.equal(M.calcolaBinaria("yule_q", [1, 1], [1, 1]).definita, false);
 assert.equal(M.calcolaBinaria("phi", [1, 1], [1, 1]).definita, false);
 assert.throws(() => M.calcolaBinaria("jaccard", [1, 2], [1, 0]), /0 oppure 1/);
 
+assert.deepEqual(M.leggiStringa("A 🧬"), ["A", " ", "🧬"]);
+quasiUguali(M.calcolaStringa("string_hamming", "CA", "AC").valore, 2);
+quasiUguali(M.calcolaStringa("string_hamming_normalized", "CA", "AC").valore, 1);
+assert.throws(() => M.calcolaStringa("string_hamming", "ACGT", "ACT"), /stessa lunghezza/);
+quasiUguali(M.calcolaStringa("levenshtein", "ACGT", "ACT").valore, 1);
+quasiUguali(M.calcolaStringa("levenshtein", "kitten", "sitting").valore, 3);
+quasiUguali(M.calcolaStringa("levenshtein_normalized", "ACGT", "ACT").valore, 1 / 4);
+quasiUguali(M.calcolaStringa("damerau_levenshtein", "CA", "AC").valore, 1);
+quasiUguali(M.calcolaStringa("damerau_levenshtein", "CA", "ABC").valore, 2);
+quasiUguali(M.calcolaStringa("damerau_levenshtein", "", "").valore, 0);
+assert.throws(() => M.calcolaStringa("levenshtein_normalized", "", ""), /stringhe vuote/);
+
 console.log("Tutti i test matematici sono stati superati.");

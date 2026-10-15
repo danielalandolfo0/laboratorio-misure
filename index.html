@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Laboratorio interattivo per calcolare e comprendere misure tra dati numerici e binari.">
+  <meta name="description" content="Laboratorio interattivo per calcolare e comprendere misure tra vettori numerici, vettori binari e stringhe.">
   <title>Calcolo delle misure tra due elementi</title>
-  <link rel="stylesheet" href="css/stile.css?v=20261015-3">
+  <link rel="stylesheet" href="css/stile.css?v=20261015-4">
   <script>
     window.MathJax = {
       tex: {
@@ -31,6 +31,7 @@
       <select id="data-type">
         <option value="numeric">Vettori numerici</option>
         <option value="binary">Vettori binari</option>
+        <option value="string">Stringhe e sequenze simboliche</option>
       </select>
 
       <label for="vector-x" id="vector-x-label">Vettore x</label>
@@ -125,12 +126,18 @@
           <div class="binary-counts" id="binary-counts"></div>
           <div class="binary-coordinates" id="binary-coordinates" aria-label="Confronto coordinata per coordinata"></div>
         </article>
+
+        <article class="card panel string-panel" id="string-panel" hidden>
+          <h2>Confronto delle stringhe</h2>
+          <p class="panel-sub" id="string-panel-subtitle"></p>
+          <div id="string-visualization"></div>
+        </article>
       </div>
     </section>
   </main>
 
 
-  <script src="js/misure.js?v=20261015-3"></script>
-  <script src="js/interfaccia.js?v=20261015-3"></script>
+  <script src="js/misure.js?v=20261015-4"></script>
+  <script src="js/interfaccia.js?v=20261015-4"></script>
 </body>
 </html>

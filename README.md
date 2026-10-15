@@ -7,10 +7,12 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze, dissi
 - famiglia di Minkowski: forma generale, Manhattan, Euclidea, Chebyshev, versione pesata ed Euclidea standardizzata;
 - Mahalanobis, Canberra, Bray–Curtis e χ² simmetrica;
 - distanze e dissimilarità per vettori binari, insieme alle misure di associazione descritte nell’atlante;
+- Hamming, Levenshtein e Damerau–Levenshtein per stringhe e sequenze simboliche;
 - selezione del tipo di dato e delle sole misure compatibili;
 - contributi delle singole coordinate;
 - rappresentazione geometrica per vettori numerici in due dimensioni;
 - conteggi \(n_{11}, n_{10}, n_{01}, n_{00}\) per vettori binari;
+- confronto simbolo per simbolo e matrici di programmazione dinamica per le stringhe;
 - controlli sulla validità degli input numerici e binari.
 
 ## Struttura del progetto
