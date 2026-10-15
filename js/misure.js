@@ -84,6 +84,34 @@
       interpretazione: "Uno stesso scarto pesa maggiormente quando riguarda valori complessivamente piccoli.",
       dominio: "Vettori non negativi della stessa dimensione.", proprieta: "È una metrica."
     },
+    cosine: {
+      nome: "Similarità coseno", tipoDati: "numeric", risultato: "Similarità",
+      formula: String.raw`s_{\\cos}(x,y)=\\frac{x^\\top y}{\\|x\\|_2\\,\\|y\\|_2}`,
+      interpretazione: "Confronta la direzione dei vettori ignorandone la lunghezza; 1 indica stessa direzione, 0 ortogonalità e −1 direzioni opposte.",
+      dominio: "Vettori numerici non nulli della stessa dimensione, con coordinate riferite alle stesse variabili.",
+      proprieta: "Assume valori in [−1,1] ed è invariante rispetto a moltiplicazioni per scalari positivi; non è una distanza."
+    },
+    pearson: {
+      nome: "Correlazione di Pearson", tipoDati: "numeric", risultato: "Correlazione",
+      formula: String.raw`r(x,y)=\\frac{\\sum_j(x_j-\\bar x)(y_j-\\bar y)}{\\sqrt{\\sum_j(x_j-\\bar x)^2}\\,\\sqrt{\\sum_j(y_j-\\bar y)^2}}`,
+      interpretazione: "Confronta l'andamento lineare dei profili dopo aver sottratto a ciascuno la propria media.",
+      dominio: "Vettori numerici non costanti della stessa dimensione; le coordinate devono riferirsi alle stesse variabili.",
+      proprieta: "Assume valori in [−1,1]. È il coseno fra i profili centrati e non è definita se uno dei vettori è costante."
+    },
+    spearman: {
+      nome: "Correlazione di Spearman", tipoDati: "numeric", risultato: "Correlazione",
+      formula: String.raw`\\rho_S(x,y)=r\\!\\left(R(x),R(y)\\right)`,
+      interpretazione: "È la correlazione di Pearson fra i ranghi e misura l'associazione monotona; ai pari merito assegna il rango medio.",
+      dominio: "Vettori numerici della stessa dimensione, con almeno due valori e con ranghi non tutti uguali in ciascun vettore.",
+      proprieta: "Assume valori in [−1,1] ed è invariata rispetto a trasformazioni strettamente crescenti."
+    },
+    kendall_tau_b: {
+      nome: "Coefficiente di Kendall τb", tipoDati: "numeric", risultato: "Coefficiente",
+      formula: String.raw`\\tau_b=\\frac{C-D}{\\sqrt{(C+D+T_x)(C+D+T_y)}}`,
+      interpretazione: "Confronta tutte le coppie di coordinate: C conta le coppie concordanti, D le discordanti e Tx, Ty correggono i pari merito.",
+      dominio: "Vettori numerici della stessa dimensione con almeno due elementi; il denominatore deve essere positivo.",
+      proprieta: "Assume valori in [−1,1]; τb=1 indica ordinamenti concordi e τb=−1 ordinamenti opposti."
+    },
     weighted_binary: {
       nome: "Similarità binaria pesata", tipoDati: "binary", risultato: "Similarità",
       formula: String.raw`S_{\lambda,\mu,\nu}(x,y)=\frac{\lambda n_{11}+\mu n_{00}}{\lambda n_{11}+\mu n_{00}+\nu(n_{10}+n_{01})}`,
@@ -261,6 +289,65 @@
     return { definita: true, valore: distanza, distanza, scarti, contributi };
   }
 
+  function nonDefinitaNumerica(messaggio) {
+    return { definita: false, valore: null, distanza: null, scarti: [], contributi: [], messaggio };
+  }
+
+  function limitaCorrelazione(valore) {
+    return Math.max(-1, Math.min(1, valore));
+  }
+
+  function calcolaCoseno(x, y) {
+    const normaX = Math.sqrt(x.reduce((s, v) => s + v * v, 0));
+    const normaY = Math.sqrt(y.reduce((s, v) => s + v * v, 0));
+    if (normaX === 0 || normaY === 0) return nonDefinitaNumerica("La similarità coseno non è definita se almeno uno dei due vettori è nullo.");
+    const valore = limitaCorrelazione(x.reduce((s, v, j) => s + v * y[j], 0) / (normaX * normaY));
+    return { definita: true, valore, coefficiente: valore, distanza: null, scarti: [], contributi: [] };
+  }
+
+  function coefficientePearson(x, y) {
+    const mediaX = x.reduce((a, b) => a + b, 0) / x.length;
+    const mediaY = y.reduce((a, b) => a + b, 0) / y.length;
+    const centratoX = x.map(v => v - mediaX);
+    const centratoY = y.map(v => v - mediaY);
+    const normaX = Math.sqrt(centratoX.reduce((s, v) => s + v * v, 0));
+    const normaY = Math.sqrt(centratoY.reduce((s, v) => s + v * v, 0));
+    if (normaX === 0 || normaY === 0) return null;
+    return limitaCorrelazione(centratoX.reduce((s, v, j) => s + v * centratoY[j], 0) / (normaX * normaY));
+  }
+
+  function ranghiMedi(vettore) {
+    const ordinati = vettore.map((valore, indice) => ({ valore, indice })).sort((a, b) => a.valore - b.valore);
+    const ranghi = Array(vettore.length);
+    for (let i = 0; i < ordinati.length;) {
+      let h = i + 1;
+      while (h < ordinati.length && ordinati[h].valore === ordinati[i].valore) h += 1;
+      const rangoMedio = (i + 1 + h) / 2;
+      for (let k = i; k < h; k += 1) ranghi[ordinati[k].indice] = rangoMedio;
+      i = h;
+    }
+    return ranghi;
+  }
+
+  function calcolaKendallTauB(x, y) {
+    let C = 0, D = 0, Tx = 0, Ty = 0;
+    for (let i = 0; i < x.length - 1; i += 1) {
+      for (let h = i + 1; h < x.length; h += 1) {
+        const sx = Math.sign(x[i] - x[h]);
+        const sy = Math.sign(y[i] - y[h]);
+        if (sx === 0 && sy === 0) continue;
+        if (sx === 0) Tx += 1;
+        else if (sy === 0) Ty += 1;
+        else if (sx === sy) C += 1;
+        else D += 1;
+      }
+    }
+    const denominatore = Math.sqrt((C + D + Tx) * (C + D + Ty));
+    if (denominatore === 0) return nonDefinitaNumerica("Kendall τb non è definito perché non vi sono abbastanza coppie confrontabili.");
+    const valore = limitaCorrelazione((C - D) / denominatore);
+    return { definita: true, valore, coefficiente: valore, distanza: null, scarti: [], contributi: [], conteggiRango: { C, D, Tx, Ty } };
+  }
+
   function calcolaNumerica(tipo, x, y, parametri = {}) {
     validaVettori(x, y);
     const scarti = x.map((v, j) => Math.abs(v - y[j]));
@@ -268,6 +355,18 @@
     if (tipo === "euclidean") return calcola(x, y, 2);
     if (tipo === "chebyshev") return calcola(x, y, Infinity);
     if (tipo === "minkowski") return calcola(x, y, parametri.q);
+    if (tipo === "cosine") return calcolaCoseno(x, y);
+    if (tipo === "pearson") {
+      const valore = coefficientePearson(x, y);
+      if (valore === null) return nonDefinitaNumerica("Pearson non è definita se almeno uno dei due vettori è costante.");
+      return { definita: true, valore, coefficiente: valore, distanza: null, scarti: [], contributi: [] };
+    }
+    if (tipo === "spearman") {
+      const valore = coefficientePearson(ranghiMedi(x), ranghiMedi(y));
+      if (valore === null) return nonDefinitaNumerica("Spearman non è definita se almeno uno dei due vettori assegna lo stesso rango a tutte le coordinate.");
+      return { definita: true, valore, coefficiente: valore, distanza: null, scarti: [], contributi: [] };
+    }
+    if (tipo === "kendall_tau_b") return calcolaKendallTauB(x, y);
     let contributi;
     let valore;
     if (tipo === "weighted_minkowski") {
@@ -425,6 +524,7 @@
   return {
     definizioni, leggiVettore, leggiMatrice, leggiStringa, validaVettori, validaBinari, validaStringhe,
     minkowski, chebyshev, calcola, calcolaNumerica, conteggiBinari,
+    calcolaCoseno, coefficientePearson, ranghiMedi, calcolaKendallTauB,
     calcolaBinaria, calcolaStringa, matriceLevenshtein, matriceDamerauLevenshtein, cholesky, formatta
   };
 });

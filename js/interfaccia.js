@@ -9,7 +9,9 @@
     numeric: {
       gruppi: [
         ["Famiglia di Minkowski", ["minkowski", "manhattan", "euclidean", "chebyshev", "weighted_minkowski", "standardized_euclidean"]],
-        ["Altre distanze basate sulle coordinate", ["mahalanobis", "canberra", "bray_curtis", "chi_square"]]
+        ["Altre distanze basate sulle coordinate", ["mahalanobis", "canberra", "bray_curtis", "chi_square"]],
+        ["Similarità di profilo e correlazioni", ["cosine", "pearson"]],
+        ["Confronti basati sui ranghi", ["spearman", "kendall_tau_b"]]
       ],
       etichettaX: "Vettore x", etichettaY: "Vettore y",
       aiuto: "Separa le coordinate con virgole, spazi o punti e virgola.",
@@ -198,14 +200,15 @@
     const numerico = tipoDati === "numeric";
     const binario = tipoDati === "binary";
     const stringa = tipoDati === "string";
-    const geometria = numerico && x.length === 2;
-    $("contribution-panel").hidden = !numerico;
+    const soloCoefficiente = ["cosine", "pearson", "spearman", "kendall_tau_b"].includes(misuraCorrente());
+    const geometria = numerico && !soloCoefficiente && x.length === 2;
+    $("contribution-panel").hidden = !numerico || soloCoefficiente;
     $("geometry-panel").hidden = !geometria;
     $("binary-panel").hidden = !binario;
     $("string-panel").hidden = !stringa;
     $("visual-panels").classList.toggle("single-panel", !geometria);
     if (numerico) {
-      disegnaContributi(risultato.contributi, misuraCorrente());
+      if (!soloCoefficiente) disegnaContributi(risultato.contributi, misuraCorrente());
       if (geometria) disegnaPiano(x, y, misuraCorrente()); else $("plot").replaceChildren();
     } else if (binario) disegnaBinari(x, y, risultato.conteggi);
     else disegnaStringhe(risultato);

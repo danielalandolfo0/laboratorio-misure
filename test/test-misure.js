@@ -21,6 +21,21 @@ assert.throws(() => M.calcolaNumerica("bray_curtis", [-1], [1]), /non negative/)
 assert.throws(() => M.calcolaNumerica("mahalanobis", x, y, { matrice: [[1, 2], [0, 1]] }), /simmetrica/);
 assert.throws(() => M.calcolaNumerica("mahalanobis", x, y, { matrice: [[1, 0], [0, 0]] }), /definita positiva/);
 
+quasiUguali(M.calcolaNumerica("cosine", [1, 0], [0, 1]).valore, 0);
+quasiUguali(M.calcolaNumerica("cosine", [1, 2], [2, 4]).valore, 1);
+assert.equal(M.calcolaNumerica("cosine", [0, 0], [1, 2]).definita, false);
+quasiUguali(M.calcolaNumerica("pearson", [1, 2, 3], [2, 4, 6]).valore, 1);
+quasiUguali(M.calcolaNumerica("pearson", [1, 2, 3], [6, 4, 2]).valore, -1);
+assert.equal(M.calcolaNumerica("pearson", [1, 1, 1], [1, 2, 3]).definita, false);
+assert.deepEqual(M.ranghiMedi([4, 4, 9, 15]), [1.5, 1.5, 3, 4]);
+quasiUguali(M.calcolaNumerica("spearman", [4, 4, 9, 15], [10, 10, 20, 30]).valore, 1);
+quasiUguali(M.calcolaNumerica("spearman", [1, 2, 3], [3, 2, 1]).valore, -1);
+assert.equal(M.calcolaNumerica("spearman", [1, 1, 1], [1, 2, 3]).definita, false);
+quasiUguali(M.calcolaNumerica("kendall_tau_b", [1, 2, 3], [1, 2, 3]).valore, 1);
+quasiUguali(M.calcolaNumerica("kendall_tau_b", [1, 2, 3], [3, 2, 1]).valore, -1);
+quasiUguali(M.calcolaNumerica("kendall_tau_b", [1, 1, 2], [1, 2, 3]).valore, 2 / Math.sqrt(6));
+assert.equal(M.calcolaNumerica("kendall_tau_b", [1, 1], [2, 2]).definita, false);
+
 assert.deepEqual(M.leggiVettore("1, 2, -3.5"), [1, 2, -3.5]);
 assert.deepEqual(M.leggiMatrice("2, 0; 0, 1"), [[2, 0], [0, 1]]);
 assert.throws(() => M.minkowski([1], [1, 2], 2), /stessa dimensione/);

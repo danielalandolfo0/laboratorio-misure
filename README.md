@@ -6,6 +6,8 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 
 - famiglia di Minkowski: forma generale, Manhattan, Euclidea, Chebyshev, versione pesata ed Euclidea standardizzata;
 - Mahalanobis, Canberra, Bray–Curtis e χ² simmetrica;
+- similarità coseno e correlazione di Pearson per confrontare i profili;
+- correlazioni di Spearman e Kendall τb per i confronti basati sui ranghi;
 - distanze, dissimilarità e similarità pesata per vettori binari;
 - Hamming, Levenshtein e Damerau–Levenshtein per stringhe e sequenze simboliche;
 - selezione del tipo di dato e delle sole misure compatibili;
