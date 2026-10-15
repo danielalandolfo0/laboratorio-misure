@@ -170,7 +170,7 @@
       ).join("")}</div>`;
       return;
     }
-    $("string-panel-subtitle").textContent = "La cella in basso a destra contiene la distanza finale.";
+    $("string-panel-subtitle").textContent = "Ogni cella Dᵢⱼ indica il numero minimo di operazioni necessarie per trasformare il prefisso x₁…xᵢ nel prefisso y₁…yⱼ. La cella in basso a destra contiene la distanza finale.";
     const intestazione = ["∅", ...risultato.simboliY].map(s => `<th>${simboloVisibile(s)}</th>`).join("");
     const righe = risultato.matrice.map((riga, i) => {
       const etichetta = i === 0 ? "∅" : risultato.simboliX[i - 1];
