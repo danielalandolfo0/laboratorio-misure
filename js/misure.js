@@ -342,10 +342,15 @@
         else D += 1;
       }
     }
+    const ranghiX = ranghiMedi(x);
+    const ranghiY = ranghiMedi(y);
+    const conteggiRango = { C, D, Tx, Ty };
     const denominatore = Math.sqrt((C + D + Tx) * (C + D + Ty));
-    if (denominatore === 0) return nonDefinitaNumerica("Kendall τb non è definito perché non vi sono abbastanza coppie confrontabili.");
+    if (denominatore === 0) {
+      return { ...nonDefinitaNumerica("Kendall τb non è definito perché non vi sono abbastanza coppie confrontabili."), ranghiX, ranghiY, conteggiRango };
+    }
     const valore = limitaCorrelazione((C - D) / denominatore);
-    return { definita: true, valore, coefficiente: valore, distanza: null, scarti: [], contributi: [], conteggiRango: { C, D, Tx, Ty } };
+    return { definita: true, valore, coefficiente: valore, distanza: null, scarti: [], contributi: [], ranghiX, ranghiY, conteggiRango };
   }
 
   function calcolaNumerica(tipo, x, y, parametri = {}) {
@@ -362,9 +367,13 @@
       return { definita: true, valore, coefficiente: valore, distanza: null, scarti: [], contributi: [] };
     }
     if (tipo === "spearman") {
-      const valore = coefficientePearson(ranghiMedi(x), ranghiMedi(y));
-      if (valore === null) return nonDefinitaNumerica("Spearman non è definita se almeno uno dei due vettori assegna lo stesso rango a tutte le coordinate.");
-      return { definita: true, valore, coefficiente: valore, distanza: null, scarti: [], contributi: [] };
+      const ranghiX = ranghiMedi(x);
+      const ranghiY = ranghiMedi(y);
+      const valore = coefficientePearson(ranghiX, ranghiY);
+      if (valore === null) {
+        return { ...nonDefinitaNumerica("Spearman non è definita se almeno uno dei due vettori assegna lo stesso rango a tutte le coordinate."), ranghiX, ranghiY };
+      }
+      return { definita: true, valore, coefficiente: valore, distanza: null, scarti: [], contributi: [], ranghiX, ranghiY };
     }
     if (tipo === "kendall_tau_b") return calcolaKendallTauB(x, y);
     let contributi;

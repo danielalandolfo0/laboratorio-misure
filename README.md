@@ -12,7 +12,8 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 - Hamming, Levenshtein e Damerau–Levenshtein per stringhe e sequenze simboliche;
 - selezione del tipo di dato e delle sole misure compatibili;
 - contributi delle singole coordinate;
-- rappresentazione geometrica per vettori numerici in due dimensioni;
+- rappresentazione geometrica per vettori numerici in due dimensioni, inclusi i vettori direzionali e i profili centrati;
+- confronto visuale degli ordinamenti, dei ranghi e dei conteggi di Kendall;
 - conteggi \(n_{11}, n_{10}, n_{01}, n_{00}\) per vettori binari;
 - confronto simbolo per simbolo e matrici di programmazione dinamica per le stringhe;
 - controlli sulla validità degli input numerici e binari.

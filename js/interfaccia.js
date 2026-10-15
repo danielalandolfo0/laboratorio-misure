@@ -181,8 +181,65 @@
     contenuto.innerHTML = `<div class="string-matrix-wrap"><table class="string-matrix"><thead><tr><th></th>${intestazione}</tr></thead><tbody>${righe}</tbody></table></div>`;
   }
 
+  function coloreCoordinata(indice, totale) {
+    const tonalita = Math.round((indice * 320 / Math.max(totale, 1) + 205) % 360);
+    return `hsl(${tonalita} 66% 47%)`;
+  }
+
+  function creaRigaOrdine(nome, valori, ranghi) {
+    const elementi = valori.map((valore, indice) => ({ valore, indice, rango: ranghi[indice] }))
+      .sort((a, b) => a.rango - b.rango || a.indice - b.indice);
+    return `<div class="rank-order-row"><b>${nome}</b><div class="rank-items">${elementi.map(item =>
+      `<span class="rank-item" style="--rank-color:${coloreCoordinata(item.indice, valori.length)}"><small>j=${item.indice + 1}</small><strong>${M.formatta(item.valore)}</strong><em>R=${M.formatta(item.rango)}</em></span>`
+    ).join("")}</div></div>`;
+  }
+
+  function disegnaRanghi(x, y, risultato) {
+    $("rank-panel-subtitle").textContent = misuraCorrente() === "spearman"
+      ? "Lo stesso colore identifica la medesima coordinata nei due ordinamenti; i pari merito condividono il rango medio."
+      : "Lo stesso colore identifica la medesima coordinata; Kendall confronta tutte le coppie e corregge i pari merito.";
+    $("rank-orders").innerHTML = creaRigaOrdine("Ordine secondo x", x, risultato.ranghiX)
+      + creaRigaOrdine("Ordine secondo y", y, risultato.ranghiY);
+    if (misuraCorrente() === "spearman") {
+      $("rank-details").innerHTML = `<div class="rank-differences">${risultato.ranghiX.map((rangoX, j) =>
+        `<div class="rank-detail" style="--rank-color:${coloreCoordinata(j, x.length)}"><b>j=${j + 1}</b><span>Rₓ=${M.formatta(rangoX)}</span><span>Rᵧ=${M.formatta(risultato.ranghiY[j])}</span><small>|ΔR|=${M.formatta(Math.abs(rangoX - risultato.ranghiY[j]))}</small></div>`
+      ).join("")}</div>`;
+    } else {
+      const q = risultato.conteggiRango;
+      const statistiche = [["C", q.C, "concordanti"], ["D", q.D, "discordanti"], ["Tₓ", q.Tx, "legate solo in x"], ["Tᵧ", q.Ty, "legate solo in y"]];
+      $("rank-details").innerHTML = `<div class="rank-counts">${statistiche.map(([simbolo, valore, testo]) =>
+        `<div class="rank-stat"><span>${simbolo}</span><strong>${valore}</strong><small>${testo}</small></div>`
+      ).join("")}</div>`;
+    }
+  }
+
+  function disegnaDirezioni(x, y, tipo) {
+    const svg = $("plot");
+    const margine = 42, larghezza = 420, altezza = 320;
+    const centra = vettore => {
+      const media = vettore.reduce((a, b) => a + b, 0) / vettore.length;
+      return vettore.map(v => v - media);
+    };
+    const Xv = tipo === "pearson" ? centra(x) : x.slice();
+    const Yv = tipo === "pearson" ? centra(y) : y.slice();
+    $("geometry-subtitle").textContent = tipo === "pearson"
+      ? "I profili centrati sono applicati all'origine: Pearson è il coseno dell'angolo fra essi."
+      : "I vettori sono applicati all'origine: il loro angolo determina la similarità coseno.";
+    const massimoX = Math.max(1, Math.abs(Xv[0]), Math.abs(Yv[0])) * 1.25;
+    const massimoY = Math.max(1, Math.abs(Xv[1]), Math.abs(Yv[1])) * 1.25;
+    const sx = v => margine + (v + massimoX) / (2 * massimoX) * (larghezza - 2 * margine);
+    const sy = v => altezza - margine - (v + massimoY) / (2 * massimoY) * (altezza - 2 * margine);
+    const O = { x: sx(0), y: sy(0) };
+    const X = { x: sx(Xv[0]), y: sy(Xv[1]) };
+    const Y = { x: sx(Yv[0]), y: sy(Yv[1]) };
+    const etichettaX = tipo === "pearson" ? "x centrato" : "x";
+    const etichettaY = tipo === "pearson" ? "y centrato" : "y";
+    svg.innerHTML = `<defs><marker id="arrow-x" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#087cff"/></marker><marker id="arrow-y" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7657ff"/></marker></defs><line x1="${margine}" y1="${O.y}" x2="${larghezza - margine}" y2="${O.y}" stroke="#b8c5d9"/><line x1="${O.x}" y1="${margine}" x2="${O.x}" y2="${altezza - margine}" stroke="#b8c5d9"/><circle cx="${O.x}" cy="${O.y}" r="4" fill="#77839a"/><line x1="${O.x}" y1="${O.y}" x2="${X.x}" y2="${X.y}" stroke="#087cff" stroke-width="4" marker-end="url(#arrow-x)"/><line x1="${O.x}" y1="${O.y}" x2="${Y.x}" y2="${Y.y}" stroke="#7657ff" stroke-width="4" marker-end="url(#arrow-y)"/><text x="${X.x + 10}" y="${X.y - 9}" fill="#087cff" font-size="13" font-weight="700">${etichettaX}</text><text x="${Y.x + 10}" y="${Y.y + 18}" fill="#7657ff" font-size="13" font-weight="700">${etichettaY}</text>`;
+  }
+
   function disegnaPiano(x, y, tipo) {
     const svg = $("plot");
+    $("geometry-subtitle").textContent = "Rappresentazione dei vettori nel piano ℝ².";
     const margine = 42, larghezza = 420, altezza = 320;
     let minX = Math.min(x[0], y[0], 0), maxX = Math.max(x[0], y[0], 0);
     let minY = Math.min(x[1], y[1], 0), maxY = Math.max(x[1], y[1], 0);
@@ -200,16 +257,27 @@
     const numerico = tipoDati === "numeric";
     const binario = tipoDati === "binary";
     const stringa = tipoDati === "string";
-    const soloCoefficiente = ["cosine", "pearson", "spearman", "kendall_tau_b"].includes(misuraCorrente());
-    const geometria = numerico && !soloCoefficiente && x.length === 2;
+    const direzionale = ["cosine", "pearson"].includes(misuraCorrente());
+    const basataSuiRanghi = ["spearman", "kendall_tau_b"].includes(misuraCorrente());
+    const soloCoefficiente = direzionale || basataSuiRanghi;
+    const geometria = numerico && !basataSuiRanghi && x.length === 2;
     $("contribution-panel").hidden = !numerico || soloCoefficiente;
     $("geometry-panel").hidden = !geometria;
+    $("rank-panel").hidden = !basataSuiRanghi;
     $("binary-panel").hidden = !binario;
     $("string-panel").hidden = !stringa;
-    $("visual-panels").classList.toggle("single-panel", !geometria);
+    $("visual-panels").classList.toggle("single-panel", soloCoefficiente || !geometria);
     if (numerico) {
-      if (!soloCoefficiente) disegnaContributi(risultato.contributi, misuraCorrente());
-      if (geometria) disegnaPiano(x, y, misuraCorrente()); else $("plot").replaceChildren();
+      if (basataSuiRanghi) {
+        disegnaRanghi(x, y, risultato);
+        $("plot").replaceChildren();
+      } else {
+        if (!soloCoefficiente) disegnaContributi(risultato.contributi, misuraCorrente());
+        if (geometria) {
+          if (direzionale) disegnaDirezioni(x, y, misuraCorrente());
+          else disegnaPiano(x, y, misuraCorrente());
+        } else $("plot").replaceChildren();
+      }
     } else if (binario) disegnaBinari(x, y, risultato.conteggi);
     else disegnaStringhe(risultato);
   }

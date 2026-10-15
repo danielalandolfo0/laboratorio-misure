@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Laboratorio interattivo per calcolare e comprendere misure tra vettori numerici, vettori binari e stringhe.">
   <title>Calcolo delle misure tra due elementi</title>
-  <link rel="stylesheet" href="css/stile.css?v=20261015-5">
+  <link rel="stylesheet" href="css/stile.css?v=20261015-6">
   <script>
     window.MathJax = {
       tex: {
@@ -116,7 +116,7 @@
 
         <article class="card panel" id="geometry-panel">
           <h2>Vista geometrica</h2>
-          <p class="panel-sub">Rappresentazione dei vettori nel piano ℝ².</p>
+          <p class="panel-sub" id="geometry-subtitle">Rappresentazione dei vettori nel piano ℝ².</p>
           <svg class="plot" id="plot" viewBox="0 0 420 320" role="img" aria-label="Rappresentazione dei due vettori nel piano"></svg>
         </article>
 
@@ -125,6 +125,13 @@
           <p class="panel-sub">I conteggi distinguono presenze comuni, discordanze e assenze comuni.</p>
           <div class="binary-counts" id="binary-counts"></div>
           <div class="binary-coordinates" id="binary-coordinates" aria-label="Confronto coordinata per coordinata"></div>
+        </article>
+
+        <article class="card panel rank-panel" id="rank-panel" hidden>
+          <h2>Ordinamento delle coordinate</h2>
+          <p class="panel-sub" id="rank-panel-subtitle"></p>
+          <div class="rank-orders" id="rank-orders"></div>
+          <div id="rank-details"></div>
         </article>
 
         <article class="card panel string-panel" id="string-panel" hidden>
@@ -137,7 +144,7 @@
   </main>
 
 
-  <script src="js/misure.js?v=20261015-9"></script>
-  <script src="js/interfaccia.js?v=20261015-6"></script>
+  <script src="js/misure.js?v=20261015-10"></script>
+  <script src="js/interfaccia.js?v=20261015-7"></script>
 </body>
 </html>
