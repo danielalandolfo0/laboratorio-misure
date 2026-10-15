@@ -1,16 +1,16 @@
 # Laboratorio delle misure
 
-Applicazione didattica per calcolare, confrontare e visualizzare misure di distanza e similarità.
+Applicazione didattica per calcolare, confrontare e visualizzare distanze, dissimilarità e misure di associazione.
 
 ## Funzionalità disponibili
 
 - famiglia di Minkowski: forma generale, Manhattan, Euclidea, Chebyshev, versione pesata ed Euclidea standardizzata;
 - Mahalanobis, Canberra, Bray–Curtis e χ² simmetrica;
-- coefficienti binari simmetrici, asimmetrici, pesati e di associazione descritti nell’atlante;
+- distanze e dissimilarità per vettori binari, insieme alle misure di associazione descritte nell’atlante;
 - selezione del tipo di dato e delle sole misure compatibili;
 - contributi delle singole coordinate;
 - rappresentazione geometrica per vettori numerici in due dimensioni;
-- conteggi \(n_{11}, n_{10}, n_{01}, n_{00}\) per dati di presenza/assenza;
+- conteggi \(n_{11}, n_{10}, n_{01}, n_{00}\) per vettori binari;
 - controlli sulla validità degli input numerici e binari.
 
 ## Struttura del progetto

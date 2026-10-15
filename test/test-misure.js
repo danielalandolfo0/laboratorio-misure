@@ -42,7 +42,7 @@ const attesi = {
   phi: 0
 };
 for (const [tipo, atteso] of Object.entries(attesi)) quasiUguali(M.calcolaBinaria(tipo, b1, b2).valore, atteso);
-quasiUguali(M.calcolaBinaria("weighted_binary", b1, b2, { lambda: 1, mu: 1, nu: 1 }).valore, .5);
+quasiUguali(M.calcolaBinaria("weighted_binary", b1, b2, { lambda: 2, mu: 1, nu: 3 }).valore, 2 / 3);
 
 const nulli = [0, 0];
 quasiUguali(M.calcolaBinaria("jaccard", nulli, nulli).valore, 0);

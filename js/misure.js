@@ -85,11 +85,11 @@
       dominio: "Vettori non negativi della stessa dimensione.", proprieta: "È una metrica."
     },
     weighted_binary: {
-      nome: "Similarità binaria pesata", tipoDati: "binary", risultato: "Similarità",
-      formula: String.raw`S_{\lambda,\mu,\nu}(x,y)=\frac{\lambda n_{11}+\mu n_{00}}{\lambda n_{11}+\mu n_{00}+\nu(n_{10}+n_{01})}`,
-      interpretazione: "I parametri stabiliscono il peso di co-presenze, co-assenze e disaccordi.",
+      nome: "Dissimilarità binaria pesata", tipoDati: "binary", risultato: "Dissimilarità",
+      formula: String.raw`d_{\lambda,\mu,\nu}(x,y)=\frac{\nu(n_{10}+n_{01})}{\lambda n_{11}+\mu n_{00}+\nu(n_{10}+n_{01})}`,
+      interpretazione: "Misura la quota pesata dei disaccordi rispetto al totale pesato; 0 indica coincidenza.",
       dominio: dominioBinario + " I pesi λ, μ, ν sono non negativi e il denominatore deve essere positivo.",
-      proprieta: "È una famiglia di coefficienti di similarità; le proprietà metriche del complemento dipendono dai pesi."
+      proprieta: "È il complemento della similarità binaria pesata e assume valori in [0,1]; le proprietà metriche dipendono dai pesi."
     },
     hamming: {
       nome: "Hamming normalizzata / Simple Matching", tipoDati: "binary", risultato: "Distanza",
@@ -110,7 +110,7 @@
       dominio: dominioBinario, proprieta: "Separa i vettori, ma può violare la disuguaglianza triangolare."
     },
     jaccard: {
-      nome: "Distanza di Jaccard", tipoDati: "binary", risultato: "Distanza",
+      nome: "Dissimilarità di Jaccard", tipoDati: "binary", risultato: "Dissimilarità",
       formula: String.raw`d_J(x,y)=\frac{n_{10}+n_{01}}{n_{11}+n_{10}+n_{01}}`,
       interpretazione: "Confronta soltanto le presenze: le assenze comuni n₀₀ non modificano il risultato.",
       dominio: dominioBinario + " Per due vettori nulli si pone convenzionalmente dJ=0.",
@@ -304,8 +304,8 @@
       const { lambda, mu, nu } = parametri;
       if (![lambda, mu, nu].every(v => Number.isFinite(v) && v >= 0)) throw new Error("I pesi λ, μ e ν devono essere non negativi.");
       const den = lambda * n11 + mu * n00 + nu * m;
-      if (den === 0) return nonDefinita(c, "La similarità pesata non è definita perché il denominatore è nullo.");
-      valore = (lambda * n11 + mu * n00) / den;
+      if (den === 0) return nonDefinita(c, "La dissimilarità pesata non è definita perché il denominatore è nullo.");
+      valore = nu * m / den;
     } else if (tipo === "hamming") valore = m / p;
     else if (tipo === "rogers_tanimoto") valore = 2 * m / (a + 2 * m);
     else if (tipo === "sokal_sneath_sym") valore = m / (2 * a + m);

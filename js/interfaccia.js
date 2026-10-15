@@ -18,8 +18,8 @@
     binary: {
       gruppi: [
         ["Famiglia pesata", ["weighted_binary"]],
-        ["Coefficienti simmetrici", ["hamming", "rogers_tanimoto", "sokal_sneath_sym"]],
-        ["Coefficienti asimmetrici", ["jaccard", "sokal_sneath_asym", "dice", "ochiai", "russell_rao"]],
+        ["Distanze e dissimilarità simmetriche", ["hamming", "rogers_tanimoto", "sokal_sneath_sym"]],
+        ["Distanze e dissimilarità asimmetriche", ["jaccard", "sokal_sneath_asym", "dice", "ochiai", "russell_rao"]],
         ["Coefficienti di associazione", ["yule_q", "phi"]]
       ],
       etichettaX: "Vettore binario x", etichettaY: "Vettore binario y",
