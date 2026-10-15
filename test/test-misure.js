@@ -37,9 +37,7 @@ const attesi = {
   sokal_sneath_asym: 4 / 5,
   dice: .5,
   ochiai: .5,
-  russell_rao: 3 / 4,
-  yule_q: 0,
-  phi: 0
+  russell_rao: 3 / 4
 };
 for (const [tipo, atteso] of Object.entries(attesi)) quasiUguali(M.calcolaBinaria(tipo, b1, b2).valore, atteso);
 quasiUguali(M.calcolaBinaria("weighted_binary", b1, b2, { lambda: 2, mu: 1, nu: 3 }).valore, 1 / 3);
@@ -50,8 +48,6 @@ quasiUguali(M.calcolaBinaria("sokal_sneath_asym", nulli, nulli).valore, 0);
 assert.equal(M.calcolaBinaria("dice", nulli, nulli).definita, false);
 assert.equal(M.calcolaBinaria("ochiai", nulli, nulli).definita, false);
 assert.equal(M.calcolaBinaria("ochiai", nulli, [1, 0]).definita, false);
-assert.equal(M.calcolaBinaria("yule_q", [1, 1], [1, 1]).definita, false);
-assert.equal(M.calcolaBinaria("phi", [1, 1], [1, 1]).definita, false);
 assert.throws(() => M.calcolaBinaria("jaccard", [1, 2], [1, 0]), /0 oppure 1/);
 
 assert.deepEqual(M.leggiStringa("A 🧬"), ["A", " ", "🧬"]);

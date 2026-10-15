@@ -19,8 +19,7 @@
       gruppi: [
         ["Famiglia pesata", ["weighted_binary"]],
         ["Distanze e dissimilarità simmetriche", ["hamming", "rogers_tanimoto", "sokal_sneath_sym"]],
-        ["Distanze e dissimilarità asimmetriche", ["jaccard", "sokal_sneath_asym", "dice", "ochiai", "russell_rao"]],
-        ["Coefficienti di associazione", ["yule_q", "phi"]]
+        ["Distanze e dissimilarità asimmetriche", ["jaccard", "sokal_sneath_asym", "dice", "ochiai", "russell_rao"]]
       ],
       etichettaX: "Vettore binario x", etichettaY: "Vettore binario y",
       aiuto: "Inserisci soltanto 0 e 1, separati da virgole, spazi o punti e virgola.",

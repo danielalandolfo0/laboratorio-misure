@@ -143,20 +143,6 @@
       interpretazione: "Confronta le co-presenze con tutte le coordinate, comprese le doppie assenze nel denominatore.",
       dominio: dominioBinario, proprieta: "Non deriva da una similarità normalizzata sulla diagonale e non è una metrica."
     },
-    yule_q: {
-      nome: "Q di Yule", tipoDati: "binary", risultato: "Associazione",
-      formula: String.raw`Q_Y=\frac{n_{11}n_{00}-n_{10}n_{01}}{n_{11}n_{00}+n_{10}n_{01}}`,
-      interpretazione: "Valori positivi indicano associazione concorde, valori negativi associazione inversa.",
-      dominio: dominioBinario + " Il denominatore deve essere diverso da zero.",
-      proprieta: "Assume valori in [-1,1]; non è una distanza né una similarità nel senso restrittivo."
-    },
-    phi: {
-      nome: "Coefficiente φ di Pearson", tipoDati: "binary", risultato: "Associazione",
-      formula: String.raw`\phi=\frac{n_{11}n_{00}-n_{10}n_{01}}{\sqrt{(n_{11}+n_{10})(n_{01}+n_{00})(n_{11}+n_{01})(n_{10}+n_{00})}}`,
-      interpretazione: "È la correlazione di Pearson tra le due variabili binarie.",
-      dominio: dominioBinario + " Tutti i totali marginali al denominatore devono essere positivi.",
-      proprieta: "Assume valori in [-1,1]; non deve essere trasformato automaticamente in una distanza."
-    },
     string_hamming: {
       nome: "Distanza di Hamming", tipoDati: "string", risultato: "Distanza",
       formula: String.raw`d_H(x,y)=\sum_{i=1}^{n}\mathbf 1_{\{x_i\neq y_i\}}`,
@@ -364,15 +350,7 @@
       if (px === 0 || py === 0) return nonDefinita(c, "Ochiai non è definita se almeno uno dei due vettori è nullo.");
       valore = 1 - n11 / Math.sqrt(px * py);
     } else if (tipo === "russell_rao") valore = 1 - n11 / p;
-    else if (tipo === "yule_q") {
-      const den = n11 * n00 + n10 * n01;
-      if (den === 0) return nonDefinita(c, "Q di Yule non è definito perché il denominatore è nullo.");
-      valore = (n11 * n00 - n10 * n01) / den;
-    } else if (tipo === "phi") {
-      const den2 = (n11 + n10) * (n01 + n00) * (n11 + n01) * (n10 + n00);
-      if (den2 === 0) return nonDefinita(c, "Il coefficiente φ non è definito perché almeno un totale marginale è nullo.");
-      valore = (n11 * n00 - n10 * n01) / Math.sqrt(den2);
-    } else throw new Error("Misura binaria non riconosciuta.");
+    else throw new Error("Misura binaria non riconosciuta.");
     return { definita: true, valore, distanza: valore, conteggi: c };
   }
 
