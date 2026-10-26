@@ -189,6 +189,8 @@ header p {
 .method-badge { display: inline-block; padding: 4px 7px; border-radius: 999px; white-space: nowrap; font-weight: 700; }
 .method-zscore { color: #075fae; background: rgba(8, 124, 255, .10); }
 .method-robusto { color: #6542d7; background: rgba(118, 87, 255, .12); }
+.method-minmax { color: #08704f; background: rgba(31, 168, 121, .12); }
+.method-maxabs { color: #8b4d09; background: rgba(244, 151, 45, .15); }
 .method-costante { color: #8a4b13; background: rgba(255, 175, 118, .18); }
 .method-nessuno { color: #536078; background: rgba(102, 112, 133, .10); }
 .preview-toolbar { align-items: end; }
