@@ -61,14 +61,14 @@
           <option value="binaria"${tipo === "binaria" ? " selected" : ""}>Binaria 0/1</option>
           <option value="non_numerica"${tipo === "non_numerica" ? " selected" : ""}>Non numerica</option>
         </select></td>
-        <td><div class="method-choice-wrap"><select class="column-choice" data-choice="metodo" data-column="${indice}" aria-label="Metodo per la feature ${escapeHtml(colonna.nome)}"${colonna.tipo === "binaria" || colonna.tipo === "non_numerica" ? " disabled" : ""}>
+        <td><div class="method-choice-wrap"><div class="method-choice-line"><select class="column-choice" data-choice="metodo" data-column="${indice}" aria-label="Metodo per la feature ${escapeHtml(colonna.nome)}"${colonna.tipo === "binaria" || colonna.tipo === "non_numerica" ? " disabled" : ""}>
           <option value="auto"${metodo === "auto" ? " selected" : ""}>${etichettaMetodo(colonna.metodoAutomatico)} (suggerito)</option>
           <option value="zscore"${metodo === "zscore" ? " selected" : ""}>Z-score</option>
           <option value="robusto"${metodo === "robusto" ? " selected" : ""}>Scala robusta</option>
           <option value="minmax"${metodo === "minmax" ? " selected" : ""}>Min–max [0,1]</option>
           <option value="maxabs"${metodo === "maxabs" ? " selected" : ""}>Max-abs</option>
           <option value="nessuno"${metodo === "nessuno" ? " selected" : ""}>Nessuno</option>
-        </select><details class="method-info"><summary aria-label="Informazioni sulla scelta per ${escapeHtml(colonna.nome)}">i</summary><div>${escapeHtml(colonna.motivo)}</div></details></div></td>
+        </select><button class="method-info-button" data-info-column="${indice}" type="button" aria-label="Informazioni sulla scelta per ${escapeHtml(colonna.nome)}" aria-controls="method-reason-${indice}" aria-expanded="false">i</button></div><p class="method-reason" id="method-reason-${indice}" hidden>${escapeHtml(colonna.motivo)}</p></div></td>
         <td><span class="method-params">${parametri}</span></td>
         <td>${colonna.mancanti}</td></tr>`;
     }).join("");
@@ -179,6 +179,14 @@
   $("download-work").addEventListener("click", scaricaTabella);
   $("scaling-body").addEventListener("change", evento => {
     if (evento.target.matches(".column-choice")) aggiornaScelta(evento.target);
+  });
+  $("scaling-body").addEventListener("click", evento => {
+    const pulsante = evento.target.closest(".method-info-button");
+    if (!pulsante) return;
+    const spiegazione = document.getElementById(pulsante.getAttribute("aria-controls"));
+    const apri = pulsante.getAttribute("aria-expanded") !== "true";
+    pulsante.setAttribute("aria-expanded", String(apri));
+    spiegazione.hidden = !apri;
   });
 
   const zona = $("csv-drop-zone");
