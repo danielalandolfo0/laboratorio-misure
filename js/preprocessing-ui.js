@@ -26,7 +26,7 @@
   }
 
   function etichettaMetodo(metodo) {
-    return ({ zscore: "Z-score", robusto: "Scala robusta", costante: "Valore 0", nessuno: "Nessuno" })[metodo];
+    return ({ zscore: "Z-score", robusto: "Scala robusta", minmax: "Min–max", maxabs: "Max-abs", costante: "Valore 0", nessuno: "Nessuno" })[metodo];
   }
 
   function mostraErrore(messaggio) {
@@ -57,6 +57,10 @@
         ? `media ${formatoNumero(s.media)} · σ ${formatoNumero(s.deviazione)}`
         : colonna.metodo === "robusto"
           ? `mediana ${formatoNumero(s.mediana)} · IQR ${formatoNumero(s.iqr)}`
+          : colonna.metodo === "minmax"
+            ? `min ${formatoNumero(s.minimo)} · max ${formatoNumero(s.massimo)}`
+            : colonna.metodo === "maxabs"
+              ? `max |x| ${formatoNumero(s.massimoAssoluto)}`
           : colonna.metodo === "costante" ? "deviazione 0" : "—";
       const tipo = colonna.sceltaTipo || "auto";
       const metodo = colonna.sceltaMetodo || "auto";
@@ -72,6 +76,8 @@
           <option value="auto"${metodo === "auto" ? " selected" : ""}>Automatico (${etichettaMetodo(colonna.metodoAutomatico)})</option>
           <option value="zscore"${metodo === "zscore" ? " selected" : ""}>Z-score</option>
           <option value="robusto"${metodo === "robusto" ? " selected" : ""}>Scala robusta</option>
+          <option value="minmax"${metodo === "minmax" ? " selected" : ""}>Min–max [0,1]</option>
+          <option value="maxabs"${metodo === "maxabs" ? " selected" : ""}>Max-abs</option>
           <option value="nessuno"${metodo === "nessuno" ? " selected" : ""}>Nessuno</option>
         </select></td>
         <td><span class="method-badge method-${colonna.metodo}">${etichettaMetodo(colonna.metodo)}</span><small class="method-params">${parametri}</small></td>
