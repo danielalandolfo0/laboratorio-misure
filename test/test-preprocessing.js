@@ -45,6 +45,12 @@ const manuale = P.preparaTabella(tabella, [
 assert.deepEqual(manuale.trasformate.map(r => r[0]), [1, 2, 3]);
 assert.equal(manuale.colonne[1].metodo, "robusto");
 assert.equal(manuale.colonne[2].tipo, "numerica");
+
+const binariaComeNumerica = P.preparaTabella(tabella, [{}, {}, { tipo: "numerica", metodo: "auto" }]);
+assert.equal(binariaComeNumerica.colonne[2].tipo, "numerica");
+assert.equal(binariaComeNumerica.colonne[2].metodo, "zscore");
+assert.equal(binariaComeNumerica.colonne[2].metodoAutomatico, "zscore");
+assert.notDeepEqual(binariaComeNumerica.trasformate.map(r => r[2]), [0, 1, 0]);
 assert.throws(() => P.preparaTabella(tabella, [{ tipo: "auto", metodo: "auto" }, {}, {}, { tipo: "numerica", metodo: "zscore" }]), /valori non numerici/);
 assert.throws(() => P.preparaTabella(tabella, [{}, { tipo: "binaria", metodo: "auto" }]), /non è binaria/);
 assert.throws(() => P.preparaTabella(conEstremo.originale, [{}, { tipo: "numerica", metodo: "zscore" }]), /costante/);
