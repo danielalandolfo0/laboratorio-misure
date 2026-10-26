@@ -184,20 +184,24 @@
     const mancanti = convertiti.filter(v => v === null).length;
     const numericiValidi = osservati.length > 0 && osservati.every(v => v !== undefined && Number.isFinite(v));
     let analisi;
+    let metodoAutomaticoEffettivo = automatica.metodo;
 
     if (tipo === "non_numerica") {
+      metodoAutomaticoEffettivo = "nessuno";
       analisi = { nome, tipo, metodo: "nessuno", mancanti, motivo: "I valori restano invariati." };
     } else {
       if (!numericiValidi) throw new Error(`La feature “${nome}” contiene valori non numerici e non può essere trattata come ${tipo === "binaria" ? "binaria" : "numerica"}.`);
       const numeri = osservati;
       if (tipo === "binaria") {
         if (!numeri.every(v => v === 0 || v === 1)) throw new Error(`La feature “${nome}” non è binaria: sono ammessi soltanto 0, 1 e valori mancanti.`);
+        metodoAutomaticoEffettivo = "nessuno";
         analisi = { nome, tipo, metodo: "nessuno", mancanti, motivo: "Sono presenti soltanto 0 e 1.", valoriNumerici: convertiti };
       } else {
         const stats = statistiche(numeri);
         const haEstremi = stats.quotaEstremi > .01 && stats.iqr > 0;
         const sparsa = !haEstremi && stats.quotaZeri >= .8 && stats.massimoAssoluto > 0;
         const automatico = stats.deviazione === 0 ? "costante" : haEstremi ? "robusto" : sparsa ? "maxabs" : "zscore";
+        metodoAutomaticoEffettivo = automatico;
         const metodo = metodoScelto === "auto" ? automatico : metodoScelto;
         if (metodo === "zscore" && stats.deviazione === 0) throw new Error(`La feature “${nome}” è costante: lo z-score richiede una deviazione standard positiva.`);
         if (metodo === "robusto" && stats.iqr === 0) throw new Error(`La feature “${nome}” ha IQR nullo: la scala robusta non è definita.`);
@@ -214,7 +218,7 @@
         analisi = { nome, tipo: stats.deviazione === 0 && metodo === "costante" ? "numerica_costante" : "numerica", metodo, mancanti, motivo: motivi[metodo], statistiche: stats, valoriNumerici: convertiti };
       }
     }
-    return { ...analisi, tipoRilevato: automatica.tipo, metodoAutomatico: automatica.metodo, sceltaTipo: tipoScelto, sceltaMetodo: metodoScelto };
+    return { ...analisi, tipoRilevato: automatica.tipo, metodoAutomatico: metodoAutomaticoEffettivo, sceltaTipo: tipoScelto, sceltaMetodo: metodoScelto };
   }
 
   function trasformaValore(valore, analisi) {
