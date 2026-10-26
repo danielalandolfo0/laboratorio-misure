@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Laboratorio interattivo per calcolare e comprendere misure tra vettori numerici, vettori binari e stringhe.">
-  <title>Calcolo delle misure tra due elementi</title>
-  <link rel="stylesheet" href="css/stile.css?v=20261015-6">
+  <meta name="description" content="Laboratorio interattivo per preparare dati tabellari e comprendere misure tra vettori, dati binari e stringhe.">
+  <title>Laboratorio delle misure</title>
+  <link rel="stylesheet" href="css/stile.css?v=20261026-1">
   <script>
     window.MathJax = {
       tex: {
@@ -19,9 +19,79 @@
 </head>
 <body>
   <header class="shell">
-    <h1>Calcolo delle misure tra due elementi</h1>
-    <p>Scegli il tipo di dato, inserisci due elementi e osserva come viene costruita la misura.</p>
+    <h1>Laboratorio delle misure</h1>
+    <p>Prepara una tabella di dati oppure confronta direttamente due elementi e osserva come viene costruita la misura.</p>
   </header>
+
+  <section class="shell card data-prep" aria-labelledby="prep-title">
+    <div class="prep-heading">
+      <div>
+        <p class="section-label">Preelaborazione</p>
+        <h2 id="prep-title">Carica e riscala la tua tabella</h2>
+        <p>Ogni riga è un’istanza e ogni colonna una feature. L’app crea una tabella di lavoro senza modificare il file originale.</p>
+      </div>
+      <span class="local-badge">Elaborazione nel browser</span>
+    </div>
+
+    <div class="prep-upload-grid">
+      <label class="csv-drop-zone" id="csv-drop-zone" for="csv-file">
+        <input class="visually-hidden" id="csv-file" type="file" accept=".csv,text/csv,text/plain">
+        <span class="upload-icon" aria-hidden="true">↑</span>
+        <strong>Scegli un CSV</strong>
+        <small>oppure trascinalo qui · massimo 15 MB</small>
+      </label>
+      <div class="prep-rules">
+        <h3>Riscalamento automatico</h3>
+        <ul>
+          <li><b>Z-score</b> per le feature numeriche ordinarie.</li>
+          <li><b>Scala robusta</b> se oltre l’1% dei valori supera le soglie di Tukey.</li>
+          <li>Feature binarie e non numeriche lasciate invariate.</li>
+        </ul>
+        <button class="chip" id="load-example-csv" type="button">Carica un esempio</button>
+      </div>
+    </div>
+    <div class="error" id="csv-error" role="alert"></div>
+
+    <div class="csv-output" id="csv-output" hidden>
+      <div class="csv-output-head">
+        <div><span>File analizzato</span><strong id="csv-file-name"></strong></div>
+        <button class="secondary-action" id="download-work" type="button" disabled>Scarica la tabella riscalata</button>
+      </div>
+      <div class="csv-summary" id="csv-summary"></div>
+
+      <div class="scaling-wrap">
+        <h3>Decisioni di riscalamento</h3>
+        <p>Le statistiche sono calcolate sui valori osservati; gli eventuali valori mancanti restano mancanti.</p>
+        <div class="data-table-wrap">
+          <table class="data-table scaling-table">
+            <thead><tr><th>Feature</th><th>Tipo</th><th>Metodo</th><th>Parametri</th><th>Mancanti</th><th>Motivazione</th></tr></thead>
+            <tbody id="scaling-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="preview-block">
+        <div class="preview-toolbar">
+          <div>
+            <h3>Anteprima della tabella</h3>
+            <p id="preview-caption"></p>
+          </div>
+          <div class="view-switch" aria-label="Scegli la tabella da visualizzare">
+            <button id="view-original" type="button">Originale</button>
+            <button class="active" id="view-work" type="button">Di lavoro</button>
+          </div>
+        </div>
+        <div class="data-table-wrap">
+          <table class="data-table preview-table">
+            <thead id="preview-head"></thead>
+            <tbody id="preview-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="shell section-divider"><span>Confronto tra due elementi</span></div>
 
   <main class="shell">
     <section class="card controls" aria-labelledby="input-title">
@@ -144,6 +214,8 @@
   </main>
 
 
+  <script src="js/preprocessing.js?v=20261026-1"></script>
+  <script src="js/preprocessing-ui.js?v=20261026-1"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>
