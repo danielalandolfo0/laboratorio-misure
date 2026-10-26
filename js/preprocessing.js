@@ -121,10 +121,13 @@
     const iqr = q3 - q1;
     const minimoTukey = q1 - 1.5 * iqr, massimoTukey = q3 + 1.5 * iqr;
     const estremi = valori.filter(v => v < minimoTukey || v > massimoTukey).length;
+    const zeri = valori.filter(v => v === 0).length;
+    const massimoAssoluto = Math.max(...valori.map(Math.abs));
     return {
       media, deviazione, mediana, q1, q3, iqr,
       minimo: ordinati[0], massimo: ordinati[ordinati.length - 1],
-      estremi, quotaEstremi: estremi / valori.length
+      massimoAssoluto, estremi, quotaEstremi: estremi / valori.length,
+      zeri, quotaZeri: zeri / valori.length
     };
   }
 
@@ -149,9 +152,12 @@
     }
 
     const robusto = stats.quotaEstremi > .01 && stats.iqr > 0;
-    const metodo = robusto ? "robusto" : "zscore";
+    const maxabs = !robusto && stats.quotaZeri >= .8 && stats.massimoAssoluto > 0;
+    const metodo = robusto ? "robusto" : maxabs ? "maxabs" : "zscore";
     const motivo = robusto
       ? `${stats.estremi} valori (${formattaPercentuale(stats.quotaEstremi)}) oltre le soglie di Tukey.`
+      : maxabs
+        ? `${stats.zeri} valori (${formattaPercentuale(stats.quotaZeri)}) uguali a zero: max-abs preserva la sparsità.`
       : stats.iqr === 0
         ? "IQR nullo: si usa lo z-score perché la deviazione standard è positiva."
         : "Valori estremi entro la soglia automatica dell’1%.";
@@ -187,13 +193,19 @@
         analisi = { nome, tipo, metodo: "nessuno", mancanti, motivo: "Tipo binario impostato: codifica 0/1 lasciata invariata.", valoriNumerici: convertiti };
       } else {
         const stats = statistiche(numeri);
-        const automatico = stats.deviazione === 0 ? "costante" : (stats.quotaEstremi > .01 && stats.iqr > 0 ? "robusto" : "zscore");
+        const haEstremi = stats.quotaEstremi > .01 && stats.iqr > 0;
+        const sparsa = !haEstremi && stats.quotaZeri >= .8 && stats.massimoAssoluto > 0;
+        const automatico = stats.deviazione === 0 ? "costante" : haEstremi ? "robusto" : sparsa ? "maxabs" : "zscore";
         const metodo = metodoScelto === "auto" ? automatico : metodoScelto;
         if (metodo === "zscore" && stats.deviazione === 0) throw new Error(`La feature “${nome}” è costante: lo z-score richiede una deviazione standard positiva.`);
         if (metodo === "robusto" && stats.iqr === 0) throw new Error(`La feature “${nome}” ha IQR nullo: la scala robusta non è definita.`);
+        if (metodo === "minmax" && stats.massimo === stats.minimo) throw new Error(`La feature “${nome}” è costante: min–max richiede massimo e minimo differenti.`);
+        if (metodo === "maxabs" && stats.massimoAssoluto === 0) throw new Error(`La feature “${nome}” contiene soltanto zeri: max-abs richiede un massimo assoluto positivo.`);
         const motivi = {
           zscore: metodoScelto === "auto" ? "Metodo automatico: standardizzazione rispetto a media e deviazione standard." : "Metodo impostato manualmente.",
           robusto: metodoScelto === "auto" ? "Metodo automatico: presenza di valori estremi oltre le soglie di Tukey." : "Metodo impostato manualmente.",
+          maxabs: metodoScelto === "auto" ? `Metodo automatico: ${formattaPercentuale(stats.quotaZeri)} dei valori osservati è zero; la trasformazione preserva gli zeri.` : "Metodo impostato manualmente: divisione per il massimo valore assoluto.",
+          minmax: "Metodo impostato manualmente: trasformazione dell’intervallo osservato in [0,1].",
           costante: "Feature costante: tutti i valori osservati vengono posti a 0.",
           nessuno: "Nessun riscalamento: i valori numerici restano invariati."
         };
@@ -211,6 +223,8 @@
     if (analisi.metodo === "nessuno") return numero;
     if (analisi.metodo === "costante") return 0;
     if (analisi.metodo === "robusto") return (numero - analisi.statistiche.mediana) / analisi.statistiche.iqr;
+    if (analisi.metodo === "minmax") return (numero - analisi.statistiche.minimo) / (analisi.statistiche.massimo - analisi.statistiche.minimo);
+    if (analisi.metodo === "maxabs") return numero / analisi.statistiche.massimoAssoluto;
     return (numero - analisi.statistiche.media) / analisi.statistiche.deviazione;
   }
 
