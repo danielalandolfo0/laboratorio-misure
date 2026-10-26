@@ -35,4 +35,17 @@ assert.throws(() => P.leggiCsv("a,a\n1,2"), /univoci/);
 assert.throws(() => P.leggiCsv("a,b\n1,2\n3"), /riga 3/);
 assert.match(P.creaCsv(["a", "b"], [[1.25, "x,y"]]), /^a,b\n1.25,"x,y"$/);
 
+const manuale = P.preparaTabella(tabella, [
+  { tipo: "numerica", metodo: "nessuno" },
+  { tipo: "numerica", metodo: "robusto" },
+  { tipo: "numerica", metodo: "zscore" },
+  { tipo: "non_numerica", metodo: "auto" }
+]);
+assert.deepEqual(manuale.trasformate.map(r => r[0]), [1, 2, 3]);
+assert.equal(manuale.colonne[1].metodo, "robusto");
+assert.equal(manuale.colonne[2].tipo, "numerica");
+assert.throws(() => P.preparaTabella(tabella, [{ tipo: "auto", metodo: "auto" }, {}, {}, { tipo: "numerica", metodo: "zscore" }]), /valori non numerici/);
+assert.throws(() => P.preparaTabella(tabella, [{}, { tipo: "binaria", metodo: "auto" }]), /non è binaria/);
+assert.throws(() => P.preparaTabella(conEstremo.originale, [{}, { tipo: "numerica", metodo: "zscore" }]), /costante/);
+
 console.log("Tutti i test di preprocessing sono stati superati.");
