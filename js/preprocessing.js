@@ -131,41 +131,43 @@
     };
   }
 
+  function descriviOutlier(stats) {
+    if (stats.estremi === 1) return "È presente un solo outlier.";
+    if (stats.quotaEstremi <= .1) return "Sono presenti pochi outlier.";
+    return "Sono presenti molti outlier.";
+  }
+
   function analizzaColonna(nome, valori, separatore) {
     const convertiti = valori.map(v => leggiNumero(v, separatore));
     const osservati = convertiti.filter(v => v !== null);
     const tuttiNumerici = osservati.length > 0 && osservati.every(v => v !== undefined && Number.isFinite(v));
     const mancanti = convertiti.filter(v => v === null).length;
     if (!tuttiNumerici) {
-      return { nome, tipo: "non_numerica", metodo: "nessuno", mancanti, motivo: "Valori non numerici: la colonna resta invariata." };
+      return { nome, tipo: "non_numerica", metodo: "nessuno", mancanti, motivo: "Sono presenti valori non numerici." };
     }
 
     const numeri = osservati;
     const unici = [...new Set(numeri)];
     if (unici.every(v => v === 0 || v === 1)) {
-      return { nome, tipo: "binaria", metodo: "nessuno", mancanti, motivo: "Codifica 0/1 già su scala comune.", valoriNumerici: convertiti };
+      return { nome, tipo: "binaria", metodo: "nessuno", mancanti, motivo: "Sono presenti soltanto 0 e 1.", valoriNumerici: convertiti };
     }
 
     const stats = statistiche(numeri);
     if (stats.deviazione === 0) {
-      return { nome, tipo: "numerica_costante", metodo: "costante", mancanti, motivo: "La feature è costante e viene posta a 0.", statistiche: stats, valoriNumerici: convertiti };
+      return { nome, tipo: "numerica_costante", metodo: "costante", mancanti, motivo: "Tutti i valori sono uguali.", statistiche: stats, valoriNumerici: convertiti };
     }
 
     const robusto = stats.quotaEstremi > .01 && stats.iqr > 0;
     const maxabs = !robusto && stats.quotaZeri >= .8 && stats.massimoAssoluto > 0;
     const metodo = robusto ? "robusto" : maxabs ? "maxabs" : "zscore";
     const motivo = robusto
-      ? `${stats.estremi} ${stats.estremi === 1 ? "valore" : "valori"} (${formattaPercentuale(stats.quotaEstremi)}) oltre le soglie di Tukey.`
+      ? descriviOutlier(stats)
       : maxabs
-        ? `${stats.zeri} ${stats.zeri === 1 ? "valore" : "valori"} (${formattaPercentuale(stats.quotaZeri)}) ${stats.zeri === 1 ? "uguale" : "uguali"} a zero: max-abs preserva la sparsità.`
+        ? "Molti valori sono uguali a zero."
       : stats.iqr === 0
-        ? "IQR nullo: si usa lo z-score perché la deviazione standard è positiva."
-        : "Valori estremi entro la soglia automatica dell’1%.";
+        ? "I valori sono concentrati su pochi livelli."
+        : "Non emergono outlier rilevanti.";
     return { nome, tipo: "numerica", metodo, mancanti, motivo, statistiche: stats, valoriNumerici: convertiti };
-  }
-
-  function formattaPercentuale(valore) {
-    return new Intl.NumberFormat("it-IT", { style: "percent", maximumFractionDigits: 1 }).format(valore);
   }
 
   function personalizzaColonna(nome, valori, separatore, scelta = {}) {
@@ -184,13 +186,13 @@
     let analisi;
 
     if (tipo === "non_numerica") {
-      analisi = { nome, tipo, metodo: "nessuno", mancanti, motivo: "Tipo impostato manualmente: i valori restano invariati." };
+      analisi = { nome, tipo, metodo: "nessuno", mancanti, motivo: "I valori restano invariati." };
     } else {
       if (!numericiValidi) throw new Error(`La feature “${nome}” contiene valori non numerici e non può essere trattata come ${tipo === "binaria" ? "binaria" : "numerica"}.`);
       const numeri = osservati;
       if (tipo === "binaria") {
         if (!numeri.every(v => v === 0 || v === 1)) throw new Error(`La feature “${nome}” non è binaria: sono ammessi soltanto 0, 1 e valori mancanti.`);
-        analisi = { nome, tipo, metodo: "nessuno", mancanti, motivo: "Tipo binario impostato: codifica 0/1 lasciata invariata.", valoriNumerici: convertiti };
+        analisi = { nome, tipo, metodo: "nessuno", mancanti, motivo: "Sono presenti soltanto 0 e 1.", valoriNumerici: convertiti };
       } else {
         const stats = statistiche(numeri);
         const haEstremi = stats.quotaEstremi > .01 && stats.iqr > 0;
@@ -202,12 +204,12 @@
         if (metodo === "minmax" && stats.massimo === stats.minimo) throw new Error(`La feature “${nome}” è costante: min–max richiede massimo e minimo differenti.`);
         if (metodo === "maxabs" && stats.massimoAssoluto === 0) throw new Error(`La feature “${nome}” contiene soltanto zeri: max-abs richiede un massimo assoluto positivo.`);
         const motivi = {
-          zscore: metodoScelto === "auto" ? "Metodo automatico: standardizzazione rispetto a media e deviazione standard." : "Metodo impostato manualmente.",
-          robusto: metodoScelto === "auto" ? "Metodo automatico: presenza di valori estremi oltre le soglie di Tukey." : "Metodo impostato manualmente.",
-          maxabs: metodoScelto === "auto" ? `Metodo automatico: ${formattaPercentuale(stats.quotaZeri)} dei valori osservati è zero; la trasformazione preserva gli zeri.` : "Metodo impostato manualmente: divisione per il massimo valore assoluto.",
-          minmax: "Metodo impostato manualmente: trasformazione dell’intervallo osservato in [0,1].",
-          costante: "Feature costante: tutti i valori osservati vengono posti a 0.",
-          nessuno: "Nessun riscalamento: i valori numerici restano invariati."
+          zscore: metodoScelto === "auto" ? "Non emergono outlier rilevanti." : "Le differenze vengono riportate su una scala comune.",
+          robusto: metodoScelto === "auto" ? descriviOutlier(stats) : "Viene ridotto il peso degli outlier.",
+          maxabs: metodoScelto === "auto" ? "Molti valori sono uguali a zero." : "Gli zeri restano invariati.",
+          minmax: "I valori vengono riportati tra 0 e 1.",
+          costante: "Tutti i valori sono uguali.",
+          nessuno: "I valori restano invariati."
         };
         analisi = { nome, tipo: stats.deviazione === 0 && metodo === "costante" ? "numerica_costante" : "numerica", metodo, mancanti, motivo: motivi[metodo], statistiche: stats, valoriNumerici: convertiti };
       }
