@@ -162,19 +162,61 @@
     return new Intl.NumberFormat("it-IT", { style: "percent", maximumFractionDigits: 1 }).format(valore);
   }
 
+  function personalizzaColonna(nome, valori, separatore, scelta = {}) {
+    const automatica = analizzaColonna(nome, valori, separatore);
+    const tipoScelto = scelta.tipo || "auto";
+    const metodoScelto = scelta.metodo || "auto";
+    if (tipoScelto === "auto" && metodoScelto === "auto") {
+      return { ...automatica, tipoRilevato: automatica.tipo, metodoAutomatico: automatica.metodo, sceltaTipo: "auto", sceltaMetodo: "auto" };
+    }
+
+    const tipo = tipoScelto === "auto" ? automatica.tipo : tipoScelto;
+    const convertiti = valori.map(v => leggiNumero(v, separatore));
+    const osservati = convertiti.filter(v => v !== null);
+    const mancanti = convertiti.filter(v => v === null).length;
+    const numericiValidi = osservati.length > 0 && osservati.every(v => v !== undefined && Number.isFinite(v));
+    let analisi;
+
+    if (tipo === "non_numerica") {
+      analisi = { nome, tipo, metodo: "nessuno", mancanti, motivo: "Tipo impostato manualmente: i valori restano invariati." };
+    } else {
+      if (!numericiValidi) throw new Error(`La feature “${nome}” contiene valori non numerici e non può essere trattata come ${tipo === "binaria" ? "binaria" : "numerica"}.`);
+      const numeri = osservati;
+      if (tipo === "binaria") {
+        if (!numeri.every(v => v === 0 || v === 1)) throw new Error(`La feature “${nome}” non è binaria: sono ammessi soltanto 0, 1 e valori mancanti.`);
+        analisi = { nome, tipo, metodo: "nessuno", mancanti, motivo: "Tipo binario impostato: codifica 0/1 lasciata invariata.", valoriNumerici: convertiti };
+      } else {
+        const stats = statistiche(numeri);
+        const automatico = stats.deviazione === 0 ? "costante" : (stats.quotaEstremi > .01 && stats.iqr > 0 ? "robusto" : "zscore");
+        const metodo = metodoScelto === "auto" ? automatico : metodoScelto;
+        if (metodo === "zscore" && stats.deviazione === 0) throw new Error(`La feature “${nome}” è costante: lo z-score richiede una deviazione standard positiva.`);
+        if (metodo === "robusto" && stats.iqr === 0) throw new Error(`La feature “${nome}” ha IQR nullo: la scala robusta non è definita.`);
+        const motivi = {
+          zscore: metodoScelto === "auto" ? "Metodo automatico: standardizzazione rispetto a media e deviazione standard." : "Metodo impostato manualmente.",
+          robusto: metodoScelto === "auto" ? "Metodo automatico: presenza di valori estremi oltre le soglie di Tukey." : "Metodo impostato manualmente.",
+          costante: "Feature costante: tutti i valori osservati vengono posti a 0.",
+          nessuno: "Nessun riscalamento: i valori numerici restano invariati."
+        };
+        analisi = { nome, tipo: stats.deviazione === 0 && metodo === "costante" ? "numerica_costante" : "numerica", metodo, mancanti, motivo: motivi[metodo], statistiche: stats, valoriNumerici: convertiti };
+      }
+    }
+    return { ...analisi, tipoRilevato: automatica.tipo, metodoAutomatico: automatica.metodo, sceltaTipo: tipoScelto, sceltaMetodo: metodoScelto };
+  }
+
   function trasformaValore(valore, analisi) {
     if (analisi.tipo === "non_numerica") return mancante(valore) ? null : valore;
     const numero = leggiNumero(valore, analisi.separatore);
     if (numero === null) return null;
     if (analisi.tipo === "binaria") return numero;
+    if (analisi.metodo === "nessuno") return numero;
     if (analisi.metodo === "costante") return 0;
     if (analisi.metodo === "robusto") return (numero - analisi.statistiche.mediana) / analisi.statistiche.iqr;
     return (numero - analisi.statistiche.media) / analisi.statistiche.deviazione;
   }
 
-  function preparaTabella(tabella) {
+  function preparaTabella(tabella, scelte = []) {
     const colonne = tabella.intestazioni.map((nome, j) => {
-      const analisi = analizzaColonna(nome, tabella.righe.map(riga => riga[j]), tabella.separatore);
+      const analisi = personalizzaColonna(nome, tabella.righe.map(riga => riga[j]), tabella.separatore, scelte[j]);
       analisi.separatore = tabella.separatore;
       return analisi;
     });
@@ -204,5 +246,5 @@
     return [intestazioni, ...righe].map(riga => riga.map(valoreCsv).join(",")).join("\n");
   }
 
-  return { rilevaSeparatore, leggiCsv, leggiNumero, quantile, statistiche, analizzaColonna, preparaTabella, creaCsv, mancante };
+  return { rilevaSeparatore, leggiCsv, leggiNumero, quantile, statistiche, analizzaColonna, personalizzaColonna, preparaTabella, creaCsv, mancante };
 });
