@@ -64,4 +64,23 @@ const minmax = P.preparaTabella(tabella, [{ tipo: "numerica", metodo: "minmax" }
 assert.deepEqual(minmax.trasformate.map(r => r[0]), [0, .5, 1]);
 assert.throws(() => P.preparaTabella(conEstremo.originale, [{}, { tipo: "numerica", metodo: "minmax" }]), /costante/);
 
+const scaleSimili = P.preparaTabella(P.leggiCsv("a,b\n1,10\n2,11\n3,12"));
+assert.equal(scaleSimili.colonne[0].metodo, "nessuno");
+assert.equal(scaleSimili.colonne[1].metodo, "nessuno");
+assert.equal(scaleSimili.colonne[0].metodoAutomatico, "nessuno");
+assert.deepEqual(scaleSimili.trasformate, [[1, 10], [2, 11], [3, 12]]);
+
+const scaleDiverse = P.preparaTabella(P.leggiCsv("a,b\n1,100\n2,200\n3,300"));
+assert.equal(scaleDiverse.colonne[0].metodo, "zscore");
+assert.equal(scaleDiverse.colonne[1].metodo, "zscore");
+assert.match(scaleDiverse.colonne[0].motivo, /dispersioni molto diverse/);
+
+const unaNumerica = P.preparaTabella(P.leggiCsv("a,gruppo\n1,x\n2,y\n3,z"));
+assert.equal(unaNumerica.colonne[0].metodo, "nessuno");
+assert.match(unaNumerica.colonne[0].motivo, /Non ci sono altre feature numeriche/);
+
+const sceltaManualeConScaleSimili = P.preparaTabella(P.leggiCsv("a,b\n1,10\n2,11\n3,12"), [{ metodo: "zscore" }, {}]);
+assert.equal(sceltaManualeConScaleSimili.colonne[0].metodo, "zscore");
+assert.equal(sceltaManualeConScaleSimili.colonne[0].metodoAutomatico, "nessuno");
+
 console.log("Tutti i test di preprocessing sono stati superati.");
