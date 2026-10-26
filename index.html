@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Laboratorio interattivo per preparare dati tabellari e comprendere misure tra vettori, dati binari e stringhe.">
   <title>Laboratorio delle misure</title>
-  <link rel="stylesheet" href="css/stile.css?v=20261026-4">
+  <link rel="stylesheet" href="css/stile.css?v=20261026-6">
   <script>
     window.MathJax = {
       tex: {
@@ -28,26 +28,19 @@
       <div>
         <p class="section-label">Preelaborazione</p>
         <h2 id="prep-title">Carica e riscala la tua tabella</h2>
-        <p>Ogni riga è un’istanza e ogni colonna una feature. L’app crea una tabella di lavoro senza modificare il file originale.</p>
+        <p>Ogni riga è un’istanza e ogni colonna una feature. Viene creata una tabella di lavoro senza modificare il file originale.</p>
       </div>
     </div>
 
-    <div class="prep-upload-grid">
+    <div class="prep-upload-block">
       <label class="csv-drop-zone" id="csv-drop-zone" for="csv-file">
         <input class="visually-hidden" id="csv-file" type="file" accept=".csv,text/csv,text/plain">
         <span class="upload-icon" aria-hidden="true">↑</span>
         <strong>Scegli un CSV</strong>
         <small>oppure trascinalo qui · massimo 15 MB</small>
       </label>
-      <div class="prep-rules">
-        <h3>Riscalamento automatico</h3>
-        <ul>
-          <li><b>Z-score</b> per le feature numeriche ordinarie.</li>
-          <li><b>Scala robusta</b> se oltre l’1% dei valori supera le soglie di Tukey.</li>
-          <li><b>Max-abs</b> se almeno l’80% dei valori è zero e non prevale la regola robusta.</li>
-          <li><b>Min–max</b> disponibile come scelta manuale quando serve l’intervallo [0,1].</li>
-          <li>Feature binarie e non numeriche lasciate invariate.</li>
-        </ul>
+      <div class="upload-actions">
+        <span>Non hai un file a disposizione?</span>
         <button class="chip" id="load-example-csv" type="button">Carica un esempio</button>
       </div>
     </div>
@@ -61,7 +54,7 @@
 
       <div class="scaling-wrap">
         <h3>Riscalamento</h3>
-        <p>L’app propone tipo e metodo automaticamente, ma puoi modificarli per ogni feature. I valori mancanti restano mancanti.</p>
+        <p>Tipo e metodo vengono suggeriti automaticamente, ma possono essere modificati per ogni feature. I valori mancanti restano mancanti.</p>
         <div class="data-table-wrap">
           <table class="data-table scaling-table">
             <thead><tr><th>Feature</th><th>Tipo di dato</th><th>Metodo scelto</th><th>Parametri</th><th>Mancanti</th></tr></thead>
@@ -215,7 +208,7 @@
 
 
   <script src="js/preprocessing.js?v=20261026-5"></script>
-  <script src="js/preprocessing-ui.js?v=20261026-4"></script>
+  <script src="js/preprocessing-ui.js?v=20261026-6"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>
