@@ -24,6 +24,14 @@ assert.equal(conEstremo.colonne[0].motivo, "È presente un solo outlier.");
 assert.equal(conEstremo.colonne[1].metodo, "costante");
 assert.ok(conEstremo.trasformate.every(r => r[1] === 0));
 
+const robustoComune = P.preparaTabella(P.leggiCsv("a,b\n10,100\n12,105\n11,98\n9,102\n13,101\n10,99\n12,104\n80,103"));
+assert.equal(robustoComune.colonne[0].metodo, "robusto");
+assert.equal(robustoComune.colonne[1].metodo, "robusto");
+assert.equal(robustoComune.colonne[1].metodoAutomatico, "robusto");
+assert.match(robustoComune.colonne[1].motivo, /scala robusta comune/);
+quasiUguali(P.statistiche(robustoComune.trasformate.map(r => r[0])).iqr, 1);
+quasiUguali(P.statistiche(robustoComune.trasformate.map(r => r[1])).iqr, 1);
+
 const decimaliItaliani = P.preparaTabella(P.leggiCsv("x;y\n1,5;2,5\n2,5;3,5"));
 assert.equal(decimaliItaliani.originale.separatore, ";");
 assert.equal(decimaliItaliani.colonne[0].tipo, "numerica");
@@ -57,7 +65,7 @@ assert.throws(() => P.preparaTabella(conEstremo.originale, [{}, { tipo: "numeric
 
 const sparse = P.preparaTabella(P.leggiCsv("x,id\n0,a\n0,b\n0,c\n0,d\n0,e\n0,f\n0,g\n0,h\n2,i\n-1,j"));
 assert.equal(sparse.colonne[0].metodo, "maxabs");
-assert.equal(sparse.colonne[0].motivo, "Molti valori sono uguali a zero.");
+assert.equal(sparse.colonne[0].motivo, "La matrice numerica contiene molti valori uguali a zero.");
 assert.deepEqual(sparse.trasformate.map(r => r[0]), [0, 0, 0, 0, 0, 0, 0, 0, 1, -.5]);
 
 const minmax = P.preparaTabella(tabella, [{ tipo: "numerica", metodo: "minmax" }]);
