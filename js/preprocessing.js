@@ -242,16 +242,35 @@
     const rapporto = numeriche.length === 1 ? 1 : Math.max(...scale) / Math.min(...scale);
     const confrontabili = rapporto <= 2;
 
+    const robustoApplicabile = numeriche.every(c => c.statistiche.iqr > 0);
+    const presentiOutlier = robustoApplicabile && numeriche.some(c => c.statistiche.quotaEstremi > .01);
+    const valoriOsservati = numeriche.reduce((somma, c) => somma + c.valoriNumerici.filter(v => v !== null).length, 0);
+    const zeriOsservati = numeriche.reduce((somma, c) => somma + c.statistiche.zeri, 0);
+    const matriceSparsa = !presentiOutlier && valoriOsservati > 0 && zeriOsservati / valoriOsservati >= .8;
+
+    const metodoComune = presentiOutlier
+      ? "robusto"
+      : matriceSparsa
+        ? "maxabs"
+        : confrontabili
+          ? "nessuno"
+          : "zscore";
+
     numeriche.forEach(colonna => {
-      if (colonna.metodoAutomatico !== "zscore") return;
-      colonna.metodoAutomatico = confrontabili ? "nessuno" : "zscore";
+      colonna.metodoAutomatico = metodoComune;
       if (colonna.sceltaMetodo !== "auto") return;
-      colonna.metodo = colonna.metodoAutomatico;
-      colonna.motivo = confrontabili
-        ? numeriche.length === 1
-          ? "Non ci sono altre feature numeriche con cui bilanciare la scala."
-          : "Le feature numeriche hanno dispersioni simili."
-        : "Le feature numeriche hanno dispersioni molto diverse.";
+      colonna.metodo = metodoComune;
+      colonna.motivo = metodoComune === "robusto"
+        ? colonna.statistiche.quotaEstremi > .01
+          ? descriviOutlier(colonna.statistiche)
+          : "È stata scelta una scala robusta comune per le feature numeriche."
+        : metodoComune === "maxabs"
+          ? "La matrice numerica contiene molti valori uguali a zero."
+          : metodoComune === "nessuno"
+            ? numeriche.length === 1
+              ? "Non ci sono altre feature numeriche con cui bilanciare la scala."
+              : "Le feature numeriche hanno dispersioni simili."
+            : "Le feature numeriche hanno dispersioni molto diverse.";
     });
   }
 
