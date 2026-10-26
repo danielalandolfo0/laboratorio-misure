@@ -155,9 +155,9 @@
     const maxabs = !robusto && stats.quotaZeri >= .8 && stats.massimoAssoluto > 0;
     const metodo = robusto ? "robusto" : maxabs ? "maxabs" : "zscore";
     const motivo = robusto
-      ? `${stats.estremi} valori (${formattaPercentuale(stats.quotaEstremi)}) oltre le soglie di Tukey.`
+      ? `${stats.estremi} ${stats.estremi === 1 ? "valore" : "valori"} (${formattaPercentuale(stats.quotaEstremi)}) oltre le soglie di Tukey.`
       : maxabs
-        ? `${stats.zeri} valori (${formattaPercentuale(stats.quotaZeri)}) uguali a zero: max-abs preserva la sparsità.`
+        ? `${stats.zeri} ${stats.zeri === 1 ? "valore" : "valori"} (${formattaPercentuale(stats.quotaZeri)}) ${stats.zeri === 1 ? "uguale" : "uguali"} a zero: max-abs preserva la sparsità.`
       : stats.iqr === 0
         ? "IQR nullo: si usa lo z-score perché la deviazione standard è positiva."
         : "Valori estremi entro la soglia automatica dell’1%.";
