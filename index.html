@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Laboratorio interattivo per preparare dati tabellari e comprendere misure tra vettori, dati binari e stringhe.">
   <title>Laboratorio delle misure</title>
-  <link rel="stylesheet" href="css/stile.css?v=20261026-3">
+  <link rel="stylesheet" href="css/stile.css?v=20261026-4">
   <script>
     window.MathJax = {
       tex: {
@@ -30,7 +30,6 @@
         <h2 id="prep-title">Carica e riscala la tua tabella</h2>
         <p>Ogni riga è un’istanza e ogni colonna una feature. L’app crea una tabella di lavoro senza modificare il file originale.</p>
       </div>
-      <span class="local-badge">Elaborazione nel browser</span>
     </div>
 
     <div class="prep-upload-grid">
@@ -56,17 +55,16 @@
 
     <div class="csv-output" id="csv-output" hidden>
       <div class="csv-output-head">
-        <div><span>File analizzato</span><strong id="csv-file-name"></strong></div>
+        <div class="csv-file-info"><span>File analizzato</span><strong id="csv-file-name"></strong><small id="csv-dimensions"></small></div>
         <button class="secondary-action" id="download-work" type="button" disabled>Scarica la tabella riscalata</button>
       </div>
-      <div class="csv-summary" id="csv-summary"></div>
 
       <div class="scaling-wrap">
-        <h3>Decisioni di riscalamento</h3>
+        <h3>Riscalamento</h3>
         <p>L’app propone tipo e metodo automaticamente, ma puoi modificarli per ogni feature. I valori mancanti restano mancanti.</p>
         <div class="data-table-wrap">
           <table class="data-table scaling-table">
-            <thead><tr><th>Feature</th><th>Tipo di dato</th><th>Metodo scelto</th><th>Risultato e parametri</th><th>Mancanti</th><th>Motivazione</th></tr></thead>
+            <thead><tr><th>Feature</th><th>Tipo di dato</th><th>Metodo scelto</th><th>Parametri</th><th>Mancanti</th></tr></thead>
             <tbody id="scaling-body"></tbody>
           </table>
         </div>
@@ -216,8 +214,8 @@
   </main>
 
 
-  <script src="js/preprocessing.js?v=20261026-3"></script>
-  <script src="js/preprocessing-ui.js?v=20261026-3"></script>
+  <script src="js/preprocessing.js?v=20261026-4"></script>
+  <script src="js/preprocessing-ui.js?v=20261026-4"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>
