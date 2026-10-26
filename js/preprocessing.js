@@ -1,0 +1,208 @@
+/* Analisi e riscalamento di tabelle CSV, indipendenti dall'interfaccia. */
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === "object" && module.exports) module.exports = api;
+  root.Preprocessing = api;
+})(typeof globalThis !== "undefined" ? globalThis : this, function () {
+  "use strict";
+
+  const MANCANTI = new Set(["", "na", "n/a", "null", "?"]);
+
+  function rigaIniziale(testo) {
+    let dentroVirgolette = false;
+    let riga = "";
+    for (let i = 0; i < testo.length; i += 1) {
+      const c = testo[i];
+      if (c === '"') {
+        if (dentroVirgolette && testo[i + 1] === '"') { riga += '""'; i += 1; continue; }
+        dentroVirgolette = !dentroVirgolette;
+      }
+      if (!dentroVirgolette && (c === "\n" || c === "\r")) break;
+      riga += c;
+    }
+    return riga;
+  }
+
+  function contaSeparatore(riga, separatore) {
+    let dentroVirgolette = false;
+    let conteggio = 0;
+    for (let i = 0; i < riga.length; i += 1) {
+      if (riga[i] === '"') {
+        if (dentroVirgolette && riga[i + 1] === '"') { i += 1; continue; }
+        dentroVirgolette = !dentroVirgolette;
+      } else if (!dentroVirgolette && riga[i] === separatore) conteggio += 1;
+    }
+    return conteggio;
+  }
+
+  function rilevaSeparatore(testo) {
+    const prima = rigaIniziale(testo.replace(/^\uFEFF/, ""));
+    const candidati = [",", ";", "\t"].map(separatore => ({ separatore, n: contaSeparatore(prima, separatore) }));
+    candidati.sort((a, b) => b.n - a.n);
+    if (candidati[0].n === 0) throw new Error("Non riesco a individuare il separatore del CSV. Usa virgola, punto e virgola oppure tabulazione.");
+    return candidati[0].separatore;
+  }
+
+  function separaCsv(testo, separatore) {
+    const righe = [];
+    let riga = [], campo = "", dentroVirgolette = false;
+    const chiudiCampo = () => { riga.push(campo.trim()); campo = ""; };
+    const chiudiRiga = () => {
+      chiudiCampo();
+      if (riga.some(valore => valore !== "")) righe.push(riga);
+      riga = [];
+    };
+
+    for (let i = 0; i < testo.length; i += 1) {
+      const c = testo[i];
+      if (c === '"') {
+        if (dentroVirgolette && testo[i + 1] === '"') { campo += '"'; i += 1; }
+        else dentroVirgolette = !dentroVirgolette;
+      } else if (!dentroVirgolette && c === separatore) chiudiCampo();
+      else if (!dentroVirgolette && (c === "\n" || c === "\r")) {
+        if (c === "\r" && testo[i + 1] === "\n") i += 1;
+        chiudiRiga();
+      } else campo += c;
+    }
+    if (dentroVirgolette) throw new Error("Il CSV contiene un campo tra virgolette non chiuso.");
+    if (campo !== "" || riga.length > 0) chiudiRiga();
+    return righe;
+  }
+
+  function leggiCsv(testo) {
+    if (typeof testo !== "string" || !testo.trim()) throw new Error("Il file CSV è vuoto.");
+    const pulito = testo.replace(/^\uFEFF/, "");
+    const separatore = rilevaSeparatore(pulito);
+    const righe = separaCsv(pulito, separatore);
+    if (righe.length < 2) throw new Error("Il CSV deve contenere un'intestazione e almeno una riga di dati.");
+    const intestazioni = righe[0].map(x => x.trim());
+    if (intestazioni.some(x => !x)) throw new Error("Tutte le colonne devono avere un titolo.");
+    const normalizzate = intestazioni.map(x => x.toLocaleLowerCase("it-IT"));
+    if (new Set(normalizzate).size !== normalizzate.length) throw new Error("I titoli delle colonne devono essere univoci.");
+    const dati = righe.slice(1);
+    dati.forEach((riga, i) => {
+      if (riga.length !== intestazioni.length) {
+        throw new Error(`La riga ${i + 2} contiene ${riga.length} campi anziché ${intestazioni.length}.`);
+      }
+    });
+    if (dati.length * intestazioni.length > 2000000) throw new Error("La tabella supera il limite iniziale di 2.000.000 di celle.");
+    return { intestazioni, righe: dati, separatore };
+  }
+
+  function mancante(valore) {
+    return valore === null || valore === undefined || MANCANTI.has(String(valore).trim().toLocaleLowerCase("it-IT"));
+  }
+
+  function leggiNumero(valore, separatore = ",") {
+    if (mancante(valore)) return null;
+    let testo = String(valore).trim();
+    const conPunto = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+    const conVirgola = /^[+-]?(?:\d+(?:,\d*)?|,\d+)(?:[eE][+-]?\d+)?$/;
+    if (conPunto.test(testo)) return Number(testo);
+    if (separatore !== "," && conVirgola.test(testo)) return Number(testo.replace(",", "."));
+    return undefined;
+  }
+
+  function quantile(ordinati, p) {
+    if (!ordinati.length) return null;
+    const posizione = (ordinati.length - 1) * p;
+    const sotto = Math.floor(posizione), sopra = Math.ceil(posizione);
+    if (sotto === sopra) return ordinati[sotto];
+    return ordinati[sotto] + (ordinati[sopra] - ordinati[sotto]) * (posizione - sotto);
+  }
+
+  function statistiche(valori) {
+    const ordinati = valori.slice().sort((a, b) => a - b);
+    const media = valori.reduce((a, b) => a + b, 0) / valori.length;
+    const varianza = valori.reduce((somma, valore) => somma + (valore - media) ** 2, 0) / valori.length;
+    const deviazione = Math.sqrt(varianza);
+    const mediana = quantile(ordinati, .5);
+    const q1 = quantile(ordinati, .25), q3 = quantile(ordinati, .75);
+    const iqr = q3 - q1;
+    const minimoTukey = q1 - 1.5 * iqr, massimoTukey = q3 + 1.5 * iqr;
+    const estremi = valori.filter(v => v < minimoTukey || v > massimoTukey).length;
+    return {
+      media, deviazione, mediana, q1, q3, iqr,
+      minimo: ordinati[0], massimo: ordinati[ordinati.length - 1],
+      estremi, quotaEstremi: estremi / valori.length
+    };
+  }
+
+  function analizzaColonna(nome, valori, separatore) {
+    const convertiti = valori.map(v => leggiNumero(v, separatore));
+    const osservati = convertiti.filter(v => v !== null);
+    const tuttiNumerici = osservati.length > 0 && osservati.every(v => v !== undefined && Number.isFinite(v));
+    const mancanti = convertiti.filter(v => v === null).length;
+    if (!tuttiNumerici) {
+      return { nome, tipo: "non_numerica", metodo: "nessuno", mancanti, motivo: "Valori non numerici: la colonna resta invariata." };
+    }
+
+    const numeri = osservati;
+    const unici = [...new Set(numeri)];
+    if (unici.every(v => v === 0 || v === 1)) {
+      return { nome, tipo: "binaria", metodo: "nessuno", mancanti, motivo: "Codifica 0/1 già su scala comune.", valoriNumerici: convertiti };
+    }
+
+    const stats = statistiche(numeri);
+    if (stats.deviazione === 0) {
+      return { nome, tipo: "numerica_costante", metodo: "costante", mancanti, motivo: "La feature è costante e viene posta a 0.", statistiche: stats, valoriNumerici: convertiti };
+    }
+
+    const robusto = stats.quotaEstremi > .01 && stats.iqr > 0;
+    const metodo = robusto ? "robusto" : "zscore";
+    const motivo = robusto
+      ? `${stats.estremi} valori (${formattaPercentuale(stats.quotaEstremi)}) oltre le soglie di Tukey.`
+      : stats.iqr === 0
+        ? "IQR nullo: si usa lo z-score perché la deviazione standard è positiva."
+        : "Valori estremi entro la soglia automatica dell’1%.";
+    return { nome, tipo: "numerica", metodo, mancanti, motivo, statistiche: stats, valoriNumerici: convertiti };
+  }
+
+  function formattaPercentuale(valore) {
+    return new Intl.NumberFormat("it-IT", { style: "percent", maximumFractionDigits: 1 }).format(valore);
+  }
+
+  function trasformaValore(valore, analisi) {
+    if (analisi.tipo === "non_numerica") return mancante(valore) ? null : valore;
+    const numero = leggiNumero(valore, analisi.separatore);
+    if (numero === null) return null;
+    if (analisi.tipo === "binaria") return numero;
+    if (analisi.metodo === "costante") return 0;
+    if (analisi.metodo === "robusto") return (numero - analisi.statistiche.mediana) / analisi.statistiche.iqr;
+    return (numero - analisi.statistiche.media) / analisi.statistiche.deviazione;
+  }
+
+  function preparaTabella(tabella) {
+    const colonne = tabella.intestazioni.map((nome, j) => {
+      const analisi = analizzaColonna(nome, tabella.righe.map(riga => riga[j]), tabella.separatore);
+      analisi.separatore = tabella.separatore;
+      return analisi;
+    });
+    const trasformate = tabella.righe.map(riga => riga.map((valore, j) => trasformaValore(valore, colonne[j])));
+    const riepilogo = {
+      istanze: tabella.righe.length,
+      feature: tabella.intestazioni.length,
+      numeriche: colonne.filter(c => c.tipo === "numerica" || c.tipo === "numerica_costante").length,
+      binarie: colonne.filter(c => c.tipo === "binaria").length,
+      nonNumeriche: colonne.filter(c => c.tipo === "non_numerica").length,
+      mancanti: colonne.reduce((somma, c) => somma + c.mancanti, 0)
+    };
+    return { originale: tabella, colonne, trasformate, riepilogo };
+  }
+
+  function valoreCsv(valore) {
+    if (valore === null || valore === undefined) return "";
+    if (typeof valore === "number") {
+      const pulito = Math.abs(valore) < 1e-14 ? 0 : valore;
+      return Number(pulito.toPrecision(12)).toString();
+    }
+    const testo = String(valore);
+    return /[",\r\n]/.test(testo) ? `"${testo.replaceAll('"', '""')}"` : testo;
+  }
+
+  function creaCsv(intestazioni, righe) {
+    return [intestazioni, ...righe].map(riga => riga.map(valoreCsv).join(",")).join("\n");
+  }
+
+  return { rilevaSeparatore, leggiCsv, leggiNumero, quantile, statistiche, analizzaColonna, preparaTabella, creaCsv, mancante };
+});
