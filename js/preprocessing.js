@@ -234,12 +234,34 @@
     return (numero - analisi.statistiche.media) / analisi.statistiche.deviazione;
   }
 
+  function applicaConfrontoGlobale(colonne) {
+    const numeriche = colonne.filter(c => c.tipo === "numerica" && c.statistiche && c.statistiche.deviazione > 0);
+    if (!numeriche.length) return;
+
+    const scale = numeriche.map(c => c.statistiche.iqr > 0 ? c.statistiche.iqr : c.statistiche.deviazione);
+    const rapporto = numeriche.length === 1 ? 1 : Math.max(...scale) / Math.min(...scale);
+    const confrontabili = rapporto <= 2;
+
+    numeriche.forEach(colonna => {
+      if (colonna.metodoAutomatico !== "zscore") return;
+      colonna.metodoAutomatico = confrontabili ? "nessuno" : "zscore";
+      if (colonna.sceltaMetodo !== "auto") return;
+      colonna.metodo = colonna.metodoAutomatico;
+      colonna.motivo = confrontabili
+        ? numeriche.length === 1
+          ? "Non ci sono altre feature numeriche con cui bilanciare la scala."
+          : "Le feature numeriche hanno dispersioni simili."
+        : "Le feature numeriche hanno dispersioni molto diverse.";
+    });
+  }
+
   function preparaTabella(tabella, scelte = []) {
     const colonne = tabella.intestazioni.map((nome, j) => {
       const analisi = personalizzaColonna(nome, tabella.righe.map(riga => riga[j]), tabella.separatore, scelte[j]);
       analisi.separatore = tabella.separatore;
       return analisi;
     });
+    applicaConfrontoGlobale(colonne);
     const trasformate = tabella.righe.map(riga => riga.map((valore, j) => trasformaValore(valore, colonne[j])));
     const riepilogo = {
       istanze: tabella.righe.length,
@@ -266,5 +288,5 @@
     return [intestazioni, ...righe].map(riga => riga.map(valoreCsv).join(",")).join("\n");
   }
 
-  return { rilevaSeparatore, leggiCsv, leggiNumero, quantile, statistiche, analizzaColonna, personalizzaColonna, preparaTabella, creaCsv, mancante };
+  return { rilevaSeparatore, leggiCsv, leggiNumero, quantile, statistiche, analizzaColonna, personalizzaColonna, applicaConfrontoGlobale, preparaTabella, creaCsv, mancante };
 });
