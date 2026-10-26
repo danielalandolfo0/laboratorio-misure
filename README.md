@@ -4,6 +4,11 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 
 ## Funzionalità disponibili
 
+- caricamento locale di tabelle CSV con intestazione;
+- riconoscimento di feature numeriche, binarie e non numeriche;
+- riscalamento automatico con z-score o scala robusta in presenza di valori estremi;
+- conservazione dei mancanti, segnalazione delle feature costanti e anteprima originale/trasformata;
+- esportazione della tabella di lavoro riscalata;
 - famiglia di Minkowski: forma generale, Manhattan, Euclidea, Chebyshev, versione pesata ed Euclidea standardizzata;
 - Mahalanobis, Canberra, Bray–Curtis e χ² simmetrica;
 - similarità coseno e correlazione di Pearson per confrontare i profili;
@@ -24,9 +29,12 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 laboratorio-misure/
 ├── index.html              pagina dell'applicazione
 ├── css/stile.css           aspetto grafico
+├── js/preprocessing.js     lettura CSV, diagnosi e riscalamento
+├── js/preprocessing-ui.js  interfaccia della preparazione dei dati
 ├── js/misure.js            formule e controlli matematici
 ├── js/interfaccia.js       comportamento dell'interfaccia
 ├── test/test-misure.js     test automatici
+├── test/test-preprocessing.js test del modulo CSV
 └── package.json            comando per eseguire i test
 ```
 
@@ -54,5 +62,6 @@ npm test
 3. Per modifiche alle formule, aggiorna anche `test/test-misure.js`.
 4. Descrivi chiaramente nel messaggio di commit cosa hai cambiato.
 
-Il prossimo modulo ordinerà le osservazioni di un dataset rispetto a un nuovo
-dato, dalla più vicina alla più lontana.
+La tabella riscalata costituisce la base per i successivi moduli di scelta e
+calcolo delle distanze tra le istanze.
+
