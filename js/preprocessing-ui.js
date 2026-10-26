@@ -39,17 +39,6 @@
     $("csv-error").style.display = "none";
   }
 
-  function disegnaRiepilogo() {
-    const r = risultato.riepilogo;
-    const elementi = [
-      [r.istanze, "istanze"], [r.feature, "feature"], [r.numeriche, "numeriche"],
-      [r.binarie, "binarie"], [r.nonNumeriche, "non numeriche"], [r.mancanti, "mancanti"]
-    ];
-    $("csv-summary").innerHTML = elementi.map(([valore, testo]) =>
-      `<div class="csv-stat"><strong>${valore}</strong><span>${testo}</span></div>`
-    ).join("");
-  }
-
   function disegnaMetodi() {
     $("scaling-body").innerHTML = risultato.colonne.map((colonna, indice) => {
       const s = colonna.statistiche;
@@ -67,21 +56,21 @@
       return `<tr>
         <th scope="row">${escapeHtml(colonna.nome)}</th>
         <td><select class="column-choice" data-choice="tipo" data-column="${indice}" aria-label="Tipo della feature ${escapeHtml(colonna.nome)}">
-          <option value="auto"${tipo === "auto" ? " selected" : ""}>Automatico (${etichettaTipo(colonna.tipoRilevato)})</option>
+          <option value="auto"${tipo === "auto" ? " selected" : ""}>${etichettaTipo(colonna.tipoRilevato)} (suggerito)</option>
           <option value="numerica"${tipo === "numerica" ? " selected" : ""}>Numerica</option>
           <option value="binaria"${tipo === "binaria" ? " selected" : ""}>Binaria 0/1</option>
           <option value="non_numerica"${tipo === "non_numerica" ? " selected" : ""}>Non numerica</option>
         </select></td>
-        <td><select class="column-choice" data-choice="metodo" data-column="${indice}" aria-label="Metodo per la feature ${escapeHtml(colonna.nome)}"${colonna.tipo === "binaria" || colonna.tipo === "non_numerica" ? " disabled" : ""}>
-          <option value="auto"${metodo === "auto" ? " selected" : ""}>Automatico (${etichettaMetodo(colonna.metodoAutomatico)})</option>
+        <td><div class="method-choice-wrap"><select class="column-choice" data-choice="metodo" data-column="${indice}" aria-label="Metodo per la feature ${escapeHtml(colonna.nome)}"${colonna.tipo === "binaria" || colonna.tipo === "non_numerica" ? " disabled" : ""}>
+          <option value="auto"${metodo === "auto" ? " selected" : ""}>${etichettaMetodo(colonna.metodoAutomatico)} (suggerito)</option>
           <option value="zscore"${metodo === "zscore" ? " selected" : ""}>Z-score</option>
           <option value="robusto"${metodo === "robusto" ? " selected" : ""}>Scala robusta</option>
           <option value="minmax"${metodo === "minmax" ? " selected" : ""}>Min–max [0,1]</option>
           <option value="maxabs"${metodo === "maxabs" ? " selected" : ""}>Max-abs</option>
           <option value="nessuno"${metodo === "nessuno" ? " selected" : ""}>Nessuno</option>
-        </select></td>
-        <td><span class="method-badge method-${colonna.metodo}">${etichettaMetodo(colonna.metodo)}</span><small class="method-params">${parametri}</small></td>
-        <td>${colonna.mancanti}</td><td>${escapeHtml(colonna.motivo)}</td></tr>`;
+        </select><details class="method-info"><summary aria-label="Informazioni sulla scelta per ${escapeHtml(colonna.nome)}">i</summary><div>${escapeHtml(colonna.motivo)}</div></details></div></td>
+        <td><span class="method-params">${parametri}</span></td>
+        <td>${colonna.mancanti}</td></tr>`;
     }).join("");
   }
 
@@ -99,7 +88,6 @@
         risultato = P.preparaTabella(tabellaOriginale, scelte);
       }
       nascondiErrore();
-      disegnaRiepilogo();
       disegnaMetodi();
       disegnaTabella();
     } catch (errore) {
@@ -129,9 +117,9 @@
 
   function mostraRisultato(nomeFile) {
     $("csv-file-name").textContent = nomeFile;
+    $("csv-dimensions").textContent = `Matrice ${risultato.riepilogo.istanze} × ${risultato.riepilogo.feature} (istanze × feature)`;
     $("csv-output").hidden = false;
     $("download-work").disabled = false;
-    disegnaRiepilogo();
     disegnaMetodi();
     vista = "lavoro";
     disegnaTabella();
