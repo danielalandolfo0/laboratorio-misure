@@ -4,6 +4,8 @@
   const $ = id => document.getElementById(id);
   const P = window.Preprocessing;
   let risultato = null;
+  let tabellaOriginale = null;
+  let scelte = [];
   let vista = "lavoro";
 
   function escapeHtml(valore) {
@@ -49,15 +51,56 @@
   }
 
   function disegnaMetodi() {
-    $("scaling-body").innerHTML = risultato.colonne.map(colonna => {
+    $("scaling-body").innerHTML = risultato.colonne.map((colonna, indice) => {
       const s = colonna.statistiche;
       const parametri = colonna.metodo === "zscore"
         ? `media ${formatoNumero(s.media)} · σ ${formatoNumero(s.deviazione)}`
         : colonna.metodo === "robusto"
           ? `mediana ${formatoNumero(s.mediana)} · IQR ${formatoNumero(s.iqr)}`
           : colonna.metodo === "costante" ? "deviazione 0" : "—";
-      return `<tr><th scope="row">${escapeHtml(colonna.nome)}</th><td>${etichettaTipo(colonna.tipo)}</td><td><span class="method-badge method-${colonna.metodo}">${etichettaMetodo(colonna.metodo)}</span></td><td>${parametri}</td><td>${colonna.mancanti}</td><td>${escapeHtml(colonna.motivo)}</td></tr>`;
+      const tipo = colonna.sceltaTipo || "auto";
+      const metodo = colonna.sceltaMetodo || "auto";
+      return `<tr>
+        <th scope="row">${escapeHtml(colonna.nome)}</th>
+        <td><select class="column-choice" data-choice="tipo" data-column="${indice}" aria-label="Tipo della feature ${escapeHtml(colonna.nome)}">
+          <option value="auto"${tipo === "auto" ? " selected" : ""}>Automatico (${etichettaTipo(colonna.tipoRilevato)})</option>
+          <option value="numerica"${tipo === "numerica" ? " selected" : ""}>Numerica</option>
+          <option value="binaria"${tipo === "binaria" ? " selected" : ""}>Binaria 0/1</option>
+          <option value="non_numerica"${tipo === "non_numerica" ? " selected" : ""}>Non numerica</option>
+        </select></td>
+        <td><select class="column-choice" data-choice="metodo" data-column="${indice}" aria-label="Metodo per la feature ${escapeHtml(colonna.nome)}"${colonna.tipo === "binaria" || colonna.tipo === "non_numerica" ? " disabled" : ""}>
+          <option value="auto"${metodo === "auto" ? " selected" : ""}>Automatico (${etichettaMetodo(colonna.metodoAutomatico)})</option>
+          <option value="zscore"${metodo === "zscore" ? " selected" : ""}>Z-score</option>
+          <option value="robusto"${metodo === "robusto" ? " selected" : ""}>Scala robusta</option>
+          <option value="nessuno"${metodo === "nessuno" ? " selected" : ""}>Nessuno</option>
+        </select></td>
+        <td><span class="method-badge method-${colonna.metodo}">${etichettaMetodo(colonna.metodo)}</span><small class="method-params">${parametri}</small></td>
+        <td>${colonna.mancanti}</td><td>${escapeHtml(colonna.motivo)}</td></tr>`;
     }).join("");
+  }
+
+  function aggiornaScelta(elemento) {
+    const indice = Number(elemento.dataset.column);
+    const chiave = elemento.dataset.choice;
+    const precedente = { ...scelte[indice] };
+    scelte[indice][chiave] = elemento.value;
+    if (chiave === "tipo" && (elemento.value === "binaria" || elemento.value === "non_numerica")) scelte[indice].metodo = "auto";
+    try {
+      risultato = P.preparaTabella(tabellaOriginale, scelte);
+      const tipoEffettivo = risultato.colonne[indice].tipo;
+      if ((tipoEffettivo === "binaria" || tipoEffettivo === "non_numerica") && scelte[indice].metodo !== "auto") {
+        scelte[indice].metodo = "auto";
+        risultato = P.preparaTabella(tabellaOriginale, scelte);
+      }
+      nascondiErrore();
+      disegnaRiepilogo();
+      disegnaMetodi();
+      disegnaTabella();
+    } catch (errore) {
+      scelte[indice] = precedente;
+      mostraErrore(errore.message);
+      disegnaMetodi();
+    }
   }
 
   function righeVista() {
@@ -91,7 +134,9 @@
   function elaboraTesto(testo, nomeFile) {
     nascondiErrore();
     try {
-      risultato = P.preparaTabella(P.leggiCsv(testo));
+      tabellaOriginale = P.leggiCsv(testo);
+      scelte = tabellaOriginale.intestazioni.map(() => ({ tipo: "auto", metodo: "auto" }));
+      risultato = P.preparaTabella(tabellaOriginale, scelte);
       mostraRisultato(nomeFile);
     } catch (errore) {
       risultato = null;
@@ -138,6 +183,9 @@
   $("view-original").addEventListener("click", () => { vista = "originale"; disegnaTabella(); });
   $("view-work").addEventListener("click", () => { vista = "lavoro"; disegnaTabella(); });
   $("download-work").addEventListener("click", scaricaTabella);
+  $("scaling-body").addEventListener("change", evento => {
+    if (evento.target.matches(".column-choice")) aggiornaScelta(evento.target);
+  });
 
   const zona = $("csv-drop-zone");
   ["dragenter", "dragover"].forEach(tipo => zona.addEventListener(tipo, evento => { evento.preventDefault(); zona.classList.add("dragging"); }));
