@@ -48,4 +48,12 @@ assert.throws(() => P.preparaTabella(tabella, [{ tipo: "auto", metodo: "auto" },
 assert.throws(() => P.preparaTabella(tabella, [{}, { tipo: "binaria", metodo: "auto" }]), /non è binaria/);
 assert.throws(() => P.preparaTabella(conEstremo.originale, [{}, { tipo: "numerica", metodo: "zscore" }]), /costante/);
 
+const sparse = P.preparaTabella(P.leggiCsv("x,id\n0,a\n0,b\n0,c\n0,d\n0,e\n0,f\n0,g\n0,h\n2,i\n-1,j"));
+assert.equal(sparse.colonne[0].metodo, "maxabs");
+assert.deepEqual(sparse.trasformate.map(r => r[0]), [0, 0, 0, 0, 0, 0, 0, 0, 1, -.5]);
+
+const minmax = P.preparaTabella(tabella, [{ tipo: "numerica", metodo: "minmax" }]);
+assert.deepEqual(minmax.trasformate.map(r => r[0]), [0, .5, 1]);
+assert.throws(() => P.preparaTabella(conEstremo.originale, [{}, { tipo: "numerica", metodo: "minmax" }]), /costante/);
+
 console.log("Tutti i test di preprocessing sono stati superati.");
