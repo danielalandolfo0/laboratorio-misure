@@ -20,6 +20,7 @@ assert.deepEqual(preparata.trasformate.map(r => r[3]), ["x", "y", "x"]);
 
 const conEstremo = P.preparaTabella(P.leggiCsv("x;costante\n1;5\n2;5\n3;5\n4;5\n5;5\n6;5\n7;5\n8;5\n9;5\n100;5"));
 assert.equal(conEstremo.colonne[0].metodo, "robusto");
+assert.equal(conEstremo.colonne[0].motivo, "È presente un solo outlier.");
 assert.equal(conEstremo.colonne[1].metodo, "costante");
 assert.ok(conEstremo.trasformate.every(r => r[1] === 0));
 
@@ -50,6 +51,7 @@ assert.throws(() => P.preparaTabella(conEstremo.originale, [{}, { tipo: "numeric
 
 const sparse = P.preparaTabella(P.leggiCsv("x,id\n0,a\n0,b\n0,c\n0,d\n0,e\n0,f\n0,g\n0,h\n2,i\n-1,j"));
 assert.equal(sparse.colonne[0].metodo, "maxabs");
+assert.equal(sparse.colonne[0].motivo, "Molti valori sono uguali a zero.");
 assert.deepEqual(sparse.trasformate.map(r => r[0]), [0, 0, 0, 0, 0, 0, 0, 0, 1, -.5]);
 
 const minmax = P.preparaTabella(tabella, [{ tipo: "numerica", metodo: "minmax" }]);
