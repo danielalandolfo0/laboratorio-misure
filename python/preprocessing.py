@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import datetime as dt
 import io
 import json
 import math
@@ -14,6 +15,16 @@ MANCANTI = {"", "na", "n/a", "null", "?"}
 INVALIDO = object()
 NUMERO_PUNTO = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
 NUMERO_VIRGOLA = re.compile(r"^[+-]?(?:\d+(?:,\d*)?|,\d+)(?:[eE][+-]?\d+)?$")
+
+PAROLE_IDENTIFICATIVO = {
+    "id", "identificativo", "codice", "code", "key", "chiave", "uuid",
+    "matricola", "numero pratica", "numero_pratica", "record id", "record_id",
+}
+PAROLE_DATA = {"data", "date", "giorno", "mese", "anno", "timestamp", "ora", "time"}
+PAROLE_PRESENZA = {
+    "presente", "presenza", "assenza", "attivo", "abilitato", "disponibile",
+    "has", "is", "flag", "yes", "no", "si",
+}
 
 
 def _prima_riga(testo: str) -> str:
@@ -407,6 +418,85 @@ def applica_confronto_globale(colonne: list[dict[str, Any]]) -> None:
             colonna["motivo"] = "Le feature numeriche hanno dispersioni molto diverse."
 
 
+def _parole_nome(nome: str) -> set[str]:
+    pulito = re.sub(r"[^\w]+", " ", nome.casefold(), flags=re.UNICODE).strip()
+    parole = set(pulito.split())
+    parole.add(nome.casefold().strip())
+    return parole
+
+
+def _sembra_data(valore: str) -> bool:
+    testo = valore.strip()
+    if not testo:
+        return False
+    candidati = (
+        "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d",
+        "%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M",
+    )
+    for formato in candidati:
+        try:
+            dt.datetime.strptime(testo, formato)
+            return True
+        except ValueError:
+            pass
+    return False
+
+
+def prepara_questionario(tabella: dict[str, Any], colonne: list[dict[str, Any]]) -> dict[str, Any]:
+    """Crea ipotesi prudenti e decide quali domande semantiche mostrare."""
+    profili: list[dict[str, Any]] = []
+    for indice, colonna in enumerate(colonne):
+        grezzi = [riga[indice] for riga in tabella["righe"]]
+        osservati = [str(v).strip() for v in grezzi if not mancante(v)]
+        distinti = len({v.casefold() for v in osservati})
+        parole = _parole_nome(colonna["nome"])
+        nome_identificativo = bool(parole & PAROLE_IDENTIFICATIVO)
+        nome_data = bool(parole & PAROLE_DATA)
+        quota_date = sum(_sembra_data(v) for v in osservati) / len(osservati) if osservati else 0
+        interi = False
+        if colonna["tipo"] == "numerica" and colonna.get("valoriNumerici"):
+            numeri = [v for v in colonna["valoriNumerici"] if isinstance(v, (int, float))]
+            interi = bool(numeri) and all(float(v).is_integer() for v in numeri)
+
+        if nome_identificativo:
+            ruolo, motivo = "identificativo", "Il titolo della colonna fa pensare a un codice identificativo."
+        elif nome_data or quota_date >= 0.8:
+            ruolo, motivo = "data", "Il titolo o i valori fanno pensare a date o orari."
+        elif colonna["tipo"] == "binaria":
+            ruolo = "presenza" if parole & PAROLE_PRESENZA else "binaria"
+            motivo = "La colonna contiene soltanto due valori, 0 e 1."
+        elif colonna["tipo"] == "non_numerica" and distinti <= min(12, max(4, round(len(osservati) * 0.25))):
+            ruolo, motivo = "categoria", "Poche etichette si ripetono in molte righe."
+        elif colonna["tipo"] == "non_numerica":
+            ruolo, motivo = "testo", "La colonna contiene molte scritte differenti."
+        elif colonna["tipo"] == "numerica" and interi and 2 < distinti <= 10:
+            ruolo, motivo = "livello", "Sono presenti pochi valori interi ordinabili."
+        else:
+            ruolo, motivo = "quantita", "La colonna contiene valori numerici."
+
+        esclusa = ruolo in {"identificativo", "data", "testo"}
+        profili.append({
+            "nome": colonna["nome"],
+            "ruoloSuggerito": ruolo,
+            "motivo": motivo,
+            "usaNelConfronto": not esclusa,
+            "distinti": distinti,
+            "mancanti": colonna["mancanti"],
+        })
+
+    return {
+        "colonne": profili,
+        "condizioni": {
+            "mancanti": any(c["mancanti"] > 0 for c in colonne),
+            "estremi": any(c.get("statistiche", {}).get("estremi", 0) > 0 for c in colonne),
+            "binarie": any(p["ruoloSuggerito"] in {"binaria", "presenza"} for p in profili),
+            "livelli": any(p["ruoloSuggerito"] == "livello" for p in profili),
+            "date": any(p["ruoloSuggerito"] == "data" for p in profili),
+            "numeriche": sum(c["tipo"] in {"numerica", "numerica_costante"} for c in colonne) >= 2,
+        },
+    }
+
+
 def trasforma_valore(valore: Any, analisi: dict[str, Any]) -> Any:
     if analisi["tipo"] == "non_numerica":
         return None if mancante(valore) else valore
@@ -458,6 +548,7 @@ def prepara_tabella(tabella: dict[str, Any], scelte: list[dict[str, str]] | None
         "colonne": colonne,
         "trasformate": trasformate,
         "riepilogo": riepilogo,
+        "questionario": prepara_questionario(tabella, colonne),
     }
 
 
