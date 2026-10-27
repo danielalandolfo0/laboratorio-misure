@@ -6,7 +6,8 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 
 - caricamento locale di tabelle CSV con intestazione;
 - riconoscimento di feature numeriche, binarie e non numeriche;
-- riscalamento automatico con z-score o scala robusta in presenza di valori estremi;
+- preprocessing Python eseguito localmente nel browser tramite Pyodide;
+- scelta globale del riscalamento tra nessuno, z-score, scala robusta e max-abs;
 - conservazione dei mancanti, segnalazione delle feature costanti e anteprima originale/trasformata;
 - esportazione della tabella di lavoro riscalata;
 - famiglia di Minkowski: forma generale, Manhattan, Euclidea, Chebyshev, versione pesata ed Euclidea standardizzata;
@@ -29,12 +30,13 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 laboratorio-misure/
 ├── index.html              pagina dell'applicazione
 ├── css/stile.css           aspetto grafico
-├── js/preprocessing.js     lettura CSV, diagnosi e riscalamento
+├── python/preprocessing.py logica Python per CSV, diagnosi e riscalamento
+├── js/preprocessing-python.js collegamento tra pagina e Python
 ├── js/preprocessing-ui.js  interfaccia della preparazione dei dati
 ├── js/misure.js            formule e controlli matematici
 ├── js/interfaccia.js       comportamento dell'interfaccia
 ├── test/test-misure.js     test automatici
-├── test/test-preprocessing.js test del modulo CSV
+├── test/test_preprocessing.py test del modulo Python per i CSV
 └── package.json            comando per eseguire i test
 ```
 
@@ -44,12 +46,20 @@ formule possono essere controllate senza dipendere dalla grafica.
 
 ## Aprire l'applicazione
 
-Scarica il repository e apri `index.html` con un browser. Non sono richieste
-installazioni per usare l'applicazione.
+La versione pubblicata non richiede installazioni. Per eseguire una copia
+locale, avvia un piccolo server HTTP dalla cartella del progetto, per esempio:
+
+```bash
+python3 -m http.server 8000
+```
+
+e apri `http://localhost:8000`. Al primo caricamento il browser scarica
+l'ambiente Python di Pyodide; i CSV restano nel dispositivo dell'utente.
 
 ## Eseguire i test
 
-Se sul computer è installato Node.js, dalla cartella del progetto esegui:
+Se sul computer sono installati Node.js e Python, dalla cartella del progetto
+esegui:
 
 ```bash
 npm test
