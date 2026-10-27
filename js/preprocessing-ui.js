@@ -5,6 +5,7 @@
   const P = window.Preprocessing;
   let risultato = null;
   let tabellaOriginale = null;
+  let testoOriginale = "";
   let scelte = [];
   let vista = "lavoro";
 
@@ -74,18 +75,18 @@
     }).join("");
   }
 
-  function aggiornaScelta(elemento) {
+  async function aggiornaScelta(elemento) {
     const indice = Number(elemento.dataset.column);
     const chiave = elemento.dataset.choice;
     const precedente = { ...scelte[indice] };
     scelte[indice][chiave] = elemento.value;
     if (chiave === "tipo" && (elemento.value === "binaria" || elemento.value === "non_numerica")) scelte[indice].metodo = "auto";
     try {
-      risultato = P.preparaTabella(tabellaOriginale, scelte);
+      risultato = await P.preparaTabella(testoOriginale, scelte);
       const tipoEffettivo = risultato.colonne[indice].tipo;
       if ((tipoEffettivo === "binaria" || tipoEffettivo === "non_numerica") && scelte[indice].metodo !== "auto") {
         scelte[indice].metodo = "auto";
-        risultato = P.preparaTabella(tabellaOriginale, scelte);
+        risultato = await P.preparaTabella(testoOriginale, scelte);
       }
       nascondiErrore();
       disegnaMetodi();
@@ -125,12 +126,13 @@
     disegnaTabella();
   }
 
-  function elaboraTesto(testo, nomeFile) {
+  async function elaboraTesto(testo, nomeFile) {
     nascondiErrore();
     try {
-      tabellaOriginale = P.leggiCsv(testo);
+      testoOriginale = testo;
+      risultato = await P.preparaTabella(testo, []);
+      tabellaOriginale = risultato.originale;
       scelte = tabellaOriginale.intestazioni.map(() => ({ tipo: "auto", metodo: "auto" }));
-      risultato = P.preparaTabella(tabellaOriginale, scelte);
       mostraRisultato(nomeFile);
     } catch (errore) {
       risultato = null;
@@ -145,21 +147,25 @@
     if (!/\.csv$/i.test(file.name) && file.type !== "text/csv" && file.type !== "text/plain") {
       mostraErrore("Seleziona un file CSV."); return;
     }
-    try { elaboraTesto(await file.text(), file.name); }
+    try { await elaboraTesto(await file.text(), file.name); }
     catch (_) { mostraErrore("Non è stato possibile leggere il file selezionato."); }
   }
 
-  function scaricaTabella() {
+  async function scaricaTabella() {
     if (!risultato) return;
-    const csv = "\uFEFF" + P.creaCsv(risultato.originale.intestazioni, risultato.trasformate);
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "tabella_riscalata.csv";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    try {
+      const csv = "\uFEFF" + await P.creaCsv(risultato.originale.intestazioni, risultato.trasformate);
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "tabella_riscalata.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (errore) {
+      mostraErrore(errore.message);
+    }
   }
 
   const esempio = `misura_A,misura_B,presente,gruppo
@@ -193,4 +199,17 @@
   ["dragenter", "dragover"].forEach(tipo => zona.addEventListener(tipo, evento => { evento.preventDefault(); zona.classList.add("dragging"); }));
   ["dragleave", "drop"].forEach(tipo => zona.addEventListener(tipo, evento => { evento.preventDefault(); zona.classList.remove("dragging"); }));
   zona.addEventListener("drop", evento => elaboraFile(evento.dataTransfer.files[0]));
+
+  const testoPulsanteEsempio = $("load-example-csv").textContent;
+  $("csv-file").disabled = true;
+  $("load-example-csv").disabled = true;
+  $("load-example-csv").textContent = "Preparazione…";
+  P.ready.then(() => {
+    $("csv-file").disabled = false;
+    $("load-example-csv").disabled = false;
+    $("load-example-csv").textContent = testoPulsanteEsempio;
+  }).catch(errore => {
+    $("load-example-csv").textContent = testoPulsanteEsempio;
+    mostraErrore(errore.message);
+  });
 })();
