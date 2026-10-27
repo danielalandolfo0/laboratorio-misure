@@ -81,6 +81,45 @@
           </table>
         </div>
       </div>
+
+      <section class="interpretation-wrap" aria-labelledby="interpretation-title">
+        <p class="section-label">Passo successivo</p>
+        <h3 id="interpretation-title">Che cosa rappresentano i dati?</h3>
+        <p>Le risposte servono a capire quali colonne confrontare e che cosa debba significare “somiglianza”. Le ipotesi ricavate dalla tabella possono sempre essere corrette.</p>
+
+        <div class="question-grid question-grid-two">
+          <div class="question-item">
+            <label for="row-meaning">Che cosa rappresenta ogni riga?</label>
+            <textarea id="row-meaning" rows="3" placeholder="Per esempio: una persona, un prodotto, un documento, una misurazione…"></textarea>
+          </div>
+          <div class="question-item">
+            <label for="column-organization">Come sono organizzate le colonne?</label>
+            <select id="column-organization">
+              <option value="" selected>Non lo so ancora</option>
+              <option value="caratteristiche">Descrivono caratteristiche differenti</option>
+              <option value="ripetute">Misurano più volte lo stesso fenomeno</option>
+              <option value="tempo">Sono osservazioni successive nel tempo</option>
+              <option value="parti">Sono parti dello stesso totale</option>
+              <option value="altro">Un’altra organizzazione</option>
+            </select>
+          </div>
+        </div>
+
+        <h4>Controlla il significato delle colonne</h4>
+        <div class="data-table-wrap">
+          <table class="data-table meaning-table">
+            <thead><tr><th>Colonna</th><th>Che cosa contiene?</th><th>Usarla per confrontare le righe?</th><th>Perché è stato suggerito</th></tr></thead>
+            <tbody id="meaning-body"></tbody>
+          </table>
+        </div>
+
+        <div class="adaptive-questions" id="adaptive-questions"></div>
+
+        <div class="interpretation-summary" aria-live="polite">
+          <h4>Riepilogo dell’interpretazione</h4>
+          <p id="interpretation-summary-text">Completa almeno che cosa rappresenta ogni riga.</p>
+        </div>
+      </section>
     </div>
   </section>
 
@@ -208,8 +247,8 @@
 
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
-  <script defer src="js/preprocessing-python.js?v=20261027-1"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261027-7"></script>
+  <script defer src="js/preprocessing-python.js?v=20261027-2"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261027-8"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>
