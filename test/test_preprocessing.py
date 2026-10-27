@@ -130,4 +130,11 @@ assert semantica["questionario"]["condizioni"]["binarie"] is True
 assert semantica["questionario"]["condizioni"]["date"] is True
 assert semantica["questionario"]["condizioni"]["livelli"] is True
 
+misure_generiche = p.prepara_tabella(
+    p.leggi_csv("misura_A,misura_B\n10,100\n12,105\n11,98\n9,102\n13,101\n80,103")
+)
+assert [c["ruoloSuggerito"] for c in misure_generiche["questionario"]["colonne"]] == [
+    "quantita", "quantita"
+]
+
 print("Tutti i test Python di preprocessing sono stati superati.")
