@@ -109,4 +109,25 @@ una_numerica = p.prepara_tabella(p.leggi_csv("a,gruppo\n1,x\n2,y\n3,z"))
 assert una_numerica["colonne"][0]["metodo"] == "nessuno"
 assert "Non ci sono altre feature numeriche" in una_numerica["colonne"][0]["motivo"]
 
+semantica = p.prepara_tabella(
+    p.leggi_csv(
+        "id,data,presente,livello,gruppo,descrizione\n"
+        "A1,2026-01-01,1,1,rosso,nota alfa\n"
+        "A2,2026-01-02,0,2,blu,nota beta\n"
+        "A3,2026-01-03,1,3,rosso,nota gamma\n"
+        "A4,2026-01-04,0,4,verde,nota delta\n"
+        "A5,2026-01-05,1,5,blu,nota epsilon"
+    )
+)
+ruoli = {c["nome"]: c["ruoloSuggerito"] for c in semantica["questionario"]["colonne"]}
+assert ruoli["id"] == "identificativo"
+assert ruoli["data"] == "data"
+assert ruoli["presente"] == "presenza"
+assert ruoli["livello"] == "livello"
+assert ruoli["gruppo"] == "categoria"
+assert ruoli["descrizione"] == "testo"
+assert semantica["questionario"]["condizioni"]["binarie"] is True
+assert semantica["questionario"]["condizioni"]["date"] is True
+assert semantica["questionario"]["condizioni"]["livelli"] is True
+
 print("Tutti i test Python di preprocessing sono stati superati.")
