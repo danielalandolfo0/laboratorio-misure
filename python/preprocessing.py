@@ -25,6 +25,7 @@ PAROLE_PRESENZA = {
     "presente", "presenza", "assenza", "attivo", "abilitato", "disponibile",
     "has", "is", "flag", "yes", "no", "si",
 }
+PAROLE_LIVELLO = {"livello", "grado", "rating", "score", "punteggio", "rank", "ordine"}
 
 
 def _prima_riga(testo: str) -> str:
@@ -454,9 +455,17 @@ def prepara_questionario(tabella: dict[str, Any], colonne: list[dict[str, Any]])
         nome_data = bool(parole & PAROLE_DATA)
         quota_date = sum(_sembra_data(v) for v in osservati) / len(osservati) if osservati else 0
         interi = False
+        numeri: list[float] = []
         if colonna["tipo"] == "numerica" and colonna.get("valoriNumerici"):
             numeri = [v for v in colonna["valoriNumerici"] if isinstance(v, (int, float))]
             interi = bool(numeri) and all(float(v).is_integer() for v in numeri)
+        piccola_scala = (
+            interi
+            and 2 < distinti <= 7
+            and min(numeri) >= 0
+            and max(numeri) <= 10
+            and max(numeri) - min(numeri) <= 10
+        )
 
         if nome_identificativo:
             ruolo, motivo = "identificativo", "Il titolo della colonna fa pensare a un codice identificativo."
@@ -469,7 +478,7 @@ def prepara_questionario(tabella: dict[str, Any], colonne: list[dict[str, Any]])
             ruolo, motivo = "categoria", "Poche etichette si ripetono in molte righe."
         elif colonna["tipo"] == "non_numerica":
             ruolo, motivo = "testo", "La colonna contiene molte scritte differenti."
-        elif colonna["tipo"] == "numerica" and interi and 2 < distinti <= 10:
+        elif colonna["tipo"] == "numerica" and (bool(parole & PAROLE_LIVELLO) or piccola_scala):
             ruolo, motivo = "livello", "Sono presenti pochi valori interi ordinabili."
         else:
             ruolo, motivo = "quantita", "La colonna contiene valori numerici."
