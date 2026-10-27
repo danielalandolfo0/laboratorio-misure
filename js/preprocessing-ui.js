@@ -7,6 +7,7 @@
   let tabellaOriginale = null;
   let testoOriginale = "";
   let scelte = [];
+  let interpretazione = { colonne: {} };
   let vista = "lavoro";
 
   function escapeHtml(valore) {
@@ -91,6 +92,7 @@
       nascondiErrore();
       disegnaMetodi();
       disegnaTabella();
+      disegnaQuestionario();
     } catch (errore) {
       scelte[indice] = precedente;
       mostraErrore(errore.message);
@@ -116,6 +118,115 @@
     $("view-work").classList.toggle("active", vista === "lavoro");
   }
 
+  function etichettaRuolo(ruolo) {
+    return ({
+      quantita: "Una quantità misurata",
+      livello: "Un livello con un ordine",
+      presenza: "Presenza o assenza",
+      binaria: "Una risposta con due possibilità",
+      categoria: "Un gruppo o una categoria",
+      identificativo: "Un codice identificativo",
+      data: "Una data o un orario",
+      testo: "Un testo o una sequenza",
+      risultato: "Un risultato da spiegare o prevedere",
+      altro: "Qualcos’altro",
+      ignoto: "Non lo so"
+    })[ruolo] || ruolo;
+  }
+
+  function opzioniRuolo(selezionato) {
+    const ruoli = ["quantita", "livello", "presenza", "binaria", "categoria", "identificativo", "data", "testo", "risultato", "altro", "ignoto"];
+    return ruoli.map(ruolo => `<option value="${ruolo}"${ruolo === selezionato ? " selected" : ""}>${etichettaRuolo(ruolo)}</option>`).join("");
+  }
+
+  function valoreRisposta(id) {
+    return interpretazione[id] || "";
+  }
+
+  function domandaAdattiva(id, titolo, testo, opzioni) {
+    return `<div class="question-item">
+      <label for="${id}">${titolo}</label>
+      <p>${testo}</p>
+      <select class="semantic-answer" id="${id}" data-answer="${id}">
+        <option value="">Scegli una risposta</option>
+        ${opzioni.map(([valore, etichetta]) => `<option value="${valore}"${valoreRisposta(id) === valore ? " selected" : ""}>${etichetta}</option>`).join("")}
+      </select>
+    </div>`;
+  }
+
+  function disegnaQuestionario() {
+    const profili = risultato.questionario.colonne;
+    profili.forEach(profilo => {
+      if (!interpretazione.colonne[profilo.nome]) {
+        interpretazione.colonne[profilo.nome] = {
+          ruolo: profilo.ruoloSuggerito,
+          usa: profilo.usaNelConfronto
+        };
+      }
+    });
+    $("meaning-body").innerHTML = profili.map((profilo, indice) => {
+      const risposta = interpretazione.colonne[profilo.nome];
+      return `<tr>
+        <th scope="row">${escapeHtml(profilo.nome)}</th>
+        <td><select class="column-choice semantic-role" data-semantic-column="${indice}" aria-label="Significato della colonna ${escapeHtml(profilo.nome)}">${opzioniRuolo(risposta.ruolo)}</select></td>
+        <td><label class="comparison-toggle"><input class="semantic-use" type="checkbox" data-semantic-column="${indice}"${risposta.usa ? " checked" : ""}><span>${risposta.usa ? "Sì" : "No"}</span></label></td>
+        <td>${escapeHtml(profilo.motivo)}</td>
+      </tr>`;
+    }).join("");
+
+    const c = risultato.questionario.condizioni;
+    const domande = [];
+    if (c.mancanti) domande.push(domandaAdattiva(
+      "significatoMancanti", "Che cosa significa una casella vuota?",
+      "La risposta cambia il modo in cui due righe possono essere confrontate.",
+      [["sconosciuto", "Il valore non è conosciuto"], ["non_applicabile", "La domanda non si applica"], ["assenza", "Indica assenza"], ["misto", "Dipende dalla colonna"], ["ignoto", "Non lo so"]]
+    ));
+    if (c.estremi) domande.push(domandaAdattiva(
+      "significatoEstremi", "I valori molto lontani dagli altri sono plausibili?",
+      "Sono stati osservati alcuni valori eccezionalmente alti o bassi.",
+      [["reali", "Sì, sono casi reali"], ["errori", "Probabilmente sono errori"], ["controllare", "Vanno controllati uno per uno"], ["ignoto", "Non lo so"]]
+    ));
+    if (c.binarie) domande.push(domandaAdattiva(
+      "zeriCondivisi", "Due assenze in comune rendono simili due righe?",
+      "Pensa alle colonne di presenza/assenza: avere entrambi 0 può essere informativo oppure irrilevante.",
+      [["si", "Sì, anche l’assenza in comune conta"], ["no", "No, contano soprattutto le presenze"], ["dipende", "Dipende dalla colonna"], ["ignoto", "Non lo so"]]
+    ));
+    if (c.livelli) domande.push(domandaAdattiva(
+      "ordineLivelli", "Nei livelli, l’ordine ha davvero significato?",
+      "Per esempio, basso–medio–alto ha un ordine; rosso–verde–blu no.",
+      [["si", "Sì, l’ordine è importante"], ["no", "No, sono soltanto etichette"], ["dipende", "Dipende dalla colonna"], ["ignoto", "Non lo so"]]
+    ));
+    if (c.date) domande.push(domandaAdattiva(
+      "usoDate", "Come devono essere considerate le date?",
+      "Una data può essere soltanto descrittiva oppure contribuire al confronto.",
+      [["escludi", "Non devono influire sul confronto"], ["vicinanza", "Date vicine significano casi simili"], ["durata", "Conta il tempo trascorso"], ["ordine", "Conta soltanto quale viene prima"], ["ignoto", "Non lo so"]]
+    ));
+    if (c.numeriche) domande.push(domandaAdattiva(
+      "somiglianzaNumerica", "Quando due righe numeriche devono sembrare simili?",
+      "Scegli l’idea più vicina al tuo obiettivo, senza preoccuparti del nome della misura.",
+      [["valori_vicini", "Quando hanno valori vicini"], ["proporzioni", "Quando mantengono proporzioni simili"], ["andamento", "Quando crescono e diminuiscono nello stesso modo"], ["ordine", "Quando ordinano le caratteristiche nello stesso modo"], ["ignoto", "Non lo so"]]
+    ));
+    domande.push(domandaAdattiva(
+      "importanza", "Le colonne hanno tutte la stessa importanza?",
+      "Una caratteristica molto importante potrebbe ricevere più peso delle altre.",
+      [["uguale", "Sì, tutte uguali"], ["diversa", "No, alcune sono più importanti"], ["ignoto", "Non lo so"]]
+    ));
+    $("adaptive-questions").innerHTML = domande.join("");
+    aggiornaRiepilogo();
+  }
+
+  function aggiornaRiepilogo() {
+    if (!risultato || !risultato.questionario) return;
+    const cosa = $("row-meaning").value.trim();
+    const incluse = risultato.questionario.colonne.filter(p => interpretazione.colonne[p.nome]?.usa).map(p => p.nome);
+    const escluse = risultato.questionario.colonne.filter(p => !interpretazione.colonne[p.nome]?.usa).map(p => p.nome);
+    const parti = [];
+    parti.push(cosa ? `Ogni riga rappresenta: ${cosa}.` : "Non è ancora stato indicato che cosa rappresenta ogni riga.");
+    parti.push(incluse.length ? `Nel confronto: ${incluse.join(", ")}.` : "Nessuna colonna è stata inclusa nel confronto.");
+    if (escluse.length) parti.push(`Escluse: ${escluse.join(", ")}.`);
+    $("interpretation-summary-text").textContent = parti.join(" ");
+  }
+
   function mostraRisultato(nomeFile) {
     $("csv-file-name").textContent = nomeFile;
     $("csv-dimensions").textContent = `Matrice ${risultato.riepilogo.istanze} × ${risultato.riepilogo.feature} (istanze × feature)`;
@@ -124,11 +235,15 @@
     disegnaMetodi();
     vista = "lavoro";
     disegnaTabella();
+    disegnaQuestionario();
   }
 
   async function elaboraTesto(testo, nomeFile) {
     nascondiErrore();
     try {
+      interpretazione = { colonne: {} };
+      $("row-meaning").value = "";
+      $("column-organization").value = "";
       testoOriginale = testo;
       risultato = await P.preparaTabella(testo, []);
       tabellaOriginale = risultato.originale;
@@ -194,6 +309,23 @@
     pulsante.setAttribute("aria-expanded", String(apri));
     spiegazione.hidden = !apri;
   });
+  $("meaning-body").addEventListener("change", evento => {
+    const indice = Number(evento.target.dataset.semanticColumn);
+    if (!Number.isInteger(indice)) return;
+    const profilo = risultato.questionario.colonne[indice];
+    if (evento.target.matches(".semantic-role")) interpretazione.colonne[profilo.nome].ruolo = evento.target.value;
+    if (evento.target.matches(".semantic-use")) {
+      interpretazione.colonne[profilo.nome].usa = evento.target.checked;
+      evento.target.nextElementSibling.textContent = evento.target.checked ? "Sì" : "No";
+    }
+    aggiornaRiepilogo();
+  });
+  $("adaptive-questions").addEventListener("change", evento => {
+    if (!evento.target.matches(".semantic-answer")) return;
+    interpretazione[evento.target.dataset.answer] = evento.target.value;
+  });
+  $("row-meaning").addEventListener("input", aggiornaRiepilogo);
+  $("column-organization").addEventListener("change", evento => { interpretazione.organizzazione = evento.target.value; });
 
   const zona = $("csv-drop-zone");
   ["dragenter", "dragover"].forEach(tipo => zona.addEventListener(tipo, evento => { evento.preventDefault(); zona.classList.add("dragging"); }));
