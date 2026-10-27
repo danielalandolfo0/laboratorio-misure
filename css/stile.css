@@ -173,6 +173,25 @@ header p {
 .view-switch button.active { color: var(--blue-dark); background: white; box-shadow: 0 3px 10px rgba(58, 78, 114, .10); }
 .preview-table { min-width: max-content; }
 .preview-table td { min-width: 100px; }
+.interpretation-wrap { margin-top: 30px; padding-top: 26px; border-top: 1px solid var(--line); }
+.interpretation-wrap h3 { margin: 0; letter-spacing: -.025em; font-size: 1.45rem; }
+.interpretation-wrap > p:not(.section-label) { max-width: 780px; margin: 5px 0 0; color: var(--muted); font-size: .82rem; }
+.interpretation-wrap h4 { margin: 24px 0 9px; font-size: .92rem; }
+.question-grid { display: grid; gap: 12px; margin-top: 18px; }
+.question-grid-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.question-item { padding: 14px; background: rgba(255, 255, 255, .38); border: 1px solid rgba(111, 124, 148, .13); border-radius: 16px; }
+.question-item label { margin: 0 0 8px; }
+.question-item p { margin: 0 0 10px; color: var(--muted); font-size: .75rem; }
+.question-item textarea { resize: vertical; min-height: 84px; }
+.meaning-table { min-width: 920px; }
+.meaning-table td:last-child { min-width: 250px; color: var(--muted); }
+.comparison-toggle { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: .78rem; }
+.comparison-toggle input { width: 18px; height: 18px; margin: 0; box-shadow: none; }
+.adaptive-questions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.adaptive-questions:empty { display: none; }
+.interpretation-summary { margin-top: 18px; padding: 16px 18px; background: rgba(8, 124, 255, .06); border-left: 4px solid var(--blue); border-radius: 14px; }
+.interpretation-summary h4 { margin: 0 0 5px; color: var(--blue-dark); }
+.interpretation-summary p { margin: 0; color: var(--muted); font-size: .8rem; }
 .section-divider { display: flex; align-items: center; gap: 13px; margin-bottom: 18px; color: var(--muted); font-size: .76rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .section-divider::before,
 .section-divider::after { content: ""; height: 1px; flex: 1; background: var(--line); }
@@ -510,5 +529,7 @@ footer { padding: 0 0 36px; color: var(--muted); font-size: 0.78rem; }
   .explanation-grid { grid-template-columns: 1fr; }
   .binary-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .rank-order-row { grid-template-columns: 1fr; }
+  .question-grid-two,
+  .adaptive-questions { grid-template-columns: 1fr; }
 }
 
