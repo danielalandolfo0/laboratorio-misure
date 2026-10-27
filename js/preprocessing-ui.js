@@ -201,10 +201,20 @@
       "Una data può essere soltanto descrittiva oppure contribuire al confronto.",
       [["escludi", "Non devono influire sul confronto"], ["vicinanza", "Date vicine significano casi simili"], ["durata", "Conta il tempo trascorso"], ["ordine", "Conta soltanto quale viene prima"], ["ignoto", "Non lo so"]]
     ));
-    if (c.numeriche) domande.push(domandaAdattiva(
-      "somiglianzaNumerica", "Quando due righe numeriche devono sembrare simili?",
-      "Scegli l’idea più vicina al tuo obiettivo, senza preoccuparti del nome della misura.",
+    if (c.numeriche && interpretazione.organizzazione === "ripetute") domande.push(domandaAdattiva(
+      "somiglianzaNumerica", "In base a che cosa due righe devono essere considerate simili?",
+      "Le colonne misurano più volte lo stesso fenomeno. Scegli quale aspetto del profilo deve contare.",
       [["valori_vicini", "Quando hanno valori vicini"], ["proporzioni", "Quando mantengono proporzioni simili"], ["andamento", "Quando crescono e diminuiscono nello stesso modo"], ["ordine", "Quando ordinano le caratteristiche nello stesso modo"], ["ignoto", "Non lo so"]]
+    ));
+    if (c.numeriche && interpretazione.organizzazione === "tempo") domande.push(domandaAdattiva(
+      "allineamentoTemporale", "Un andamento simile può avvenire con un piccolo ritardo?",
+      "Per esempio, lo stesso picco può comparire in momenti leggermente diversi nelle due righe.",
+      [["si", "Sì, il ritardo non deve renderle diverse"], ["no", "No, gli stessi eventi devono avvenire negli stessi momenti"], ["ignoto", "Non lo so"]]
+    ));
+    if (c.numeriche && interpretazione.organizzazione === "parti") domande.push(domandaAdattiva(
+      "totaleComposizione", "I valori di ogni riga rappresentano parti di un unico totale?",
+      "Per esempio, percentuali, quote o quantità la cui somma ha un significato preciso.",
+      [["si", "Sì, conta la composizione del totale"], ["no", "No, sono quantità indipendenti"], ["ignoto", "Non lo so"]]
     ));
     domande.push(domandaAdattiva(
       "importanza", "Le colonne hanno tutte la stessa importanza?",
@@ -334,7 +344,13 @@
     interpretazione[evento.target.dataset.answer] = evento.target.value;
   });
   $("row-meaning").addEventListener("input", aggiornaRiepilogo);
-  $("column-organization").addEventListener("change", evento => { interpretazione.organizzazione = evento.target.value; });
+  $("column-organization").addEventListener("change", evento => {
+    interpretazione.organizzazione = evento.target.value;
+    delete interpretazione.somiglianzaNumerica;
+    delete interpretazione.allineamentoTemporale;
+    delete interpretazione.totaleComposizione;
+    disegnaQuestionario();
+  });
 
   const zona = $("csv-drop-zone");
   ["dragenter", "dragover"].forEach(tipo => zona.addEventListener(tipo, evento => { evento.preventDefault(); zona.classList.add("dragging"); }));
