@@ -313,7 +313,16 @@
     const indice = Number(evento.target.dataset.semanticColumn);
     if (!Number.isInteger(indice)) return;
     const profilo = risultato.questionario.colonne[indice];
-    if (evento.target.matches(".semantic-role")) interpretazione.colonne[profilo.nome].ruolo = evento.target.value;
+    if (evento.target.matches(".semantic-role")) {
+      interpretazione.colonne[profilo.nome].ruolo = evento.target.value;
+      if (["identificativo", "data", "testo", "risultato"].includes(evento.target.value)) {
+        interpretazione.colonne[profilo.nome].usa = false;
+        const riga = evento.target.closest("tr");
+        const casella = riga.querySelector(".semantic-use");
+        casella.checked = false;
+        casella.nextElementSibling.textContent = "No";
+      }
+    }
     if (evento.target.matches(".semantic-use")) {
       interpretazione.colonne[profilo.nome].usa = evento.target.checked;
       evento.target.nextElementSibling.textContent = evento.target.checked ? "Sì" : "No";
