@@ -137,4 +137,37 @@ assert [c["ruoloSuggerito"] for c in misure_generiche["questionario"]["colonne"]
     "quantita", "quantita"
 ]
 
+piano_incompleto = p.crea_piano_confronto(preparata, {})
+assert piano_incompleto["completo"] is False
+assert "Indica che cosa rappresenta ogni riga." in piano_incompleto["avvisi"]
+
+piano_semplice = p.crea_piano_confronto(
+    preparata,
+    {"riga": "persona", "zeriCondivisi": "no", "ordineLivelli": "si", "colonne": {}},
+)
+assert piano_semplice["completo"] is True
+misure_piano = {blocco["nome"]: blocco["misura"] for blocco in piano_semplice["blocchi"]}
+assert misure_piano["a"] == "Differenza tra ranghi normalizzata"
+assert misure_piano["b"] == "Differenza numerica normalizzata"
+assert misure_piano["flag"] == "Confronto asimmetrico di Jaccard"
+assert misure_piano["gruppo"] == "Uguale o diverso"
+
+piano_profilo = p.crea_piano_confronto(
+    misure_generiche,
+    {
+        "riga": "oggetto",
+        "significatoEstremi": "reali",
+        "colonne": {
+            "misura_A": {"ruolo": "quantita", "usa": True},
+            "misura_B": {"ruolo": "quantita", "usa": True},
+        },
+        "gruppi": [{"id": "gruppo-1", "nome": "Profilo", "tipo": "ripetute"}],
+        "assegnazioni": {"misura_A": "gruppo-1", "misura_B": "gruppo-1"},
+        "somiglianza-gruppo-1": "andamento",
+    },
+)
+assert piano_profilo["completo"] is True
+assert piano_profilo["conteggioBlocchi"] == 1
+assert piano_profilo["blocchi"][0]["misura"] == "Dissimilarità di Pearson"
+
 print("Tutti i test Python di preprocessing sono stati superati.")
