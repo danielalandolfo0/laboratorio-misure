@@ -561,6 +561,212 @@ def prepara_tabella(tabella: dict[str, Any], scelte: list[dict[str, str]] | None
     }
 
 
+ETICHETTE_RUOLO = {
+    "quantita": "Quantità misurata", "livello": "Livello ordinato",
+    "presenza": "Presenza o assenza", "binaria": "Risposta con due possibilità",
+    "categoria": "Categoria senza ordine", "identificativo": "Codice identificativo",
+    "data": "Data o orario", "testo": "Testo o sequenza",
+    "risultato": "Risultato da spiegare o prevedere",
+    "altro": "Significato da specificare", "ignoto": "Significato non ancora noto",
+}
+
+
+def _blocco_indipendente(nome: str, ruolo: str, analisi: dict[str, Any], interpretazione: dict[str, Any]) -> dict[str, Any]:
+    """Traduce una caratteristica indipendente in una regola di confronto."""
+    tipo = analisi["tipo"]
+    avvisi: list[str] = []
+    stato = "pronto"
+
+    if ruolo == "quantita":
+        if tipo not in {"numerica", "numerica_costante"}:
+            misura, motivo = "Da decidere", "Una quantità deve contenere valori numerici."
+            avvisi.append("Controlla il significato o il tipo di dato della colonna.")
+            stato = "da_completare"
+        else:
+            misura = "Differenza numerica normalizzata"
+            motivo = "Confronta quanto sono lontani i valori dopo averli riportati su una scala comune."
+    elif ruolo == "livello":
+        risposta = interpretazione.get("ordineLivelli", "")
+        if risposta == "no":
+            misura, motivo = "Uguale o diverso", "I livelli sono trattati come etichette perché l’ordine non ha significato."
+        elif risposta == "si":
+            misura, motivo = "Differenza tra ranghi normalizzata", "Tiene conto dell’ordine dei livelli e non della distanza numerica grezza."
+        else:
+            misura, motivo = "Da decidere", "Occorre sapere se l’ordine dei livelli ha significato."
+            avvisi.append("Rispondi alla domanda sull’ordine dei livelli.")
+            stato = "da_completare"
+    elif ruolo == "presenza":
+        if tipo != "binaria":
+            misura, motivo = "Da decidere", "Una presenza o assenza deve essere rappresentata da due valori."
+            avvisi.append("Controlla il significato o il tipo di dato della colonna.")
+            stato = "da_completare"
+        else:
+            risposta = interpretazione.get("zeriCondivisi", "")
+            if risposta == "si":
+                misura, motivo = "Disaccordo binario", "Sia le presenze sia le assenze condivise contribuiscono alla somiglianza."
+            elif risposta == "no":
+                misura, motivo = "Confronto asimmetrico di Jaccard", "Le assenze condivise vengono ignorate; contano soprattutto le presenze."
+            else:
+                misura, motivo = "Da decidere", "Occorre sapere se due assenze condivise debbano contare come somiglianza."
+                avvisi.append("Rispondi alla domanda sulle assenze condivise.")
+                stato = "da_completare"
+    elif ruolo == "binaria":
+        if tipo != "binaria":
+            misura, motivo = "Da decidere", "Una risposta binaria deve essere rappresentata da due valori."
+            avvisi.append("Controlla il significato o il tipo di dato della colonna.")
+            stato = "da_completare"
+        else:
+            misura, motivo = "Disaccordo binario", "Due risposte uguali hanno contributo 0; due risposte diverse hanno contributo 1."
+    elif ruolo in {"categoria", "identificativo"}:
+        misura, motivo = "Uguale o diverso", "Confronta le etichette senza introdurre un ordine artificiale."
+        if ruolo == "identificativo":
+            avvisi.append("Un identificativo di solito serve a nominare le righe e non a confrontarle.")
+            stato = "attenzione"
+    elif ruolo == "data":
+        risposta = interpretazione.get("usoDate", "")
+        if risposta in {"vicinanza", "durata"}:
+            misura, motivo = "Differenza temporale normalizzata", "Confronta il tempo che separa le due date."
+        elif risposta == "ordine":
+            misura, motivo = "Differenza tra posizioni temporali", "Conta l’ordine cronologico, non la distanza temporale assoluta."
+        elif risposta == "escludi":
+            misura, motivo = "Da escludere", "Hai indicato che le date non devono influire sul confronto."
+            avvisi.append("Disattiva questa colonna nel confronto.")
+            stato = "da_completare"
+        else:
+            misura, motivo = "Da decidere", "Occorre stabilire come le date debbano contribuire al confronto."
+            avvisi.append("Rispondi alla domanda sull’uso delle date.")
+            stato = "da_completare"
+    elif ruolo == "testo":
+        misura = "Distanza di Levenshtein normalizzata"
+        motivo = "Confronta quante modifiche servono per trasformare un testo nell’altro, tenendo conto della lunghezza."
+    elif ruolo == "risultato":
+        misura = "Da decidere"
+        motivo = "Un risultato da spiegare o prevedere normalmente non deve definire la somiglianza tra le righe."
+        avvisi.append("Valuta se questa colonna debba essere esclusa dal confronto.")
+        stato = "da_completare"
+    else:
+        misura, motivo = "Da decidere", "Il significato della colonna non è ancora sufficiente per scegliere una misura."
+        avvisi.append("Specifica meglio che cosa rappresenta la colonna.")
+        stato = "da_completare"
+
+    if tipo == "numerica_costante" and stato == "pronto":
+        avvisi.append("La colonna è costante e non distingue nessuna coppia di righe.")
+        stato = "attenzione"
+
+    return {"nome": nome, "colonne": [nome], "interpretazione": ETICHETTE_RUOLO.get(ruolo, ruolo),
+            "misura": misura, "motivo": motivo, "stato": stato, "avvisi": avvisi}
+
+
+def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: dict[str, dict[str, Any]], interpretazione: dict[str, Any]) -> dict[str, Any]:
+    """Traduce un gruppo di colonne in una sola regola di confronto."""
+    nome = str(gruppo.get("nome") or "Gruppo senza nome")
+    tipo_gruppo = gruppo.get("tipo", "altro")
+    avvisi: list[str] = []
+    stato = "pronto"
+    etichetta = {"ripetute": "Misurazioni dello stesso profilo", "tempo": "Osservazioni successive nel tempo",
+                 "parti": "Parti dello stesso totale", "altro": "Gruppo di caratteristiche"}.get(tipo_gruppo, "Gruppo di caratteristiche")
+
+    if len(membri) < 2:
+        misura, motivo = "Da completare", "Un gruppo deve contenere almeno due colonne."
+        avvisi.append("Assegna almeno due colonne al gruppo oppure rimuovilo.")
+        stato = "da_completare"
+    else:
+        tipi = {analisi_per_nome[m]["tipo"] for m in membri if m in analisi_per_nome}
+        numerico = bool(tipi) and tipi <= {"numerica", "numerica_costante"}
+        if tipo_gruppo in {"ripetute", "tempo", "parti"} and not numerico:
+            misura, motivo = "Da decidere", "Questa interpretazione richiede colonne numeriche."
+            avvisi.append("Controlla il tipo di dato delle colonne del gruppo.")
+            stato = "da_completare"
+        elif tipo_gruppo == "ripetute":
+            risposta = interpretazione.get(f"somiglianza-{gruppo.get('id')}", "")
+            scelte = {
+                "valori_vicini": ("Distanza tra coordinate normalizzata", "Confronta i valori coordinata per coordinata e riassume il gruppo in un solo contributo."),
+                "proporzioni": ("Dissimilarità coseno", "Confronta la direzione dei profili, riducendo l’effetto della loro grandezza complessiva."),
+                "andamento": ("Dissimilarità di Pearson", "Confronta come i valori crescono e diminuiscono rispetto al livello medio del profilo."),
+                "ordine": ("Dissimilarità di Spearman", "Confronta l’ordinamento interno delle coordinate dei due profili."),
+            }
+            if risposta in scelte:
+                misura, motivo = scelte[risposta]
+            else:
+                misura, motivo = "Da decidere", "Occorre stabilire quale aspetto del profilo debba definire la somiglianza."
+                avvisi.append(f"Rispondi alla domanda sul gruppo “{nome}”.")
+                stato = "da_completare"
+        elif tipo_gruppo == "tempo":
+            risposta = interpretazione.get(f"ritardo-{gruppo.get('id')}", "")
+            if risposta == "si":
+                misura, motivo = "Dynamic Time Warping normalizzata", "Permette di allineare andamenti simili che avvengono con un piccolo ritardo."
+            elif risposta == "no":
+                misura, motivo = "Distanza punto per punto normalizzata", "Confronta soltanto osservazioni rilevate negli stessi istanti."
+            else:
+                misura, motivo = "Da decidere", "Occorre sapere se piccoli ritardi temporali debbano essere tollerati."
+                avvisi.append(f"Rispondi alla domanda sul ritardo nel gruppo “{nome}”.")
+                stato = "da_completare"
+        elif tipo_gruppo == "parti":
+            risposta = interpretazione.get(f"totale-{gruppo.get('id')}", "")
+            if risposta == "si":
+                misura, motivo = "Distanza composizionale di Aitchison", "Confronta le proporzioni tra le parti, non la grandezza totale."
+                if any(analisi_per_nome[m].get("statistiche", {}).get("zeri", 0) > 0 for m in membri):
+                    avvisi.append("Sono presenti zeri: prima del calcolo servirà stabilire come trattarli.")
+                    stato = "da_completare"
+            elif risposta == "no":
+                misura, motivo = "Distanza tra coordinate normalizzata", "Le quantità vengono confrontate insieme, senza trattarle come parti di una composizione."
+            else:
+                misura, motivo = "Da decidere", "Occorre confermare se le colonne siano realmente parti di un unico totale."
+                avvisi.append(f"Rispondi alla domanda sul totale del gruppo “{nome}”.")
+                stato = "da_completare"
+        else:
+            misura, motivo = "Da decidere", "Non è ancora specificato quale relazione unisca le colonne del gruppo."
+            avvisi.append("Descrivi il gruppo con una delle interpretazioni disponibili.")
+            stato = "da_completare"
+
+    return {"nome": nome, "colonne": membri, "interpretazione": etichetta, "misura": misura,
+            "motivo": motivo, "stato": stato, "avvisi": avvisi}
+
+
+def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, Any]) -> dict[str, Any]:
+    """Costruisce un piano verificabile senza calcolare ancora le distanze."""
+    if not isinstance(interpretazione, dict):
+        raise ValueError("Le risposte del questionario non sono valide.")
+    profili = risultato["questionario"]["colonne"]
+    analisi_per_nome = {colonna["nome"]: colonna for colonna in risultato["colonne"]}
+    risposte_colonne = interpretazione.get("colonne", {})
+    assegnazioni = interpretazione.get("assegnazioni", {})
+    gruppi = interpretazione.get("gruppi", [])
+    gruppi_per_id = {gruppo.get("id"): gruppo for gruppo in gruppi}
+    incluse: list[str] = []
+    ruoli: dict[str, str] = {}
+    for profilo in profili:
+        risposta = risposte_colonne.get(profilo["nome"], {})
+        if risposta.get("usa", profilo["usaNelConfronto"]):
+            incluse.append(profilo["nome"])
+        ruoli[profilo["nome"]] = risposta.get("ruolo", profilo["ruoloSuggerito"])
+
+    blocchi = [
+        _blocco_indipendente(nome, ruoli[nome], analisi_per_nome[nome], interpretazione)
+        for nome in incluse if not assegnazioni.get(nome) or assegnazioni.get(nome) not in gruppi_per_id
+    ]
+    for gruppo in gruppi:
+        membri = [nome for nome in incluse if assegnazioni.get(nome) == gruppo.get("id")]
+        if membri:
+            blocchi.append(_blocco_gruppo(gruppo, membri, analisi_per_nome, interpretazione))
+
+    avvisi: list[str] = []
+    if not interpretazione.get("riga"):
+        avvisi.append("Indica che cosa rappresenta ogni riga.")
+    if not blocchi:
+        avvisi.append("Includi almeno una colonna nel confronto.")
+    if any(analisi_per_nome[n]["mancanti"] > 0 for n in incluse) and interpretazione.get("significatoMancanti") in {None, "", "ignoto"}:
+        avvisi.append("Indica che cosa significano le caselle vuote nelle colonne incluse.")
+    incluse_con_estremi = any(analisi_per_nome[n].get("statistiche", {}).get("estremi", 0) > 0 for n in incluse)
+    if incluse_con_estremi and interpretazione.get("significatoEstremi") in {None, "", "ignoto"}:
+        avvisi.append("Indica se i valori molto lontani dagli altri sono plausibili.")
+    elif incluse_con_estremi and interpretazione.get("significatoEstremi") in {"errori", "controllare"}:
+        avvisi.append("Controlla i valori estremi prima di calcolare le distanze.")
+
+    completo = bool(blocchi) and not avvisi and all(b["stato"] != "da_completare" for b in blocchi)
+    return {"blocchi": blocchi, "avvisi": avvisi, "completo": completo, "conteggioBlocchi": len(blocchi)}
+
+
 def _valore_csv(valore: Any) -> Any:
     if valore is None:
         return ""
@@ -596,5 +802,16 @@ def crea_csv_json(intestazioni_json: str, righe_json: str) -> str:
             ensure_ascii=False,
             separators=(",", ":"),
         )
+    except (ValueError, TypeError, json.JSONDecodeError) as errore:
+        return json.dumps({"ok": False, "errore": str(errore)}, ensure_ascii=False, separators=(",", ":"))
+
+
+def crea_piano_json(testo: str, scelte_json: str = "[]", interpretazione_json: str = "{}") -> str:
+    try:
+        scelte = json.loads(scelte_json or "[]")
+        interpretazione = json.loads(interpretazione_json or "{}")
+        risultato = prepara_tabella(leggi_csv(testo), scelte)
+        piano = crea_piano_confronto(risultato, interpretazione)
+        return json.dumps({"ok": True, "piano": piano}, ensure_ascii=False, separators=(",", ":"))
     except (ValueError, TypeError, json.JSONDecodeError) as errore:
         return json.dumps({"ok": False, "errore": str(errore)}, ensure_ascii=False, separators=(",", ":"))
