@@ -7,6 +7,11 @@
   <title>Laboratorio delle misure</title>
   <link rel="stylesheet" href="css/stile.css?v=20261026-6">
   <script>
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    window.addEventListener("pageshow", () => {
+      if (!window.location.hash) window.scrollTo(0, 0);
+    });
+
     window.MathJax = {
       tex: {
         inlineMath: [["\\(", "\\)"]],
@@ -106,7 +111,7 @@
         <h4>Controlla il significato delle colonne</h4>
         <div class="data-table-wrap">
           <table class="data-table meaning-table">
-            <thead><tr><th>Colonna</th><th>Che cosa contiene?</th><th>Usarla per confrontare le righe?</th><th>Perché è stato suggerito</th></tr></thead>
+            <thead><tr><th>Colonna</th><th>Che cosa contiene?</th><th>Usarla per confrontare le righe?</th></tr></thead>
             <tbody id="meaning-body"></tbody>
           </table>
         </div>
@@ -258,7 +263,7 @@
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
   <script defer src="js/preprocessing-python.js?v=20261027-3"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261028-4"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261028-5"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>
