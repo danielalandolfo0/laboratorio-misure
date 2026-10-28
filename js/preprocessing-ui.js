@@ -403,6 +403,15 @@
     if (evento.target.matches(".group-type")) gruppo.tipo = evento.target.value;
     disegnaQuestionario();
   });
+  $("group-config-list").addEventListener("input", evento => {
+    if (!evento.target.matches(".group-name")) return;
+    const contenitore = evento.target.closest(".group-config");
+    const gruppo = interpretazione.gruppi.find(elemento => elemento.id === contenitore.dataset.groupId);
+    if (gruppo && evento.target.value.trim()) gruppo.nome = evento.target.value.trim();
+  });
+  $("group-config-list").addEventListener("focusout", evento => {
+    if (evento.target.matches(".group-name")) disegnaQuestionario();
+  });
   $("group-config-list").addEventListener("click", evento => {
     const pulsante = evento.target.closest(".remove-group");
     if (!pulsante) return;
