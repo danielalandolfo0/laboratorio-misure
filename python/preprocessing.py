@@ -1017,13 +1017,13 @@ def _valore_csv(valore: Any) -> Any:
         return ""
     if isinstance(valore, (int, float)) and not isinstance(valore, bool):
         pulito = 0 if abs(float(valore)) < 1e-14 else float(valore)
-        return format(pulito, ".12g")
+        return format(pulito, ".12g").replace(".", ",")
     return str(valore)
 
 
 def crea_csv(intestazioni: list[str], righe: list[list[Any]]) -> str:
     destinazione = io.StringIO(newline="")
-    scrittore = csv.writer(destinazione, delimiter=",", lineterminator="\n")
+    scrittore = csv.writer(destinazione, delimiter=";", lineterminator="\n")
     for riga in [intestazioni, *righe]:
         scrittore.writerow([_valore_csv(valore) for valore in riga])
     return destinazione.getvalue().rstrip("\n")
