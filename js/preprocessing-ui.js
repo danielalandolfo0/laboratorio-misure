@@ -9,6 +9,8 @@
   let scelte = [];
   let interpretazione = { colonne: {}, gruppi: [], assegnazioni: {}, prossimoGruppo: 1 };
   let vista = "lavoro";
+  let pianoCorrente = null;
+  let gowerCorrente = null;
 
   function escapeHtml(valore) {
     return String(valore).replace(/[&<>"']/g, carattere => ({
@@ -156,9 +158,16 @@
 
   function nascondiPiano() {
     $("comparison-plan").hidden = true;
+    $("gower-actions").hidden = true;
+    $("gower-result").hidden = true;
+    pianoCorrente = null;
+    gowerCorrente = null;
   }
 
   function disegnaPiano(piano) {
+    pianoCorrente = piano;
+    gowerCorrente = null;
+    $("gower-result").hidden = true;
     $("comparison-plan-paths").innerHTML = piano.percorsi.map((percorso, indice) => {
       const classe = percorso.stato === "da_completare" ? " incomplete" : "";
       return `<article class="plan-path${classe}">
@@ -199,7 +208,52 @@
       : piano.conteggioPercorsi === 1
         ? "È stato individuato un unico percorso di confronto."
         : `${piano.conteggioPercorsi} percorsi verranno calcolati separatamente, senza combinarli automaticamente.`;
+    $("gower-actions").hidden = !(piano.completo && piano.percorsi.some(percorso => percorso.tipo === "gower"));
     $("comparison-plan").hidden = false;
+  }
+
+  function disegnaMatriceGower(gower) {
+    const limite = Math.min(12, gower.etichette.length);
+    const etichette = gower.etichette.slice(0, limite);
+    $("gower-matrix-head").innerHTML = `<tr><th>Riga</th>${etichette.map(etichetta => `<th>${escapeHtml(etichetta)}</th>`).join("")}</tr>`;
+    $("gower-matrix-body").innerHTML = gower.matrice.slice(0, limite).map((riga, indice) => `<tr>
+      <th scope="row">${escapeHtml(etichette[indice])}</th>
+      ${riga.slice(0, limite).map(valore => `<td>${valore === null ? "—" : escapeHtml(formatoNumero(valore))}</td>`).join("")}
+    </tr>`).join("");
+    $("gower-result-title").textContent = gower.metodo;
+    $("gower-result-caption").textContent = `${gower.etichette.length} × ${gower.etichette.length}. ${gower.nota}${limite < gower.etichette.length ? ` Anteprima delle prime ${limite} righe.` : ""}`;
+    $("download-gower").disabled = false;
+    $("gower-result").hidden = false;
+  }
+
+  async function calcolaGower() {
+    if (!pianoCorrente) return;
+    const pulsante = $("calculate-gower");
+    const testo = pulsante.textContent;
+    pulsante.disabled = true;
+    pulsante.textContent = "Calcolo…";
+    try {
+      gowerCorrente = await P.calcolaGower(testoOriginale, scelte, interpretazione);
+      nascondiErrore();
+      disegnaMatriceGower(gowerCorrente);
+    } catch (errore) {
+      mostraErrore(errore.message);
+    } finally {
+      pulsante.disabled = false;
+      pulsante.textContent = testo;
+    }
+  }
+
+  function scaricaGower() {
+    if (!gowerCorrente) return;
+    const url = URL.createObjectURL(new Blob(["\uFEFF" + gowerCorrente.csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "matrice_gower.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   async function preparaPiano() {
@@ -413,6 +467,8 @@
   $("view-work").addEventListener("click", () => { vista = "lavoro"; disegnaTabella(); });
   $("download-work").addEventListener("click", scaricaTabella);
   $("prepare-comparison-plan").addEventListener("click", preparaPiano);
+  $("calculate-gower").addEventListener("click", calcolaGower);
+  $("download-gower").addEventListener("click", scaricaGower);
   $("scaling-body").addEventListener("change", evento => {
     if (evento.target.matches(".column-choice")) aggiornaScelta(evento.target);
   });
