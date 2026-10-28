@@ -583,7 +583,7 @@ def _blocco_indipendente(nome: str, ruolo: str, analisi: dict[str, Any], interpr
             avvisi.append("Controlla il significato o il tipo di dato della colonna.")
             stato = "da_completare"
         else:
-            misura = "Differenza numerica normalizzata"
+            misura = "Differenza numerica"
             motivo = "Confronta quanto sono lontani i valori dopo averli riportati su una scala comune."
     elif ruolo == "livello":
         risposta = interpretazione.get("ordineLivelli", "")
