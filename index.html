@@ -134,6 +134,29 @@
         </div>
 
         <div class="adaptive-questions" id="adaptive-questions"></div>
+
+        <div class="comparison-plan-actions">
+          <button class="action plan-action" id="prepare-comparison-plan" type="button">Prepara il piano di confronto</button>
+          <p>Il piano traduce le risposte in misure adatte, senza calcolare ancora le distanze.</p>
+        </div>
+
+        <section class="comparison-plan" id="comparison-plan" aria-labelledby="comparison-plan-title" hidden>
+          <div class="comparison-plan-heading">
+            <div>
+              <p class="section-label">Controllo prima del calcolo</p>
+              <h4 id="comparison-plan-title">Piano di confronto</h4>
+            </div>
+            <span class="plan-status" id="comparison-plan-status"></span>
+          </div>
+          <p id="comparison-plan-intro"></p>
+          <div class="data-table-wrap">
+            <table class="data-table comparison-plan-table">
+              <thead><tr><th>Dati utilizzati</th><th>Interpretazione</th><th>Confronto proposto</th><th>Perché</th></tr></thead>
+              <tbody id="comparison-plan-body"></tbody>
+            </table>
+          </div>
+          <div class="plan-warnings" id="comparison-plan-warnings"></div>
+        </section>
       </section>
     </div>
   </section>
@@ -262,8 +285,8 @@
 
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
-  <script defer src="js/preprocessing-python.js?v=20261027-3"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261028-5"></script>
+  <script defer src="js/preprocessing-python.js?v=20261028-4"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261028-6"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>
