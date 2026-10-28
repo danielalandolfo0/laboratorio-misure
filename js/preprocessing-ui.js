@@ -183,8 +183,6 @@
     $("comparison-plan-warnings").innerHTML = avvisi.length
       ? `<p><strong>Prima del calcolo:</strong></p><ul>${avvisi.map(avviso => `<li>${escapeHtml(avviso)}</li>`).join("")}</ul>`
       : "";
-    $("comparison-plan-status").textContent = piano.completo ? "Piano pronto" : "Da completare";
-    $("comparison-plan-status").classList.toggle("incomplete", !piano.completo);
     $("comparison-plan-intro").textContent = piano.completo
       ? `${piano.conteggioBlocchi} ${piano.conteggioBlocchi === 1 ? "blocco contribuirà" : "blocchi contribuiranno"} al confronto, ciascuno una sola volta.`
       : "Il piano è stato preparato, ma alcune informazioni devono ancora essere completate.";
