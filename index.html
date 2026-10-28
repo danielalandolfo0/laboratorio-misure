@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Laboratorio interattivo per preparare dati tabellari e comprendere misure tra vettori, dati binari e stringhe.">
   <title>Laboratorio delle misure</title>
-  <link rel="stylesheet" href="css/stile.css?v=20261028-8">
+  <link rel="stylesheet" href="css/stile.css?v=20261028-9">
   <script>
     if ("scrollRestoration" in history) history.scrollRestoration = "manual";
     window.addEventListener("pageshow", () => {
@@ -156,6 +156,20 @@
             </table>
           </div>
           <div class="plan-warnings" id="comparison-plan-warnings"></div>
+          <div class="gower-actions" id="gower-actions" hidden>
+            <button class="action" id="calculate-gower" type="button">Calcola la matrice di Gower</button>
+            <button class="secondary-action" id="download-gower" type="button" disabled>Scarica il CSV</button>
+          </div>
+          <section class="gower-result" id="gower-result" aria-labelledby="gower-result-title" hidden>
+            <h5 id="gower-result-title"></h5>
+            <p id="gower-result-caption"></p>
+            <div class="data-table-wrap">
+              <table class="data-table gower-matrix-table">
+                <thead id="gower-matrix-head"></thead>
+                <tbody id="gower-matrix-body"></tbody>
+              </table>
+            </div>
+          </section>
         </section>
       </section>
     </div>
@@ -285,8 +299,8 @@
 
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
-  <script defer src="js/preprocessing-python.js?v=20261028-6"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261028-8"></script>
+  <script defer src="js/preprocessing-python.js?v=20261028-7"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261028-9"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>
