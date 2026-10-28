@@ -151,6 +151,36 @@ assert misure_piano["a"] == "Differenza tra ranghi normalizzata"
 assert misure_piano["b"] == "Differenza numerica"
 assert misure_piano["flag"] == "Confronto asimmetrico di Jaccard"
 assert misure_piano["gruppo"] == "Uguale o diverso"
+assert piano_semplice["conteggioPercorsi"] == 1
+assert piano_semplice["percorsi"][0]["metodo"] == "Dissimilarità di Gower classica"
+
+piano_numerico = p.crea_piano_confronto(
+    scale_diverse,
+    {
+        "riga": "oggetto",
+        "colonne": {
+            "a": {"ruolo": "quantita", "usa": True},
+            "b": {"ruolo": "quantita", "usa": True},
+        },
+    },
+)
+assert piano_numerico["completo"] is True
+assert piano_numerico["percorsi"][0]["metodo"] == "Distanza euclidea"
+assert piano_numerico["percorsi"][0]["origine"] == "Tabella di lavoro"
+
+piano_numerico_estremi = p.crea_piano_confronto(
+    robusto_comune,
+    {
+        "riga": "oggetto",
+        "significatoEstremi": "reali",
+        "colonne": {
+            "a": {"ruolo": "quantita", "usa": True},
+            "b": {"ruolo": "quantita", "usa": True},
+        },
+    },
+)
+assert piano_numerico_estremi["completo"] is True
+assert piano_numerico_estremi["percorsi"][0]["metodo"] == "Distanza di Manhattan"
 
 piano_profilo = p.crea_piano_confronto(
     misure_generiche,
@@ -169,5 +199,7 @@ piano_profilo = p.crea_piano_confronto(
 assert piano_profilo["completo"] is True
 assert piano_profilo["conteggioBlocchi"] == 1
 assert piano_profilo["blocchi"][0]["misura"] == "Dissimilarità di Pearson"
+assert piano_profilo["conteggioPercorsi"] == 1
+assert piano_profilo["percorsi"][0]["metodo"] == "Dissimilarità di Pearson"
 
 print("Tutti i test Python di preprocessing sono stati superati.")
