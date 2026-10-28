@@ -68,7 +68,7 @@ for testo, frammento in (
     except ValueError as errore:
         assert frammento in str(errore)
 
-assert p.crea_csv(["a", "b"], [[1.25, "x,y"]]) == 'a,b\n1.25,"x,y"'
+assert p.crea_csv(["a", "b"], [[1.25, "x;y"]]) == 'a;b\n1,25;"x;y"'
 
 manuale = p.prepara_tabella(
     tabella,
@@ -163,6 +163,8 @@ quasi_uguali(matrice_gower["matrice"][0][1], 0.75)
 quasi_uguali(matrice_gower["matrice"][0][2], 2 / 3)
 assert matrice_gower["matrice"][1][0] == matrice_gower["matrice"][0][1]
 assert all(matrice_gower["matrice"][i][i] == 0 for i in range(3))
+assert matrice_gower["csv"].splitlines()[0] == "Riga;Riga 1;Riga 2;Riga 3"
+assert "0,75" in matrice_gower["csv"]
 
 solo_presenze = p.prepara_tabella(p.leggi_csv("id,presente\na,0\nb,0\nc,1"))
 matrice_presenze = p.calcola_matrice_gower(
