@@ -589,6 +589,10 @@ def _blocco_indipendente(nome: str, ruolo: str, analisi: dict[str, Any], interpr
         risposta = interpretazione.get("ordineLivelli", "")
         if risposta == "no":
             misura, motivo = "Uguale o diverso", "I livelli sono trattati come etichette perché l’ordine non ha significato."
+        elif risposta == "si" and tipo == "non_numerica":
+            misura, motivo = "Da decidere", "Per livelli testuali occorre specificare esplicitamente l’ordine delle etichette."
+            avvisi.append("L’ordine dei livelli testuali non può essere ricavato senza una conferma.")
+            stato = "da_completare"
         elif risposta == "si":
             misura, motivo = "Differenza tra ranghi normalizzata", "Tiene conto dell’ordine dei livelli e non della distanza numerica grezza."
         else:
@@ -867,6 +871,147 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
     }
 
 
+def _leggi_data(valore: Any) -> float | None:
+    if mancante(valore):
+        return None
+    testo = str(valore).strip()
+    formati = (
+        "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d",
+        "%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M",
+    )
+    for formato in formati:
+        try:
+            data = dt.datetime.strptime(testo, formato).replace(tzinfo=dt.timezone.utc)
+            return data.timestamp()
+        except ValueError:
+            pass
+    raise ValueError(f"Il valore “{testo}” non è una data riconosciuta.")
+
+
+def _etichette_righe(risultato: dict[str, Any], interpretazione: dict[str, Any]) -> list[str]:
+    n = len(risultato["originale"]["righe"])
+    profili = risultato["questionario"]["colonne"]
+    risposte = interpretazione.get("colonne", {})
+    candidati = [
+        profilo["nome"] for profilo in profili
+        if risposte.get(profilo["nome"], {}).get("ruolo", profilo["ruoloSuggerito"]) == "identificativo"
+    ]
+    if candidati:
+        nome = candidati[0]
+        indice = risultato["originale"]["intestazioni"].index(nome)
+        valori = [str(riga[indice]).strip() for riga in risultato["originale"]["righe"]]
+        if all(valore and not mancante(valore) for valore in valori) and len(set(valori)) == n:
+            return valori
+    return [f"Riga {indice + 1}" for indice in range(n)]
+
+
+def _metadati_gower(
+    risultato: dict[str, Any],
+    interpretazione: dict[str, Any],
+    percorso: dict[str, Any],
+) -> list[dict[str, Any]]:
+    tabella = risultato["originale"]
+    analisi_per_nome = {colonna["nome"]: colonna for colonna in risultato["colonne"]}
+    profili = {profilo["nome"]: profilo for profilo in risultato["questionario"]["colonne"]}
+    risposte = interpretazione.get("colonne", {})
+    robusta = percorso["metodo"] == "Dissimilarità di Gower robusta"
+    metadati: list[dict[str, Any]] = []
+
+    for nome in percorso["colonne"]:
+        indice = tabella["intestazioni"].index(nome)
+        grezzi = [riga[indice] for riga in tabella["righe"]]
+        ruolo = risposte.get(nome, {}).get("ruolo", profili[nome]["ruoloSuggerito"])
+        analisi = analisi_per_nome[nome]
+
+        if ruolo == "quantita":
+            valori = [leggi_numero(valore, tabella["separatore"]) for valore in grezzi]
+            if any(valore is INVALIDO for valore in valori):
+                raise ValueError(f"La colonna “{nome}” contiene valori non numerici.")
+            osservati = [float(valore) for valore in valori if valore is not None]
+            intervallo = max(osservati) - min(osservati) if osservati else 0
+            if robusta and analisi.get("statistiche", {}).get("iqr", 0) > 0:
+                scala = 7 * analisi["statistiche"]["iqr"]
+            else:
+                scala = intervallo
+            metadati.append({"nome": nome, "tipo": "numerica", "valori": valori, "scala": scala, "limita": robusta})
+        elif ruolo == "data":
+            valori = [_leggi_data(valore) for valore in grezzi]
+            osservati = sorted({valore for valore in valori if valore is not None})
+            if interpretazione.get("usoDate") == "ordine":
+                massimo = max(1, len(osservati) - 1)
+                mappa = {valore: indice / massimo for indice, valore in enumerate(osservati)}
+                codificati = [None if valore is None else mappa[valore] for valore in valori]
+                metadati.append({"nome": nome, "tipo": "numerica", "valori": codificati, "scala": 1, "limita": False})
+            else:
+                scala = osservati[-1] - osservati[0] if osservati else 0
+                metadati.append({"nome": nome, "tipo": "numerica", "valori": valori, "scala": scala, "limita": False})
+        elif ruolo == "livello" and interpretazione.get("ordineLivelli") == "si":
+            numeri = [leggi_numero(valore, tabella["separatore"]) for valore in grezzi]
+            if any(valore is INVALIDO for valore in numeri if valore is not None):
+                raise ValueError(f"Specifica l’ordine dei livelli della colonna “{nome}”.")
+            livelli = sorted({float(valore) for valore in numeri if valore is not None})
+            massimo = max(1, len(livelli) - 1)
+            mappa = {valore: indice / massimo for indice, valore in enumerate(livelli)}
+            valori = [None if valore is None else mappa[float(valore)] for valore in numeri]
+            metadati.append({"nome": nome, "tipo": "numerica", "valori": valori, "scala": 1, "limita": False})
+        else:
+            valori = [None if mancante(valore) else str(valore) for valore in grezzi]
+            asimmetrica = ruolo == "presenza" and interpretazione.get("zeriCondivisi") == "no"
+            metadati.append({"nome": nome, "tipo": "nominale", "valori": valori, "asimmetrica": asimmetrica})
+    return metadati
+
+
+def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, Any]) -> dict[str, Any]:
+    piano = crea_piano_confronto(risultato, interpretazione)
+    if not piano["completo"]:
+        raise ValueError("Completa le informazioni richieste prima di calcolare la matrice.")
+    percorsi = [percorso for percorso in piano["percorsi"] if percorso["tipo"] == "gower"]
+    if not percorsi:
+        raise ValueError("Il piano non contiene un percorso di Gower.")
+    percorso = percorsi[0]
+    metadati = _metadati_gower(risultato, interpretazione, percorso)
+    n = len(risultato["originale"]["righe"])
+    matrice: list[list[float | None]] = [[0.0 for _ in range(n)] for _ in range(n)]
+
+    for i in range(n):
+        for k in range(i + 1, n):
+            somma = 0.0
+            peso = 0
+            for variabile in metadati:
+                a = variabile["valori"][i]
+                b = variabile["valori"][k]
+                if a is None or b is None:
+                    continue
+                if variabile["tipo"] == "nominale":
+                    if variabile.get("asimmetrica") and float(a) == 0 and float(b) == 0:
+                        continue
+                    contributo = 0.0 if a == b else 1.0
+                else:
+                    scala = variabile["scala"]
+                    contributo = 0.0 if scala == 0 else abs(float(a) - float(b)) / scala
+                    if variabile.get("limita"):
+                        contributo = min(contributo, 1.0)
+                somma += contributo
+                peso += 1
+            distanza = None if peso == 0 else somma / peso
+            matrice[i][k] = distanza
+            matrice[k][i] = distanza
+
+    etichette = _etichette_righe(risultato, interpretazione)
+    righe_csv = [[etichetta, *riga] for etichetta, riga in zip(etichette, matrice)]
+    nota = (
+        "Per le quantità, Gower robusta usa l’ampiezza tra Q1−3·IQR e Q3+3·IQR; "
+        "i contributi superiori a 1 vengono limitati a 1."
+        if percorso["metodo"] == "Dissimilarità di Gower robusta"
+        else "Per le quantità, Gower classica divide la differenza assoluta per l’intervallo osservato."
+    )
+    return {
+        "metodo": percorso["metodo"], "colonne": percorso["colonne"],
+        "etichette": etichette, "matrice": matrice,
+        "csv": crea_csv(["Riga", *etichette], righe_csv), "nota": nota,
+    }
+
+
 def _valore_csv(valore: Any) -> Any:
     if valore is None:
         return ""
@@ -913,5 +1058,16 @@ def crea_piano_json(testo: str, scelte_json: str = "[]", interpretazione_json: s
         risultato = prepara_tabella(leggi_csv(testo), scelte)
         piano = crea_piano_confronto(risultato, interpretazione)
         return json.dumps({"ok": True, "piano": piano}, ensure_ascii=False, separators=(",", ":"))
+    except (ValueError, TypeError, json.JSONDecodeError) as errore:
+        return json.dumps({"ok": False, "errore": str(errore)}, ensure_ascii=False, separators=(",", ":"))
+
+
+def calcola_gower_json(testo: str, scelte_json: str = "[]", interpretazione_json: str = "{}") -> str:
+    try:
+        scelte = json.loads(scelte_json or "[]")
+        interpretazione = json.loads(interpretazione_json or "{}")
+        risultato = prepara_tabella(leggi_csv(testo), scelte)
+        gower = calcola_matrice_gower(risultato, interpretazione)
+        return json.dumps({"ok": True, "gower": gower}, ensure_ascii=False, separators=(",", ":"))
     except (ValueError, TypeError, json.JSONDecodeError) as errore:
         return json.dumps({"ok": False, "errore": str(errore)}, ensure_ascii=False, separators=(",", ":"))
