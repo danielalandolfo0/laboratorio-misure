@@ -148,7 +148,7 @@ piano_semplice = p.crea_piano_confronto(
 assert piano_semplice["completo"] is True
 misure_piano = {blocco["nome"]: blocco["misura"] for blocco in piano_semplice["blocchi"]}
 assert misure_piano["a"] == "Differenza tra ranghi normalizzata"
-assert misure_piano["b"] == "Differenza numerica normalizzata"
+assert misure_piano["b"] == "Differenza numerica"
 assert misure_piano["flag"] == "Confronto asimmetrico di Jaccard"
 assert misure_piano["gruppo"] == "Uguale o diverso"
 
