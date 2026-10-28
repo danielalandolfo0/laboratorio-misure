@@ -154,6 +154,37 @@ assert misure_piano["gruppo"] == "Uguale o diverso"
 assert piano_semplice["conteggioPercorsi"] == 1
 assert piano_semplice["percorsi"][0]["metodo"] == "Dissimilarità di Gower classica"
 
+matrice_gower = p.calcola_matrice_gower(
+    preparata,
+    {"riga": "persona", "zeriCondivisi": "no", "ordineLivelli": "si", "colonne": {}},
+)
+assert matrice_gower["metodo"] == "Dissimilarità di Gower classica"
+quasi_uguali(matrice_gower["matrice"][0][1], 0.75)
+quasi_uguali(matrice_gower["matrice"][0][2], 2 / 3)
+assert matrice_gower["matrice"][1][0] == matrice_gower["matrice"][0][1]
+assert all(matrice_gower["matrice"][i][i] == 0 for i in range(3))
+
+solo_presenze = p.prepara_tabella(p.leggi_csv("id,presente\na,0\nb,0\nc,1"))
+matrice_presenze = p.calcola_matrice_gower(
+    solo_presenze,
+    {"riga": "evento", "zeriCondivisi": "no", "colonne": {}},
+)
+assert matrice_presenze["matrice"][0][1] is None
+assert matrice_presenze["matrice"][0][2] == 1
+
+dati_misti_estremi = p.prepara_tabella(
+    p.leggi_csv("a,categoria\n10,x\n12,y\n11,x\n9,z\n13,y\n10,x\n12,z\n80,y")
+)
+matrice_robusta = p.calcola_matrice_gower(
+    dati_misti_estremi,
+    {"riga": "oggetto", "significatoEstremi": "reali", "colonne": {}},
+)
+assert matrice_robusta["metodo"] == "Dissimilarità di Gower robusta"
+assert all(
+    valore is None or 0 <= valore <= 1
+    for riga in matrice_robusta["matrice"] for valore in riga
+)
+
 piano_numerico = p.crea_piano_confronto(
     scale_diverse,
     {
