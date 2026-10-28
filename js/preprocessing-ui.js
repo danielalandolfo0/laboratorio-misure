@@ -7,7 +7,7 @@
   let tabellaOriginale = null;
   let testoOriginale = "";
   let scelte = [];
-  let interpretazione = { colonne: {} };
+  let interpretazione = { colonne: {}, gruppi: [], assegnazioni: {}, prossimoGruppo: 1 };
   let vista = "lavoro";
 
   function escapeHtml(valore) {
@@ -154,6 +154,54 @@
     </div>`;
   }
 
+  function creaGruppo() {
+    const numero = interpretazione.prossimoGruppo++;
+    const gruppo = { id: `gruppo-${numero}`, nome: `Gruppo ${numero}`, tipo: "ripetute" };
+    interpretazione.gruppi.push(gruppo);
+    return gruppo;
+  }
+
+  function opzioniGruppo(selezionato) {
+    const gruppi = interpretazione.gruppi.map(gruppo =>
+      `<option value="${gruppo.id}"${selezionato === gruppo.id ? " selected" : ""}>${escapeHtml(gruppo.nome)}</option>`
+    ).join("");
+    return `<option value=""${!selezionato ? " selected" : ""}>Caratteristica indipendente</option>${gruppi}<option value="__nuovo__">+ Crea un nuovo gruppo</option>`;
+  }
+
+  function disegnaGruppi() {
+    const profili = risultato.questionario.colonne;
+    const incluse = profili.filter(profilo => interpretazione.colonne[profilo.nome]?.usa);
+    profili.filter(profilo => !interpretazione.colonne[profilo.nome]?.usa).forEach(profilo => {
+      delete interpretazione.assegnazioni[profilo.nome];
+    });
+    $("group-assignment-body").innerHTML = incluse.length ? incluse.map(profilo => `<tr>
+      <th scope="row">${escapeHtml(profilo.nome)}</th>
+      <td><select class="column-choice group-assignment" data-group-column="${escapeHtml(profilo.nome)}" aria-label="Gruppo della colonna ${escapeHtml(profilo.nome)}">${opzioniGruppo(interpretazione.assegnazioni[profilo.nome] || "")}</select></td>
+    </tr>`).join("") : `<tr><td colspan="2">Non è stata inclusa alcuna colonna nel confronto.</td></tr>`;
+
+    $("group-config-list").innerHTML = interpretazione.gruppi.map(gruppo => {
+      const membri = incluse.filter(profilo => interpretazione.assegnazioni[profilo.nome] === gruppo.id).map(profilo => profilo.nome);
+      const tipi = membri.map(nome => risultato.colonne.find(colonna => colonna.nome === nome)?.tipo);
+      const tutteNumeriche = tipi.length >= 2 && tipi.every(tipo => tipo === "numerica" || tipo === "numerica_costante");
+      const nota = membri.length < 2
+        ? "Assegna almeno due colonne a questo gruppo."
+        : !tutteNumeriche && gruppo.tipo !== "altro"
+          ? "Per questa interpretazione servono almeno due colonne numeriche."
+          : `Colonne: ${membri.join(", ")}.`;
+      return `<div class="group-config" data-group-id="${gruppo.id}">
+        <label>Nome del gruppo<input class="group-name" value="${escapeHtml(gruppo.nome)}" aria-label="Nome di ${escapeHtml(gruppo.nome)}"></label>
+        <label>Che cosa formano insieme?<select class="group-type" aria-label="Tipo di ${escapeHtml(gruppo.nome)}">
+          <option value="ripetute"${gruppo.tipo === "ripetute" ? " selected" : ""}>Misurazioni dello stesso profilo</option>
+          <option value="tempo"${gruppo.tipo === "tempo" ? " selected" : ""}>Osservazioni successive nel tempo</option>
+          <option value="parti"${gruppo.tipo === "parti" ? " selected" : ""}>Parti dello stesso totale</option>
+          <option value="altro"${gruppo.tipo === "altro" ? " selected" : ""}>Un altro insieme di caratteristiche</option>
+        </select></label>
+        <p>${escapeHtml(nota)}</p>
+        <button class="remove-group" type="button">Rimuovi gruppo</button>
+      </div>`;
+    }).join("");
+  }
+
   function disegnaQuestionario() {
     const profili = risultato.questionario.colonne;
     profili.forEach(profilo => {
@@ -173,6 +221,7 @@
         <td>${escapeHtml(profilo.motivo)}</td>
       </tr>`;
     }).join("");
+    disegnaGruppi();
 
     const c = risultato.questionario.condizioni;
     const domande = [];
@@ -201,21 +250,27 @@
       "Una data può essere soltanto descrittiva oppure contribuire al confronto.",
       [["escludi", "Non devono influire sul confronto"], ["vicinanza", "Date vicine significano casi simili"], ["durata", "Conta il tempo trascorso"], ["ordine", "Conta soltanto quale viene prima"], ["ignoto", "Non lo so"]]
     ));
-    if (c.numeriche && interpretazione.organizzazione === "ripetute") domande.push(domandaAdattiva(
-      "somiglianzaNumerica", "In base a che cosa due righe devono essere considerate simili?",
-      "Le colonne misurano più volte lo stesso fenomeno. Scegli quale aspetto del profilo deve contare.",
-      [["valori_vicini", "Quando hanno valori vicini"], ["proporzioni", "Quando mantengono proporzioni simili"], ["andamento", "Quando crescono e diminuiscono nello stesso modo"], ["ordine", "Quando ordinano le caratteristiche nello stesso modo"], ["ignoto", "Non lo so"]]
-    ));
-    if (c.numeriche && interpretazione.organizzazione === "tempo") domande.push(domandaAdattiva(
-      "allineamentoTemporale", "Un andamento simile può avvenire con un piccolo ritardo?",
-      "Per esempio, lo stesso picco può comparire in momenti leggermente diversi nelle due righe.",
-      [["si", "Sì, il ritardo non deve renderle diverse"], ["no", "No, gli stessi eventi devono avvenire negli stessi momenti"], ["ignoto", "Non lo so"]]
-    ));
-    if (c.numeriche && interpretazione.organizzazione === "parti") domande.push(domandaAdattiva(
-      "totaleComposizione", "I valori di ogni riga rappresentano parti di un unico totale?",
-      "Per esempio, percentuali, quote o quantità la cui somma ha un significato preciso.",
-      [["si", "Sì, conta la composizione del totale"], ["no", "No, sono quantità indipendenti"], ["ignoto", "Non lo so"]]
-    ));
+    interpretazione.gruppi.forEach(gruppo => {
+      const membri = profili.filter(profilo => interpretazione.colonne[profilo.nome]?.usa && interpretazione.assegnazioni[profilo.nome] === gruppo.id);
+      const tipi = membri.map(profilo => risultato.colonne.find(colonna => colonna.nome === profilo.nome)?.tipo);
+      const valido = membri.length >= 2 && tipi.every(tipo => tipo === "numerica" || tipo === "numerica_costante");
+      if (!valido) return;
+      if (gruppo.tipo === "ripetute") domande.push(domandaAdattiva(
+        `somiglianza-${gruppo.id}`, `Nel gruppo “${escapeHtml(gruppo.nome)}”, quando due righe devono essere considerate simili?`,
+        "Le colonne formano un unico profilo: scegli quale aspetto deve contare.",
+        [["valori_vicini", "Quando hanno valori vicini"], ["proporzioni", "Quando mantengono proporzioni simili"], ["andamento", "Quando crescono e diminuiscono nello stesso modo"], ["ordine", "Quando ordinano le caratteristiche nello stesso modo"], ["ignoto", "Non lo so"]]
+      ));
+      if (gruppo.tipo === "tempo") domande.push(domandaAdattiva(
+        `ritardo-${gruppo.id}`, `Nel gruppo “${escapeHtml(gruppo.nome)}”, un andamento simile può avvenire con un piccolo ritardo?`,
+        "Per esempio, lo stesso picco può comparire in momenti leggermente diversi nelle due righe.",
+        [["si", "Sì, il ritardo non deve renderle diverse"], ["no", "No, gli stessi eventi devono avvenire negli stessi momenti"], ["ignoto", "Non lo so"]]
+      ));
+      if (gruppo.tipo === "parti") domande.push(domandaAdattiva(
+        `totale-${gruppo.id}`, `Le colonne del gruppo “${escapeHtml(gruppo.nome)}” sono parti di un unico totale?`,
+        "Per esempio, percentuali, quote o quantità la cui somma ha un significato preciso.",
+        [["si", "Sì, conta la composizione del totale"], ["no", "No, sono quantità indipendenti"], ["ignoto", "Non lo so"]]
+      ));
+    });
     $("adaptive-questions").innerHTML = domande.join("");
   }
 
@@ -233,9 +288,8 @@
   async function elaboraTesto(testo, nomeFile) {
     nascondiErrore();
     try {
-      interpretazione = { colonne: {} };
+      interpretazione = { colonne: {}, gruppi: [], assegnazioni: {}, prossimoGruppo: 1 };
       $("row-meaning").value = "";
-      $("column-organization").value = "";
       testoOriginale = testo;
       risultato = await P.preparaTabella(testo, []);
       tabellaOriginale = risultato.originale;
@@ -319,6 +373,7 @@
       interpretazione.colonne[profilo.nome].usa = evento.target.checked;
       evento.target.nextElementSibling.textContent = evento.target.checked ? "Sì" : "No";
     }
+    disegnaQuestionario();
   });
   $("adaptive-questions").addEventListener("change", evento => {
     if (evento.target.matches(".semantic-answer")) {
@@ -326,11 +381,36 @@
     }
   });
   $("row-meaning").addEventListener("change", evento => { interpretazione.riga = evento.target.value; });
-  $("column-organization").addEventListener("change", evento => {
-    interpretazione.organizzazione = evento.target.value;
-    delete interpretazione.somiglianzaNumerica;
-    delete interpretazione.allineamentoTemporale;
-    delete interpretazione.totaleComposizione;
+  $("add-column-group").addEventListener("click", () => {
+    creaGruppo();
+    disegnaQuestionario();
+  });
+  $("group-assignment-body").addEventListener("change", evento => {
+    if (!evento.target.matches(".group-assignment")) return;
+    const nome = evento.target.dataset.groupColumn;
+    let gruppoId = evento.target.value;
+    if (gruppoId === "__nuovo__") gruppoId = creaGruppo().id;
+    if (gruppoId) interpretazione.assegnazioni[nome] = gruppoId;
+    else delete interpretazione.assegnazioni[nome];
+    disegnaQuestionario();
+  });
+  $("group-config-list").addEventListener("change", evento => {
+    const contenitore = evento.target.closest(".group-config");
+    if (!contenitore) return;
+    const gruppo = interpretazione.gruppi.find(elemento => elemento.id === contenitore.dataset.groupId);
+    if (!gruppo) return;
+    if (evento.target.matches(".group-name")) gruppo.nome = evento.target.value.trim() || gruppo.nome;
+    if (evento.target.matches(".group-type")) gruppo.tipo = evento.target.value;
+    disegnaQuestionario();
+  });
+  $("group-config-list").addEventListener("click", evento => {
+    const pulsante = evento.target.closest(".remove-group");
+    if (!pulsante) return;
+    const gruppoId = pulsante.closest(".group-config").dataset.groupId;
+    interpretazione.gruppi = interpretazione.gruppi.filter(gruppo => gruppo.id !== gruppoId);
+    Object.keys(interpretazione.assegnazioni).forEach(nome => {
+      if (interpretazione.assegnazioni[nome] === gruppoId) delete interpretazione.assegnazioni[nome];
+    });
     disegnaQuestionario();
   });
 
