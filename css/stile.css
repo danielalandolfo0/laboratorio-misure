@@ -207,6 +207,19 @@ header p {
 .comparison-plan-heading h4 { margin: 0; font-size: 1.1rem; }
 .comparison-plan-heading .section-label { margin-bottom: 5px; }
 .comparison-plan > p { margin: 7px 0 13px; color: var(--muted); font-size: .78rem; }
+.plan-paths { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 11px; margin-bottom: 18px; }
+.plan-path { padding: 15px; background: rgba(8, 124, 255, .06); border: 1px solid rgba(8, 124, 255, .14); border-radius: 15px; }
+.plan-path.incomplete { background: rgba(239, 159, 39, .07); border-color: rgba(239, 159, 39, .22); }
+.plan-path > p:first-child { margin: 0 0 5px; color: var(--blue-dark); font-size: .65rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.plan-path h5 { margin: 0 0 9px; color: var(--ink); font-size: .9rem; }
+.plan-path strong,
+.plan-path span,
+.plan-path small { display: block; }
+.plan-path strong { color: var(--blue-dark); font-size: .82rem; }
+.plan-path span { margin-top: 3px; color: var(--muted); font-size: .69rem; }
+.plan-path small { margin-top: 9px; color: var(--ink); font-size: .7rem; }
+.plan-path > p:last-child { margin: 6px 0 0; color: var(--muted); font-size: .72rem; line-height: 1.4; }
+.plan-detail-title { margin: 0 0 8px; font-size: .82rem; }
 .comparison-plan-table { min-width: 850px; }
 .comparison-plan-table th small { display: block; max-width: 260px; margin-top: 4px; color: var(--muted); white-space: normal; font-weight: 500; }
 .comparison-plan-table td:nth-child(3) { color: var(--blue-dark); font-weight: 700; }
