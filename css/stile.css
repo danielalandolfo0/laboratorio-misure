@@ -182,8 +182,7 @@ header p {
 .question-item { padding: 14px; background: rgba(255, 255, 255, .38); border: 1px solid rgba(111, 124, 148, .13); border-radius: 16px; }
 .question-item label { margin: 0 0 8px; }
 .question-item p { margin: 0 0 10px; color: var(--muted); font-size: .75rem; }
-.meaning-table { min-width: 920px; }
-.meaning-table td:last-child { min-width: 250px; color: var(--muted); }
+.meaning-table { min-width: 680px; }
 .comparison-toggle { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: .78rem; }
 .comparison-toggle input { width: 18px; height: 18px; margin: 0; box-shadow: none; }
 .adaptive-questions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
