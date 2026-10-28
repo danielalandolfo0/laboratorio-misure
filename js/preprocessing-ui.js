@@ -154,6 +154,60 @@
     </div>`;
   }
 
+  function nascondiPiano() {
+    $("comparison-plan").hidden = true;
+  }
+
+  function disegnaPiano(piano) {
+    $("comparison-plan-body").innerHTML = piano.blocchi.length
+      ? piano.blocchi.map(blocco => {
+        const classe = blocco.stato === "da_completare"
+          ? "plan-row-incomplete"
+          : blocco.stato === "attenzione" ? "plan-row-warning" : "";
+        const dati = blocco.colonne.length > 1
+          ? `${escapeHtml(blocco.nome)}<small>${blocco.colonne.map(escapeHtml).join(", ")}</small>`
+          : escapeHtml(blocco.nome);
+        return `<tr class="${classe}">
+          <th scope="row">${dati}</th>
+          <td>${escapeHtml(blocco.interpretazione)}</td>
+          <td>${escapeHtml(blocco.misura)}</td>
+          <td>${escapeHtml(blocco.motivo)}</td>
+        </tr>`;
+      }).join("")
+      : `<tr><td colspan="4">Non è ancora disponibile alcun blocco di confronto.</td></tr>`;
+
+    const avvisiBlocchi = piano.blocchi.flatMap(blocco =>
+      blocco.avvisi.map(avviso => `${blocco.nome}: ${avviso}`)
+    );
+    const avvisi = [...piano.avvisi, ...avvisiBlocchi];
+    $("comparison-plan-warnings").innerHTML = avvisi.length
+      ? `<p><strong>Prima del calcolo:</strong></p><ul>${avvisi.map(avviso => `<li>${escapeHtml(avviso)}</li>`).join("")}</ul>`
+      : "";
+    $("comparison-plan-status").textContent = piano.completo ? "Piano pronto" : "Da completare";
+    $("comparison-plan-status").classList.toggle("incomplete", !piano.completo);
+    $("comparison-plan-intro").textContent = piano.completo
+      ? `${piano.conteggioBlocchi} ${piano.conteggioBlocchi === 1 ? "blocco contribuirà" : "blocchi contribuiranno"} al confronto, ciascuno una sola volta.`
+      : "Il piano è stato preparato, ma alcune informazioni devono ancora essere completate.";
+    $("comparison-plan").hidden = false;
+  }
+
+  async function preparaPiano() {
+    const pulsante = $("prepare-comparison-plan");
+    const testo = pulsante.textContent;
+    pulsante.disabled = true;
+    pulsante.textContent = "Preparazione…";
+    try {
+      const piano = await P.creaPiano(testoOriginale, scelte, interpretazione);
+      nascondiErrore();
+      disegnaPiano(piano);
+    } catch (errore) {
+      mostraErrore(errore.message);
+    } finally {
+      pulsante.disabled = false;
+      pulsante.textContent = testo;
+    }
+  }
+
   function creaGruppo() {
     const numero = interpretazione.prossimoGruppo++;
     const gruppo = { id: `gruppo-${numero}`, nome: `Gruppo ${numero}`, tipo: "ripetute" };
@@ -203,6 +257,7 @@
   }
 
   function disegnaQuestionario() {
+    nascondiPiano();
     const profili = risultato.questionario.colonne;
     profili.forEach(profilo => {
       if (!interpretazione.colonne[profilo.nome]) {
@@ -222,29 +277,32 @@
     }).join("");
     disegnaGruppi();
 
-    const c = risultato.questionario.condizioni;
+    const profiliInclusi = profili.filter(profilo => interpretazione.colonne[profilo.nome]?.usa);
+    const nomiInclusi = new Set(profiliInclusi.map(profilo => profilo.nome));
+    const colonneIncluse = risultato.colonne.filter(colonna => nomiInclusi.has(colonna.nome));
+    const ruoliInclusi = new Set(profiliInclusi.map(profilo => interpretazione.colonne[profilo.nome].ruolo));
     const domande = [];
-    if (c.mancanti) domande.push(domandaAdattiva(
+    if (colonneIncluse.some(colonna => colonna.mancanti > 0)) domande.push(domandaAdattiva(
       "significatoMancanti", "Che cosa significa una casella vuota?",
       "La risposta cambia il modo in cui due righe possono essere confrontate.",
       [["sconosciuto", "Il valore non è conosciuto"], ["non_applicabile", "La domanda non si applica"], ["assenza", "Indica assenza"], ["misto", "Dipende dalla colonna"], ["ignoto", "Non lo so"]]
     ));
-    if (c.estremi) domande.push(domandaAdattiva(
+    if (colonneIncluse.some(colonna => colonna.statistiche?.estremi > 0)) domande.push(domandaAdattiva(
       "significatoEstremi", "I valori molto lontani dagli altri sono plausibili?",
       "Sono stati osservati alcuni valori eccezionalmente alti o bassi.",
       [["reali", "Sì, sono casi reali"], ["errori", "Probabilmente sono errori"], ["controllare", "Vanno controllati uno per uno"], ["ignoto", "Non lo so"]]
     ));
-    if (c.binarie) domande.push(domandaAdattiva(
+    if (ruoliInclusi.has("presenza")) domande.push(domandaAdattiva(
       "zeriCondivisi", "Due assenze in comune rendono simili due righe?",
       "Pensa alle colonne di presenza/assenza: avere entrambi 0 può essere informativo oppure irrilevante.",
       [["si", "Sì, anche l’assenza in comune conta"], ["no", "No, contano soprattutto le presenze"], ["dipende", "Dipende dalla colonna"], ["ignoto", "Non lo so"]]
     ));
-    if (c.livelli) domande.push(domandaAdattiva(
+    if (ruoliInclusi.has("livello")) domande.push(domandaAdattiva(
       "ordineLivelli", "Nei livelli, l’ordine ha davvero significato?",
       "Per esempio, basso–medio–alto ha un ordine; rosso–verde–blu no.",
       [["si", "Sì, l’ordine è importante"], ["no", "No, sono soltanto etichette"], ["dipende", "Dipende dalla colonna"], ["ignoto", "Non lo so"]]
     ));
-    if (c.date) domande.push(domandaAdattiva(
+    if (ruoliInclusi.has("data")) domande.push(domandaAdattiva(
       "usoDate", "Come devono essere considerate le date?",
       "Una data può essere soltanto descrittiva oppure contribuire al confronto.",
       [["escludi", "Non devono influire sul confronto"], ["vicinanza", "Date vicine significano casi simili"], ["durata", "Conta il tempo trascorso"], ["ordine", "Conta soltanto quale viene prima"], ["ignoto", "Non lo so"]]
@@ -343,6 +401,7 @@
   $("view-original").addEventListener("click", () => { vista = "originale"; disegnaTabella(); });
   $("view-work").addEventListener("click", () => { vista = "lavoro"; disegnaTabella(); });
   $("download-work").addEventListener("click", scaricaTabella);
+  $("prepare-comparison-plan").addEventListener("click", preparaPiano);
   $("scaling-body").addEventListener("change", evento => {
     if (evento.target.matches(".column-choice")) aggiornaScelta(evento.target);
   });
@@ -377,9 +436,13 @@
   $("adaptive-questions").addEventListener("change", evento => {
     if (evento.target.matches(".semantic-answer")) {
       interpretazione[evento.target.dataset.answer] = evento.target.value;
+      nascondiPiano();
     }
   });
-  $("row-meaning").addEventListener("change", evento => { interpretazione.riga = evento.target.value; });
+  $("row-meaning").addEventListener("change", evento => {
+    interpretazione.riga = evento.target.value;
+    nascondiPiano();
+  });
   $("add-column-group").addEventListener("click", () => {
     creaGruppo();
     disegnaQuestionario();
