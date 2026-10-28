@@ -159,6 +159,17 @@
   }
 
   function disegnaPiano(piano) {
+    $("comparison-plan-paths").innerHTML = piano.percorsi.map((percorso, indice) => {
+      const classe = percorso.stato === "da_completare" ? " incomplete" : "";
+      return `<article class="plan-path${classe}">
+        <p>Percorso ${indice + 1}</p>
+        <h5>${escapeHtml(percorso.titolo)}</h5>
+        <strong>${escapeHtml(percorso.metodo)}</strong>
+        <span>${escapeHtml(percorso.origine)}</span>
+        <small>Dati: ${percorso.colonne.map(escapeHtml).join(", ")}</small>
+        <p>${escapeHtml(percorso.motivo)}</p>
+      </article>`;
+    }).join("");
     $("comparison-plan-body").innerHTML = piano.blocchi.length
       ? piano.blocchi.map(blocco => {
         const classe = blocco.stato === "da_completare"
@@ -183,9 +194,11 @@
     $("comparison-plan-warnings").innerHTML = avvisi.length
       ? `<p><strong>Prima del calcolo:</strong></p><ul>${avvisi.map(avviso => `<li>${escapeHtml(avviso)}</li>`).join("")}</ul>`
       : "";
-    $("comparison-plan-intro").textContent = piano.completo
-      ? `${piano.conteggioBlocchi} ${piano.conteggioBlocchi === 1 ? "blocco contribuirà" : "blocchi contribuiranno"} al confronto, ciascuno una sola volta.`
-      : "Il piano è stato preparato, ma alcune informazioni devono ancora essere completate.";
+    $("comparison-plan-intro").textContent = !piano.completo
+      ? "Il piano è stato preparato, ma alcune informazioni devono ancora essere completate."
+      : piano.conteggioPercorsi === 1
+        ? "È stato individuato un unico percorso di confronto."
+        : `${piano.conteggioPercorsi} percorsi verranno calcolati separatamente, senza combinarli automaticamente.`;
     $("comparison-plan").hidden = false;
   }
 
