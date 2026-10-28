@@ -90,7 +90,16 @@
         <div class="question-grid question-grid-two">
           <div class="question-item">
             <label for="row-meaning">Che cosa rappresenta ogni riga?</label>
-            <textarea id="row-meaning" rows="3" placeholder="Per esempio: una persona, un prodotto, un documento, una misurazione…"></textarea>
+            <select id="row-meaning">
+              <option value="" selected>Scegli una risposta</option>
+              <option value="persona">Una persona</option>
+              <option value="oggetto">Un oggetto o un prodotto</option>
+              <option value="evento">Un evento o un’osservazione</option>
+              <option value="luogo">Un luogo</option>
+              <option value="documento">Un documento o un testo</option>
+              <option value="organizzazione">Un gruppo o un’organizzazione</option>
+              <option value="altro">Qualcos’altro</option>
+            </select>
           </div>
           <div class="question-item">
             <label for="column-organization">Come sono organizzate le colonne?</label>
@@ -114,11 +123,6 @@
         </div>
 
         <div class="adaptive-questions" id="adaptive-questions"></div>
-
-        <div class="interpretation-summary" aria-live="polite">
-          <h4>Riepilogo dell’interpretazione</h4>
-          <p id="interpretation-summary-text">Completa almeno che cosa rappresenta ogni riga.</p>
-        </div>
       </section>
     </div>
   </section>
@@ -248,7 +252,7 @@
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
   <script defer src="js/preprocessing-python.js?v=20261027-3"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261027-10"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261028-1"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>
