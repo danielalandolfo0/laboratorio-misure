@@ -230,6 +230,17 @@ header p {
 .plan-warnings p { margin: 0 0 6px; color: #76420b; font-size: .76rem; }
 .plan-warnings ul { margin: 6px 0 0; padding-left: 20px; color: var(--muted); font-size: .75rem; }
 .plan-warnings li + li { margin-top: 4px; }
+.gower-actions { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+.gower-actions[hidden],
+.gower-result[hidden] { display: none; }
+.gower-actions .action { width: auto; margin: 0; }
+.gower-result { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+.gower-result h5 { margin: 0; font-size: 1rem; }
+.gower-result > p { margin: 5px 0 11px; color: var(--muted); font-size: .74rem; line-height: 1.45; }
+.gower-matrix-table { min-width: max-content; }
+.gower-matrix-table th,
+.gower-matrix-table td { min-width: 82px; text-align: right; }
+.gower-matrix-table th:first-child { position: sticky; left: 0; text-align: left; background: rgba(241, 247, 255, .98); }
 .section-divider { display: flex; align-items: center; gap: 13px; margin-bottom: 18px; color: var(--muted); font-size: .76rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .section-divider::before,
 .section-divider::after { content: ""; height: 1px; flex: 1; background: var(--line); }
@@ -575,5 +586,8 @@ footer { padding: 0 0 36px; color: var(--muted); font-size: 0.78rem; }
   .comparison-plan-actions,
   .comparison-plan-heading { align-items: stretch; flex-direction: column; }
   .comparison-plan-actions .plan-action { width: 100%; min-width: 0; }
+  .gower-actions { align-items: stretch; flex-direction: column; }
+  .gower-actions .action,
+  .gower-actions .secondary-action { width: 100%; }
 }
 
