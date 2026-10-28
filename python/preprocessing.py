@@ -625,7 +625,7 @@ def _blocco_indipendente(nome: str, ruolo: str, analisi: dict[str, Any], interpr
     elif ruolo == "data":
         risposta = interpretazione.get("usoDate", "")
         if risposta in {"vicinanza", "durata"}:
-            misura, motivo = "Differenza temporale normalizzata", "Confronta il tempo che separa le due date."
+            misura, motivo = "Differenza temporale", "Confronta il tempo che separa le due date."
         elif risposta == "ordine":
             misura, motivo = "Differenza tra posizioni temporali", "Conta l’ordine cronologico, non la distanza temporale assoluta."
         elif risposta == "escludi":
@@ -680,7 +680,7 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
         elif tipo_gruppo == "ripetute":
             risposta = interpretazione.get(f"somiglianza-{gruppo.get('id')}", "")
             scelte = {
-                "valori_vicini": ("Distanza tra coordinate normalizzata", "Confronta i valori coordinata per coordinata e riassume il gruppo in un solo contributo."),
+                "valori_vicini": ("Distanza tra coordinate", "Confronta i valori coordinata per coordinata e riassume il gruppo in un solo contributo."),
                 "proporzioni": ("Dissimilarità coseno", "Confronta la direzione dei profili, riducendo l’effetto della loro grandezza complessiva."),
                 "andamento": ("Dissimilarità di Pearson", "Confronta come i valori crescono e diminuiscono rispetto al livello medio del profilo."),
                 "ordine": ("Dissimilarità di Spearman", "Confronta l’ordinamento interno delle coordinate dei due profili."),
@@ -694,9 +694,9 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
         elif tipo_gruppo == "tempo":
             risposta = interpretazione.get(f"ritardo-{gruppo.get('id')}", "")
             if risposta == "si":
-                misura, motivo = "Dynamic Time Warping normalizzata", "Permette di allineare andamenti simili che avvengono con un piccolo ritardo."
+                misura, motivo = "Dynamic Time Warping", "Permette di allineare andamenti simili che avvengono con un piccolo ritardo."
             elif risposta == "no":
-                misura, motivo = "Distanza punto per punto normalizzata", "Confronta soltanto osservazioni rilevate negli stessi istanti."
+                misura, motivo = "Distanza punto per punto", "Confronta soltanto osservazioni rilevate negli stessi istanti."
             else:
                 misura, motivo = "Da decidere", "Occorre sapere se piccoli ritardi temporali debbano essere tollerati."
                 avvisi.append(f"Rispondi alla domanda sul ritardo nel gruppo “{nome}”.")
@@ -709,7 +709,7 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
                     avvisi.append("Sono presenti zeri: prima del calcolo servirà stabilire come trattarli.")
                     stato = "da_completare"
             elif risposta == "no":
-                misura, motivo = "Distanza tra coordinate normalizzata", "Le quantità vengono confrontate insieme, senza trattarle come parti di una composizione."
+                misura, motivo = "Distanza tra coordinate", "Le quantità vengono confrontate insieme, senza trattarle come parti di una composizione."
             else:
                 misura, motivo = "Da decidere", "Occorre confermare se le colonne siano realmente parti di un unico totale."
                 avvisi.append(f"Rispondi alla domanda sul totale del gruppo “{nome}”.")
@@ -721,6 +721,88 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
 
     return {"nome": nome, "colonne": membri, "interpretazione": etichetta, "misura": misura,
             "motivo": motivo, "stato": stato, "avvisi": avvisi}
+
+
+RUOLI_GOWER = {"quantita", "livello", "presenza", "binaria", "categoria", "data"}
+
+
+def _crea_percorsi(
+    indipendenti: list[str],
+    gruppi_con_blocco: list[tuple[dict[str, Any], dict[str, Any]]],
+    ruoli: dict[str, str],
+    analisi_per_nome: dict[str, dict[str, Any]],
+    interpretazione: dict[str, Any],
+    blocchi_per_nome: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Separa il piano nei tre percorsi concordati, senza combinarne i risultati."""
+    percorsi: list[dict[str, Any]] = []
+    standard = [nome for nome in indipendenti if ruoli[nome] in RUOLI_GOWER]
+    separati = [nome for nome in indipendenti if nome not in standard]
+
+    if standard:
+        solo_quantitative = all(
+            ruoli[nome] == "quantita"
+            and analisi_per_nome[nome]["tipo"] in {"numerica", "numerica_costante"}
+            for nome in standard
+        )
+        ha_estremi = any(
+            analisi_per_nome[nome].get("statistiche", {}).get("estremi", 0) > 0
+            for nome in standard
+        )
+        stato_blocchi = "da_completare" if any(
+            blocchi_per_nome[nome]["stato"] == "da_completare" for nome in standard
+        ) else "pronto"
+
+        if solo_quantitative:
+            if len(standard) == 1:
+                metodo = "Differenza assoluta"
+                motivo = "Con una sola caratteristica numerica, euclidea e Manhattan coincidono."
+            elif ha_estremi:
+                metodo = "Distanza di Manhattan"
+                motivo = "Usa la tabella riscalata e limita il predominio delle differenze più grandi."
+            else:
+                metodo = "Distanza euclidea"
+                motivo = "Usa la tabella riscalata e combina le differenze delle caratteristiche numeriche."
+            percorsi.append({
+                "tipo": "numerico", "titolo": "Caratteristiche numeriche indipendenti",
+                "colonne": standard, "metodo": metodo, "origine": "Tabella di lavoro",
+                "motivo": motivo, "stato": stato_blocchi,
+            })
+        else:
+            risposta_estremi = interpretazione.get("significatoEstremi", "")
+            stato = stato_blocchi
+            if ha_estremi and risposta_estremi == "reali":
+                metodo = "Dissimilarità di Gower robusta"
+                motivo = "Le caratteristiche sono di tipo diverso e gli outlier reali non devono comprimere tutte le altre differenze."
+            elif ha_estremi and risposta_estremi in {"errori", "controllare"}:
+                metodo = "Gower dopo il controllo dei dati"
+                motivo = "Prima del calcolo occorre correggere o verificare i valori estremi segnalati."
+                stato = "da_completare"
+            else:
+                metodo = "Dissimilarità di Gower classica"
+                motivo = "Combina quantità, categorie, livelli e variabili binarie con contributi confrontabili."
+            percorsi.append({
+                "tipo": "gower", "titolo": "Caratteristiche indipendenti di tipo misto",
+                "colonne": standard, "metodo": metodo,
+                "origine": "Valori originali; Gower applica il proprio riscalamento",
+                "motivo": motivo, "stato": stato,
+            })
+
+    for nome in separati:
+        blocco = blocchi_per_nome[nome]
+        percorsi.append({
+            "tipo": "separato", "titolo": ETICHETTE_RUOLO.get(ruoli[nome], "Confronto separato"),
+            "colonne": [nome], "metodo": blocco["misura"], "origine": "Confronto separato",
+            "motivo": blocco["motivo"], "stato": blocco["stato"],
+        })
+
+    for gruppo, blocco in gruppi_con_blocco:
+        percorsi.append({
+            "tipo": "gruppo", "titolo": blocco["nome"], "colonne": blocco["colonne"],
+            "metodo": blocco["misura"], "origine": blocco["interpretazione"],
+            "motivo": blocco["motivo"], "stato": blocco["stato"],
+        })
+    return percorsi
 
 
 def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, Any]) -> dict[str, Any]:
@@ -741,14 +823,28 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
             incluse.append(profilo["nome"])
         ruoli[profilo["nome"]] = risposta.get("ruolo", profilo["ruoloSuggerito"])
 
-    blocchi = [
-        _blocco_indipendente(nome, ruoli[nome], analisi_per_nome[nome], interpretazione)
-        for nome in incluse if not assegnazioni.get(nome) or assegnazioni.get(nome) not in gruppi_per_id
+    indipendenti = [
+        nome for nome in incluse
+        if not assegnazioni.get(nome) or assegnazioni.get(nome) not in gruppi_per_id
     ]
+    blocchi_indipendenti = [
+        _blocco_indipendente(nome, ruoli[nome], analisi_per_nome[nome], interpretazione)
+        for nome in indipendenti
+    ]
+    blocchi = list(blocchi_indipendenti)
+    gruppi_con_blocco: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for gruppo in gruppi:
         membri = [nome for nome in incluse if assegnazioni.get(nome) == gruppo.get("id")]
         if membri:
-            blocchi.append(_blocco_gruppo(gruppo, membri, analisi_per_nome, interpretazione))
+            blocco = _blocco_gruppo(gruppo, membri, analisi_per_nome, interpretazione)
+            blocchi.append(blocco)
+            gruppi_con_blocco.append((gruppo, blocco))
+
+    blocchi_per_nome = {blocco["nome"]: blocco for blocco in blocchi_indipendenti}
+    percorsi = _crea_percorsi(
+        indipendenti, gruppi_con_blocco, ruoli, analisi_per_nome,
+        interpretazione, blocchi_per_nome,
+    )
 
     avvisi: list[str] = []
     if not interpretazione.get("riga"):
@@ -764,7 +860,11 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
         avvisi.append("Controlla i valori estremi prima di calcolare le distanze.")
 
     completo = bool(blocchi) and not avvisi and all(b["stato"] != "da_completare" for b in blocchi)
-    return {"blocchi": blocchi, "avvisi": avvisi, "completo": completo, "conteggioBlocchi": len(blocchi)}
+    return {
+        "blocchi": blocchi, "percorsi": percorsi, "avvisi": avvisi,
+        "completo": completo, "conteggioBlocchi": len(blocchi),
+        "conteggioPercorsi": len(percorsi),
+    }
 
 
 def _valore_csv(valore: Any) -> Any:
