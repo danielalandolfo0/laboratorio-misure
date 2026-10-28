@@ -7,7 +7,7 @@
   let tabellaOriginale = null;
   let testoOriginale = "";
   let scelte = [];
-  let interpretazione = { colonne: {}, pesi: {} };
+  let interpretazione = { colonne: {} };
   let vista = "lavoro";
 
   function escapeHtml(valore) {
@@ -154,28 +154,6 @@
     </div>`;
   }
 
-  function dettaglioImportanza(profili) {
-    const incluse = profili.filter(profilo => interpretazione.colonne[profilo.nome]?.usa);
-    if (!incluse.length) return `<div class="question-item importance-detail">
-      <strong>Quali colonne sono più importanti?</strong>
-      <p>Prima seleziona almeno una colonna da usare nel confronto.</p>
-    </div>`;
-    interpretazione.pesi ||= {};
-    return `<div class="question-item importance-detail">
-      <strong>Quanto deve contare ogni colonna?</strong>
-      <p>Il peso è relativo: “più” significa che una differenza in quella colonna influirà maggiormente sul confronto.</p>
-      <div class="importance-list">${incluse.map(profilo => {
-        const peso = interpretazione.pesi[profilo.nome] || "1";
-        return `<label><span>${escapeHtml(profilo.nome)}</span><select class="importance-weight" data-weight-column="${escapeHtml(profilo.nome)}" aria-label="Importanza della colonna ${escapeHtml(profilo.nome)}">
-          <option value="0.5"${peso === "0.5" ? " selected" : ""}>Meno delle altre</option>
-          <option value="1"${peso === "1" ? " selected" : ""}>Come le altre</option>
-          <option value="2"${peso === "2" ? " selected" : ""}>Più delle altre</option>
-          <option value="3"${peso === "3" ? " selected" : ""}>Molto più delle altre</option>
-        </select></label>`;
-      }).join("")}</div>
-    </div>`;
-  }
-
   function disegnaQuestionario() {
     const profili = risultato.questionario.colonne;
     profili.forEach(profilo => {
@@ -238,12 +216,6 @@
       "Per esempio, percentuali, quote o quantità la cui somma ha un significato preciso.",
       [["si", "Sì, conta la composizione del totale"], ["no", "No, sono quantità indipendenti"], ["ignoto", "Non lo so"]]
     ));
-    domande.push(domandaAdattiva(
-      "importanza", "Le colonne hanno tutte la stessa importanza?",
-      "Una caratteristica molto importante potrebbe ricevere più peso delle altre.",
-      [["uguale", "Sì, tutte uguali"], ["diversa", "No, alcune sono più importanti"], ["ignoto", "Non lo so"]]
-    ));
-    if (interpretazione.importanza === "diversa") domande.push(dettaglioImportanza(profili));
     $("adaptive-questions").innerHTML = domande.join("");
   }
 
@@ -261,7 +233,7 @@
   async function elaboraTesto(testo, nomeFile) {
     nascondiErrore();
     try {
-      interpretazione = { colonne: {}, pesi: {} };
+      interpretazione = { colonne: {} };
       $("row-meaning").value = "";
       $("column-organization").value = "";
       testoOriginale = testo;
@@ -347,16 +319,10 @@
       interpretazione.colonne[profilo.nome].usa = evento.target.checked;
       evento.target.nextElementSibling.textContent = evento.target.checked ? "Sì" : "No";
     }
-    if (interpretazione.importanza === "diversa") disegnaQuestionario();
   });
   $("adaptive-questions").addEventListener("change", evento => {
     if (evento.target.matches(".semantic-answer")) {
       interpretazione[evento.target.dataset.answer] = evento.target.value;
-      if (evento.target.dataset.answer === "importanza") disegnaQuestionario();
-      return;
-    }
-    if (evento.target.matches(".importance-weight")) {
-      interpretazione.pesi[evento.target.dataset.weightColumn] = evento.target.value;
     }
   });
   $("row-meaning").addEventListener("change", evento => { interpretazione.riga = evento.target.value; });
