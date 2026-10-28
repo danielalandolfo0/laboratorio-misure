@@ -218,7 +218,6 @@
         <th scope="row">${escapeHtml(profilo.nome)}</th>
         <td><select class="column-choice semantic-role" data-semantic-column="${indice}" aria-label="Significato della colonna ${escapeHtml(profilo.nome)}">${opzioniRuolo(risposta.ruolo)}</select></td>
         <td><label class="comparison-toggle"><input class="semantic-use" type="checkbox" data-semantic-column="${indice}"${risposta.usa ? " checked" : ""}><span>${risposta.usa ? "Sì" : "No"}</span></label></td>
-        <td>${escapeHtml(profilo.motivo)}</td>
       </tr>`;
     }).join("");
     disegnaGruppi();
