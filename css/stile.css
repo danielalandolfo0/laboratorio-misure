@@ -188,12 +188,6 @@ header p {
 .comparison-toggle input { width: 18px; height: 18px; margin: 0; box-shadow: none; }
 .adaptive-questions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
 .adaptive-questions:empty { display: none; }
-.importance-detail { grid-column: 1 / -1; }
-.importance-detail > strong { display: block; margin-bottom: 4px; font-size: .86rem; }
-.importance-list { display: grid; gap: 8px; margin-top: 12px; }
-.importance-list label { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(190px, 1fr); gap: 12px; align-items: center; margin: 0; }
-.importance-list label > span { overflow-wrap: anywhere; }
-.importance-list select { padding: 9px 12px; font-size: .78rem; }
 .section-divider { display: flex; align-items: center; gap: 13px; margin-bottom: 18px; color: var(--muted); font-size: .76rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .section-divider::before,
 .section-divider::after { content: ""; height: 1px; flex: 1; background: var(--line); }
@@ -533,6 +527,5 @@ footer { padding: 0 0 36px; color: var(--muted); font-size: 0.78rem; }
   .rank-order-row { grid-template-columns: 1fr; }
   .question-grid-two,
   .adaptive-questions { grid-template-columns: 1fr; }
-  .importance-list label { grid-template-columns: 1fr; gap: 5px; }
 }
 
