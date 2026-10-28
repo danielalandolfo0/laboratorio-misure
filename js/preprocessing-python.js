@@ -4,6 +4,7 @@
 
   let analizzaCsvPython = null;
   let creaCsvPython = null;
+  let creaPianoPython = null;
 
   const ready = (async () => {
     if (typeof loadPyodide !== "function") {
@@ -12,11 +13,12 @@
     const pyodide = await loadPyodide({
       indexURL: "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/"
     });
-    const risposta = await fetch("python/preprocessing.py?v=20261027-3", { cache: "no-cache" });
+    const risposta = await fetch("python/preprocessing.py?v=20261028-4", { cache: "no-cache" });
     if (!risposta.ok) throw new Error("Non è stato possibile caricare il modulo Python di preprocessing.");
     await pyodide.runPythonAsync(await risposta.text());
     analizzaCsvPython = pyodide.globals.get("analizza_csv_json");
     creaCsvPython = pyodide.globals.get("crea_csv_json");
+    creaPianoPython = pyodide.globals.get("crea_piano_json");
   })();
 
   async function preparaTabella(testo, scelte = []) {
@@ -33,5 +35,16 @@
     return risposta.csv;
   }
 
-  window.Preprocessing = { ready, preparaTabella, creaCsv };
+  async function creaPiano(testo, scelte, interpretazione) {
+    await ready;
+    const risposta = JSON.parse(creaPianoPython(
+      testo,
+      JSON.stringify(scelte),
+      JSON.stringify(interpretazione)
+    ));
+    if (!risposta.ok) throw new Error(risposta.errore);
+    return risposta.piano;
+  }
+
+  window.Preprocessing = { ready, preparaTabella, creaCsv, creaPiano };
 })();
