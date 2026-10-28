@@ -7,7 +7,7 @@
   let tabellaOriginale = null;
   let testoOriginale = "";
   let scelte = [];
-  let interpretazione = { colonne: {} };
+  let interpretazione = { colonne: {}, pesi: {} };
   let vista = "lavoro";
 
   function escapeHtml(valore) {
@@ -154,6 +154,28 @@
     </div>`;
   }
 
+  function dettaglioImportanza(profili) {
+    const incluse = profili.filter(profilo => interpretazione.colonne[profilo.nome]?.usa);
+    if (!incluse.length) return `<div class="question-item importance-detail">
+      <strong>Quali colonne sono più importanti?</strong>
+      <p>Prima seleziona almeno una colonna da usare nel confronto.</p>
+    </div>`;
+    interpretazione.pesi ||= {};
+    return `<div class="question-item importance-detail">
+      <strong>Quanto deve contare ogni colonna?</strong>
+      <p>Il peso è relativo: “più” significa che una differenza in quella colonna influirà maggiormente sul confronto.</p>
+      <div class="importance-list">${incluse.map(profilo => {
+        const peso = interpretazione.pesi[profilo.nome] || "1";
+        return `<label><span>${escapeHtml(profilo.nome)}</span><select class="importance-weight" data-weight-column="${escapeHtml(profilo.nome)}" aria-label="Importanza della colonna ${escapeHtml(profilo.nome)}">
+          <option value="0.5"${peso === "0.5" ? " selected" : ""}>Meno delle altre</option>
+          <option value="1"${peso === "1" ? " selected" : ""}>Come le altre</option>
+          <option value="2"${peso === "2" ? " selected" : ""}>Più delle altre</option>
+          <option value="3"${peso === "3" ? " selected" : ""}>Molto più delle altre</option>
+        </select></label>`;
+      }).join("")}</div>
+    </div>`;
+  }
+
   function disegnaQuestionario() {
     const profili = risultato.questionario.colonne;
     profili.forEach(profilo => {
@@ -221,20 +243,8 @@
       "Una caratteristica molto importante potrebbe ricevere più peso delle altre.",
       [["uguale", "Sì, tutte uguali"], ["diversa", "No, alcune sono più importanti"], ["ignoto", "Non lo so"]]
     ));
+    if (interpretazione.importanza === "diversa") domande.push(dettaglioImportanza(profili));
     $("adaptive-questions").innerHTML = domande.join("");
-    aggiornaRiepilogo();
-  }
-
-  function aggiornaRiepilogo() {
-    if (!risultato || !risultato.questionario) return;
-    const cosa = $("row-meaning").value.trim();
-    const incluse = risultato.questionario.colonne.filter(p => interpretazione.colonne[p.nome]?.usa).map(p => p.nome);
-    const escluse = risultato.questionario.colonne.filter(p => !interpretazione.colonne[p.nome]?.usa).map(p => p.nome);
-    const parti = [];
-    parti.push(cosa ? `Ogni riga rappresenta: ${cosa}.` : "Non è ancora stato indicato che cosa rappresenta ogni riga.");
-    parti.push(incluse.length ? `Nel confronto: ${incluse.join(", ")}.` : "Nessuna colonna è stata inclusa nel confronto.");
-    if (escluse.length) parti.push(`Escluse: ${escluse.join(", ")}.`);
-    $("interpretation-summary-text").textContent = parti.join(" ");
   }
 
   function mostraRisultato(nomeFile) {
@@ -251,7 +261,7 @@
   async function elaboraTesto(testo, nomeFile) {
     nascondiErrore();
     try {
-      interpretazione = { colonne: {} };
+      interpretazione = { colonne: {}, pesi: {} };
       $("row-meaning").value = "";
       $("column-organization").value = "";
       testoOriginale = testo;
@@ -337,13 +347,19 @@
       interpretazione.colonne[profilo.nome].usa = evento.target.checked;
       evento.target.nextElementSibling.textContent = evento.target.checked ? "Sì" : "No";
     }
-    aggiornaRiepilogo();
+    if (interpretazione.importanza === "diversa") disegnaQuestionario();
   });
   $("adaptive-questions").addEventListener("change", evento => {
-    if (!evento.target.matches(".semantic-answer")) return;
-    interpretazione[evento.target.dataset.answer] = evento.target.value;
+    if (evento.target.matches(".semantic-answer")) {
+      interpretazione[evento.target.dataset.answer] = evento.target.value;
+      if (evento.target.dataset.answer === "importanza") disegnaQuestionario();
+      return;
+    }
+    if (evento.target.matches(".importance-weight")) {
+      interpretazione.pesi[evento.target.dataset.weightColumn] = evento.target.value;
+    }
   });
-  $("row-meaning").addEventListener("input", aggiornaRiepilogo);
+  $("row-meaning").addEventListener("change", evento => { interpretazione.riga = evento.target.value; });
   $("column-organization").addEventListener("change", evento => {
     interpretazione.organizzazione = evento.target.value;
     delete interpretazione.somiglianzaNumerica;
