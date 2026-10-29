@@ -153,6 +153,11 @@ assert misure_piano["flag"] == "Confronto asimmetrico di Jaccard"
 assert misure_piano["gruppo"] == "Uguale o diverso"
 assert piano_semplice["conteggioPercorsi"] == 1
 assert piano_semplice["percorsi"][0]["metodo"] == "Dissimilarità di Gower classica"
+assert piano_semplice["versioneContratto"] == 1
+assert piano_semplice["percorsi"][0]["preelaborazione"]["origine"] == "valori_originali"
+assert piano_semplice["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"] is False
+assert piano_semplice["percorsi"][0]["mancanti"]["strategia"] == "non_necessaria"
+assert piano_semplice["percorsi"][0]["calcolo"]["disponibile"] is True
 
 matrice_gower = p.calcola_matrice_gower(
     preparata,
@@ -199,7 +204,12 @@ piano_numerico = p.crea_piano_confronto(
 )
 assert piano_numerico["completo"] is True
 assert piano_numerico["percorsi"][0]["metodo"] == "Distanza euclidea"
-assert piano_numerico["percorsi"][0]["origine"] == "Tabella di lavoro"
+assert piano_numerico["percorsi"][0]["origine"] == "Tabella trasformata per questo percorso"
+assert piano_numerico["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"] is True
+assert [
+    passo["metodo"] for passo in piano_numerico["percorsi"][0]["preelaborazione"]["passi"]
+] == ["zscore", "zscore"]
+assert piano_numerico["percorsi"][0]["calcolo"]["disponibile"] is False
 
 piano_numerico_estremi = p.crea_piano_confronto(
     robusto_comune,
@@ -234,5 +244,32 @@ assert piano_profilo["conteggioBlocchi"] == 1
 assert piano_profilo["blocchi"][0]["misura"] == "Dissimilarità di Pearson"
 assert piano_profilo["conteggioPercorsi"] == 1
 assert piano_profilo["percorsi"][0]["metodo"] == "Dissimilarità di Pearson"
+assert piano_profilo["percorsi"][0]["preelaborazione"]["origine"] == "valori_originali"
+assert piano_profilo["percorsi"][0]["preelaborazione"]["passi"] == []
+
+piano_numerico_con_mancanti = p.crea_piano_confronto(
+    mancanti,
+    {
+        "riga": "oggetto",
+        "significatoMancanti": "sconosciuto",
+        "colonne": {
+            "x": {"ruolo": "quantita", "usa": True},
+            "y": {"ruolo": "quantita", "usa": True},
+        },
+    },
+)
+assert piano_numerico_con_mancanti["completo"] is False
+assert piano_numerico_con_mancanti["percorsi"][0]["mancanti"]["strategia"] == "da_definire"
+assert piano_numerico_con_mancanti["percorsi"][0]["stato"] == "da_completare"
+assert any("strategia operativa" in avviso for avviso in piano_numerico_con_mancanti["avvisi"])
+
+misti_con_mancanti = p.prepara_tabella(p.leggi_csv("x,categoria\n1,a\nNA,b\n3,a"))
+piano_gower_con_mancanti = p.crea_piano_confronto(
+    misti_con_mancanti,
+    {"riga": "oggetto", "significatoMancanti": "sconosciuto", "colonne": {}},
+)
+assert piano_gower_con_mancanti["completo"] is True
+assert piano_gower_con_mancanti["percorsi"][0]["mancanti"]["strategia"] == "esclusione_pairwise"
+assert piano_gower_con_mancanti["percorsi"][0]["calcolo"]["disponibile"] is True
 
 print("Tutti i test Python di preprocessing sono stati superati.")

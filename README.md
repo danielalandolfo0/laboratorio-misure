@@ -7,9 +7,10 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 - caricamento locale di tabelle CSV con intestazione;
 - riconoscimento di feature numeriche, binarie e non numeriche;
 - preprocessing Python eseguito localmente nel browser tramite Pyodide;
-- scelta globale del riscalamento tra nessuno, z-score, scala robusta e max-abs;
+- diagnosi preliminare delle scale e trasformazioni candidate tra nessuna, z-score, scala robusta, min–max e max-abs;
 - conservazione dei mancanti, segnalazione delle feature costanti e anteprima originale/trasformata;
-- esportazione della tabella di lavoro riscalata;
+- anteprima ed esportazione della tabella trasformata, senza assumerne l’uso automatico nel calcolo;
+- piano di confronto che dichiara, per ogni percorso, origine dei dati, trasformazioni, politica sui mancanti e disponibilità del calcolo;
 - famiglia di Minkowski: forma generale, Manhattan, Euclidea, Chebyshev, versione pesata ed Euclidea standardizzata;
 - Mahalanobis, Canberra, Bray–Curtis e χ² simmetrica;
 - similarità coseno e correlazione di Pearson per confrontare i profili;
@@ -72,6 +73,9 @@ npm test
 3. Per modifiche alle formule, aggiorna anche `test/test-misure.js`.
 4. Descrivi chiaramente nel messaggio di commit cosa hai cambiato.
 
-La tabella riscalata costituisce la base per i successivi moduli di scelta e
-calcolo delle distanze tra le istanze.
+La tabella trasformata è un’anteprima diagnostica. Il piano di confronto
+stabilisce esplicitamente se un percorso debba usarla oppure partire dai valori
+originali. Per esempio, Gower applica il proprio riscalamento ai valori
+originali, mentre un percorso numerico può usare trasformazioni specifiche per
+le colonne selezionate.
 
