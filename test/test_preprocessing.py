@@ -17,6 +17,23 @@ def quasi_uguali(a: float, b: float, tolleranza: float = 1e-10) -> None:
     assert math.isclose(a, b, abs_tol=tolleranza), f"{a} != {b}"
 
 
+def risposte_quantitative(**modifiche):
+    risposte = {
+        "riga": "oggetto",
+        "comparabilitaScale": "comparabili",
+        "confrontoQuantitativo": "assoluto",
+        "aggregazioneScarti": "quadratica",
+        "dipendenzaCoordinate": "no",
+        "importanzaCoordinate": "uguale",
+        "colonne": {
+            "a": {"ruolo": "quantita", "usa": True},
+            "b": {"ruolo": "quantita", "usa": True},
+        },
+    }
+    risposte.update(modifiche)
+    return risposte
+
+
 tabella = p.leggi_csv("a,b,flag,gruppo\n1,10,0,x\n2,20,1,y\n3,30,0,x")
 assert tabella["intestazioni"] == ["a", "b", "flag", "gruppo"]
 assert len(tabella["righe"]) == 3
@@ -194,13 +211,7 @@ assert all(
 
 piano_numerico = p.crea_piano_confronto(
     scale_diverse,
-    {
-        "riga": "oggetto",
-        "colonne": {
-            "a": {"ruolo": "quantita", "usa": True},
-            "b": {"ruolo": "quantita", "usa": True},
-        },
-    },
+    risposte_quantitative(comparabilitaScale="diverse", gestioneScale="trasforma"),
 )
 assert piano_numerico["completo"] is True
 assert piano_numerico["percorsi"][0]["metodo"] == "Distanza euclidea"
@@ -213,14 +224,12 @@ assert piano_numerico["percorsi"][0]["calcolo"]["disponibile"] is False
 
 piano_numerico_estremi = p.crea_piano_confronto(
     robusto_comune,
-    {
-        "riga": "oggetto",
-        "significatoEstremi": "reali",
-        "colonne": {
-            "a": {"ruolo": "quantita", "usa": True},
-            "b": {"ruolo": "quantita", "usa": True},
-        },
-    },
+    risposte_quantitative(
+        significatoEstremi="reali",
+        comparabilitaScale="diverse",
+        gestioneScale="trasforma",
+        aggregazioneScarti="lineare",
+    ),
 )
 assert piano_numerico_estremi["completo"] is True
 assert piano_numerico_estremi["percorsi"][0]["metodo"] == "Distanza di Manhattan"
@@ -252,6 +261,11 @@ piano_numerico_con_mancanti = p.crea_piano_confronto(
     {
         "riga": "oggetto",
         "significatoMancanti": "sconosciuto",
+        "comparabilitaScale": "comparabili",
+        "confrontoQuantitativo": "assoluto",
+        "aggregazioneScarti": "quadratica",
+        "dipendenzaCoordinate": "no",
+        "importanzaCoordinate": "uguale",
         "colonne": {
             "x": {"ruolo": "quantita", "usa": True},
             "y": {"ruolo": "quantita", "usa": True},
@@ -271,5 +285,83 @@ piano_gower_con_mancanti = p.crea_piano_confronto(
 assert piano_gower_con_mancanti["completo"] is True
 assert piano_gower_con_mancanti["percorsi"][0]["mancanti"]["strategia"] == "esclusione_pairwise"
 assert piano_gower_con_mancanti["percorsi"][0]["calcolo"]["disponibile"] is True
+
+# Ogni misura numerica del registro deve essere raggiungibile da almeno un profilo di risposte.
+dati_decisionali = p.prepara_tabella(p.leggi_csv("a,b\n1,2\n2,5\n4,3\n7,9"))
+
+def misura_da(**risposte):
+    piano = p.crea_piano_confronto(dati_decisionali, risposte_quantitative(**risposte))
+    assert piano["completo"] is True, piano
+    return piano["percorsi"][0]
+
+
+assert misura_da(aggregazioneScarti="lineare")["idMisura"] == "manhattan"
+assert misura_da(aggregazioneScarti="quadratica")["idMisura"] == "euclidean"
+assert misura_da(aggregazioneScarti="massimo")["idMisura"] == "chebyshev"
+assert misura_da(aggregazioneScarti="minkowski", ordineMinkowski="3")["idMisura"] == "minkowski"
+
+pesata = misura_da(
+    aggregazioneScarti="quadratica",
+    importanzaCoordinate="diversa",
+    pesiQuantitativi="1, 2",
+)
+assert pesata["idMisura"] == "weighted_minkowski"
+assert pesata["parametri"] == {"pesi": [1.0, 2.0], "q": 2}
+
+standardizzata = misura_da(
+    comparabilitaScale="diverse",
+    gestioneScale="interna",
+    aggregazioneScarti="quadratica",
+)
+assert standardizzata["idMisura"] == "standardized_euclidean"
+assert standardizzata["preelaborazione"]["origine"] == "valori_originali"
+
+mahalanobis = misura_da(dipendenzaCoordinate="si")
+assert mahalanobis["idMisura"] == "mahalanobis"
+assert mahalanobis["preelaborazione"]["usaTabellaTrasformata"] is False
+
+canberra = misura_da(
+    confrontoQuantitativo="relativo",
+    valoriVicinoZero="no",
+)
+assert canberra["idMisura"] == "canberra"
+
+assert misura_da(confrontoQuantitativo="abbondanza")["idMisura"] == "bray_curtis"
+assert misura_da(confrontoQuantitativo="frequenze")["idMisura"] == "chi_square"
+
+raggiunte = {
+    misura_da(aggregazioneScarti="lineare")["idMisura"],
+    misura_da(aggregazioneScarti="quadratica")["idMisura"],
+    misura_da(aggregazioneScarti="massimo")["idMisura"],
+    misura_da(aggregazioneScarti="minkowski", ordineMinkowski="3")["idMisura"],
+    pesata["idMisura"], standardizzata["idMisura"], mahalanobis["idMisura"],
+    canberra["idMisura"],
+    misura_da(confrontoQuantitativo="abbondanza")["idMisura"],
+    misura_da(confrontoQuantitativo="frequenze")["idMisura"],
+}
+assert raggiunte == set(p.REGISTRO_MISURE_NUMERICHE)
+
+pesi_invalidi = p.crea_piano_confronto(
+    dati_decisionali,
+    risposte_quantitative(importanzaCoordinate="diversa", pesiQuantitativi="1, 0"),
+)
+assert pesi_invalidi["completo"] is False
+assert any("strettamente positivi" in avviso for avviso in pesi_invalidi["percorsi"][0]["avvisi"])
+
+dati_singolari = p.prepara_tabella(p.leggi_csv("a,b\n1,2\n2,4\n3,6\n4,8"))
+piano_singolare = p.crea_piano_confronto(
+    dati_singolari,
+    risposte_quantitative(dipendenzaCoordinate="si"),
+)
+assert piano_singolare["completo"] is False
+assert any("covarianza empirica non è invertibile" in avviso for avviso in piano_singolare["percorsi"][0]["avvisi"])
+
+dati_con_negativi = p.prepara_tabella(p.leggi_csv("a,b\n-2,1\n-1,2\n1,4\n3,7"))
+piano_bray_non_valido = p.crea_piano_confronto(
+    dati_con_negativi,
+    risposte_quantitative(confrontoQuantitativo="abbondanza"),
+)
+assert piano_bray_non_valido["completo"] is False
+assert any("non negativi" in avviso for avviso in piano_bray_non_valido["percorsi"][0]["avvisi"])
 
 print("Tutti i test Python di preprocessing sono stati superati.")

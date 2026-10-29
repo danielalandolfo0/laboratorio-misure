@@ -738,6 +738,266 @@ ETICHETTE_TRASFORMAZIONE = {
     "nessuno": "Nessuna trasformazione",
 }
 
+REGISTRO_MISURE_NUMERICHE = {
+    "manhattan": {
+        "nome": "Distanza di Manhattan",
+        "famiglia": "Minkowski",
+        "proprieta": "Metrica; aggrega linearmente gli scarti assoluti.",
+    },
+    "euclidean": {
+        "nome": "Distanza euclidea",
+        "famiglia": "Minkowski",
+        "proprieta": "Metrica; gli scarti grandi hanno influenza quadratica.",
+    },
+    "chebyshev": {
+        "nome": "Distanza di Chebyshev",
+        "famiglia": "Minkowski",
+        "proprieta": "Metrica; coincide con il massimo scarto coordinata per coordinata.",
+    },
+    "minkowski": {
+        "nome": "Distanza di Minkowski",
+        "famiglia": "Minkowski",
+        "proprieta": "È una metrica per q ≥ 1.",
+    },
+    "weighted_minkowski": {
+        "nome": "Distanza di Minkowski pesata",
+        "famiglia": "Minkowski",
+        "proprieta": "Metrica con pesi strettamente positivi e q ≥ 1.",
+    },
+    "standardized_euclidean": {
+        "nome": "Distanza euclidea standardizzata",
+        "famiglia": "Distanze standardizzate",
+        "proprieta": "Metrica se tutte le scale utilizzate sono positive.",
+    },
+    "mahalanobis": {
+        "nome": "Distanza di Mahalanobis",
+        "famiglia": "Distanze basate sulla covarianza",
+        "proprieta": "Metrica se la matrice di covarianza è definita positiva.",
+    },
+    "canberra": {
+        "nome": "Distanza di Canberra",
+        "famiglia": "Confronti relativi",
+        "proprieta": "Metrica; enfatizza gli scarti relativi vicino allo zero.",
+    },
+    "bray_curtis": {
+        "nome": "Dissimilarità di Bray–Curtis",
+        "famiglia": "Abbondanze e conteggi",
+        "proprieta": "Dissimilarità normalizzata; in generale non soddisfa la triangolarità.",
+    },
+    "chi_square": {
+        "nome": "Distanza χ² simmetrica",
+        "famiglia": "Profili di frequenza",
+        "proprieta": "Confronta differenze relative alle masse locali delle componenti.",
+    },
+}
+
+
+def _lista_numeri_positivi(testo: Any) -> list[float] | None:
+    if not isinstance(testo, str) or not testo.strip():
+        return None
+    parti = [parte.strip() for parte in re.split(r"[,;\s]+", testo) if parte.strip()]
+    try:
+        valori = [float(parte) for parte in parti]
+    except ValueError:
+        return None
+    if not valori or any(not math.isfinite(valore) or valore <= 0 for valore in valori):
+        return None
+    return valori
+
+
+def _covarianza_empirica_invertibile(
+    nomi: list[str], analisi_per_nome: dict[str, dict[str, Any]]
+) -> bool:
+    """Controlla il rango della covarianza sulle righe complete, senza dipendenze esterne."""
+    colonne = [analisi_per_nome[nome].get("valoriNumerici", []) for nome in nomi]
+    righe = [
+        [float(valore) for valore in valori]
+        for valori in zip(*colonne)
+        if all(isinstance(valore, (int, float)) for valore in valori)
+    ]
+    p = len(nomi)
+    if len(righe) <= p:
+        return False
+    medie = [sum(riga[j] for riga in righe) / len(righe) for j in range(p)]
+    covarianza = [[
+        sum((riga[j] - medie[j]) * (riga[k] - medie[k]) for riga in righe) / (len(righe) - 1)
+        for k in range(p)
+    ] for j in range(p)]
+    scala = max((abs(valore) for riga in covarianza for valore in riga), default=0.0)
+    if scala == 0:
+        return False
+    tolleranza = scala * 1e-10
+    rango = 0
+    for colonna in range(p):
+        pivot = max(range(rango, p), key=lambda riga: abs(covarianza[riga][colonna]))
+        if abs(covarianza[pivot][colonna]) <= tolleranza:
+            continue
+        covarianza[rango], covarianza[pivot] = covarianza[pivot], covarianza[rango]
+        pivot_valore = covarianza[rango][colonna]
+        for riga in range(rango + 1, p):
+            fattore = covarianza[riga][colonna] / pivot_valore
+            for k in range(colonna, p):
+                covarianza[riga][k] -= fattore * covarianza[rango][k]
+        rango += 1
+    return rango == p
+
+
+def _specifica_misura_numerica(
+    nomi: list[str],
+    analisi_per_nome: dict[str, dict[str, Any]],
+    interpretazione: dict[str, Any],
+    numero_istanze: int,
+) -> dict[str, Any]:
+    """Seleziona una misura quantitativa soltanto quando le risposte la giustificano."""
+    avvisi: list[str] = []
+    stato = "pronto"
+    parametri: dict[str, Any] = {}
+    alternative: list[dict[str, str]] = []
+    confronto = interpretazione.get("confrontoQuantitativo", "")
+    scale = interpretazione.get("comparabilitaScale", "")
+    politica_preelaborazione = "originale"
+
+    if scale in {"", "ignoto"}:
+        avvisi.append("Indica se le quantità siano già confrontabili sulla stessa scala.")
+        stato = "da_completare"
+    elif scale == "diverse":
+        gestione = interpretazione.get("gestioneScale", "")
+        if gestione in {"", "ignoto"}:
+            avvisi.append("Scegli se trasformare le colonne o standardizzare dentro la distanza.")
+            stato = "da_completare"
+        elif gestione == "trasforma":
+            politica_preelaborazione = "trasformazioni_candidate"
+        else:
+            politica_preelaborazione = "standardizzazione_interna"
+    elif scale == "limitate":
+        politica_preelaborazione = "minmax"
+
+    minimi = [analisi_per_nome[nome].get("statistiche", {}).get("minimo") for nome in nomi]
+    non_negative = all(valore is not None and valore >= 0 for valore in minimi)
+    if confronto in {"", "ignoto"}:
+        id_misura = "euclidean"
+        avvisi.append("Indica quale tipo di differenza debba definire la dissimilarità.")
+        stato = "da_completare"
+    elif confronto == "relativo":
+        id_misura = "canberra"
+        politica_preelaborazione = "originale"
+        if not non_negative:
+            avvisi.append("Il percorso relativo richiede quantità non negative in questa guida decisionale.")
+            stato = "da_completare"
+        if interpretazione.get("valoriVicinoZero") in {"", "ignoto"}:
+            avvisi.append("Indica se valori nulli o prossimi a zero siano frequenti.")
+            stato = "da_completare"
+        elif interpretazione.get("valoriVicinoZero") == "si":
+            avvisi.append("Canberra può far dominare le componenti piccole: verifica che questo effetto sia desiderato.")
+        alternative.append({
+            "id": "bray_curtis", "nome": REGISTRO_MISURE_NUMERICHE["bray_curtis"]["nome"],
+            "motivo": "Da valutare se i dati rappresentano abbondanze e interessa la differenza complessiva.",
+        })
+    elif confronto == "abbondanza":
+        id_misura = "bray_curtis"
+        politica_preelaborazione = "originale"
+        if not non_negative:
+            avvisi.append("Bray–Curtis richiede valori non negativi.")
+            stato = "da_completare"
+        alternative.append({
+            "id": "canberra", "nome": REGISTRO_MISURE_NUMERICHE["canberra"]["nome"],
+            "motivo": "Alternativa se devono contare soprattutto le differenze relative componente per componente.",
+        })
+    elif confronto == "frequenze":
+        id_misura = "chi_square"
+        politica_preelaborazione = "originale"
+        if not non_negative:
+            avvisi.append("La distanza χ² richiede frequenze o quantità non negative.")
+            stato = "da_completare"
+        alternative.append({
+            "id": "bray_curtis", "nome": REGISTRO_MISURE_NUMERICHE["bray_curtis"]["nome"],
+            "motivo": "Alternativa se non si vuole dare particolare rilievo alle componenti rare.",
+        })
+    else:
+        aggregazione = interpretazione.get("aggregazioneScarti", "")
+        mappa = {
+            "lineare": "manhattan",
+            "quadratica": "euclidean",
+            "massimo": "chebyshev",
+            "minkowski": "minkowski",
+        }
+        id_misura = mappa.get(aggregazione, "euclidean")
+        if aggregazione in {"", "ignoto"}:
+            avvisi.append("Indica come debbano essere aggregati gli scarti delle coordinate.")
+            stato = "da_completare"
+        if aggregazione == "minkowski":
+            try:
+                q = float(interpretazione.get("ordineMinkowski", ""))
+            except (TypeError, ValueError):
+                q = math.nan
+            if not math.isfinite(q) or q < 1:
+                avvisi.append("Inserisci un esponente q numerico maggiore o uguale a 1.")
+                stato = "da_completare"
+            else:
+                parametri["q"] = q
+
+        dipendenza = interpretazione.get("dipendenzaCoordinate", "") if len(nomi) >= 2 else "no"
+        if dipendenza in {"", "ignoto"}:
+            avvisi.append("Indica se la correlazione tra le variabili debba influire sul confronto.")
+            stato = "da_completare"
+        elif dipendenza == "si":
+            id_misura = "mahalanobis"
+            politica_preelaborazione = "originale"
+            if numero_istanze <= len(nomi) or not _covarianza_empirica_invertibile(nomi, analisi_per_nome):
+                avvisi.append(
+                    "La covarianza empirica non è invertibile: servono più righe complete, "
+                    "l’eliminazione delle dipendenze lineari oppure una regolarizzazione esplicita."
+                )
+                stato = "da_completare"
+
+        importanza = interpretazione.get("importanzaCoordinate", "") if len(nomi) >= 2 else "uguale"
+        if importanza in {"", "ignoto"}:
+            avvisi.append("Indica se le variabili abbiano la stessa importanza.")
+            stato = "da_completare"
+        elif importanza == "diversa" and id_misura != "mahalanobis":
+            pesi = _lista_numeri_positivi(interpretazione.get("pesiQuantitativi"))
+            if pesi is None or len(pesi) != len(nomi):
+                avvisi.append(f"Inserisci esattamente {len(nomi)} pesi strettamente positivi.")
+                stato = "da_completare"
+            elif id_misura == "chebyshev":
+                avvisi.append("La parametrizzazione pesata adottata è definita per Minkowski con q finito; scegli un’altra aggregazione o pesi uguali.")
+                stato = "da_completare"
+            else:
+                parametri["pesi"] = pesi
+                if id_misura == "manhattan":
+                    parametri["q"] = 1
+                elif id_misura == "euclidean":
+                    parametri["q"] = 2
+                id_misura = "weighted_minkowski"
+
+        if politica_preelaborazione == "standardizzazione_interna":
+            if id_misura == "euclidean":
+                id_misura = "standardized_euclidean"
+            elif id_misura not in {"mahalanobis"}:
+                avvisi.append("La standardizzazione interna disponibile è euclidea; per questa misura scegli la trasformazione preventiva delle colonne.")
+                stato = "da_completare"
+
+        for alternativa in ("manhattan", "euclidean", "chebyshev"):
+            if alternativa != id_misura:
+                alternative.append({
+                    "id": alternativa,
+                    "nome": REGISTRO_MISURE_NUMERICHE[alternativa]["nome"],
+                    "motivo": "Alternativa con una diversa sensibilità alla distribuzione degli scarti.",
+                })
+
+    misura = REGISTRO_MISURE_NUMERICHE[id_misura]
+    return {
+        "idMisura": id_misura,
+        "metodo": misura["nome"],
+        "famiglia": misura["famiglia"],
+        "proprieta": misura["proprieta"],
+        "parametri": parametri,
+        "alternative": alternative,
+        "avvisi": avvisi,
+        "stato": stato,
+        "politicaPreelaborazione": politica_preelaborazione,
+    }
+
 
 def _politica_mancanti(
     nomi: list[str],
@@ -778,11 +1038,13 @@ def _politica_mancanti(
 
 
 def _preelaborazione_numerica(
-    nomi: list[str], analisi_per_nome: dict[str, dict[str, Any]]
+    nomi: list[str],
+    analisi_per_nome: dict[str, dict[str, Any]],
+    metodo_forzato: str | None = None,
 ) -> dict[str, Any]:
     passi = []
     for nome in nomi:
-        metodo = analisi_per_nome[nome].get("metodo", "nessuno")
+        metodo = metodo_forzato or analisi_per_nome[nome].get("metodo", "nessuno")
         passi.append({
             "colonna": nome,
             "metodo": metodo,
@@ -821,7 +1083,25 @@ def _completa_specifica_percorso(
     tipo = percorso["tipo"]
     nomi = percorso["colonne"]
     if tipo == "numerico":
-        preelaborazione = _preelaborazione_numerica(nomi, analisi_per_nome)
+        politica = percorso.get("politicaPreelaborazione", "trasformazioni_candidate")
+        if politica == "originale":
+            preelaborazione = _preelaborazione_originale(
+                "La misura confronta direttamente i valori originali e incorpora già la normalizzazione richiesta."
+            )
+        elif politica == "standardizzazione_interna":
+            preelaborazione = _preelaborazione_originale(
+                "Le scale restano nei dati originali e vengono incorporate nella distanza selezionata."
+            )
+        elif politica == "minmax":
+            preelaborazione = _preelaborazione_numerica(nomi, analisi_per_nome, "minmax")
+            preelaborazione["descrizione"] = (
+                "Ogni colonna è riportata nell’intervallo [0,1]. Quando disponibili, "
+                "sono preferibili limiti teorici agli estremi campionari."
+            )
+        elif politica == "trasformazioni_candidate":
+            preelaborazione = _preelaborazione_numerica(nomi, analisi_per_nome)
+        else:
+            preelaborazione = _preelaborazione_originale("Le quantità sono già confrontabili.")
     elif tipo == "gower":
         preelaborazione = _preelaborazione_originale(
             "Gower parte dai valori originali e costruisce internamente contributi "
@@ -862,6 +1142,7 @@ def _crea_percorsi(
     analisi_per_nome: dict[str, dict[str, Any]],
     interpretazione: dict[str, Any],
     blocchi_per_nome: dict[str, dict[str, Any]],
+    numero_istanze: int,
 ) -> list[dict[str, Any]]:
     """Separa il piano nei tre percorsi concordati, senza combinarne i risultati."""
     percorsi: list[dict[str, Any]] = []
@@ -883,20 +1164,24 @@ def _crea_percorsi(
         ) else "pronto"
 
         if solo_quantitative:
-            if len(standard) == 1:
-                metodo = "Differenza assoluta"
-                motivo = "Con una sola caratteristica numerica, euclidea e Manhattan coincidono."
-            elif ha_estremi:
-                metodo = "Distanza di Manhattan"
-                motivo = "Usa la tabella riscalata e limita il predominio delle differenze più grandi."
-            else:
-                metodo = "Distanza euclidea"
-                motivo = "Usa la tabella riscalata e combina le differenze delle caratteristiche numeriche."
-            percorsi.append({
+            selezione = _specifica_misura_numerica(
+                standard, analisi_per_nome, interpretazione, numero_istanze
+            )
+            stato = "da_completare" if (
+                stato_blocchi == "da_completare" or selezione["stato"] == "da_completare"
+            ) else "pronto"
+            percorso = {
                 "tipo": "numerico", "titolo": "Caratteristiche numeriche indipendenti",
-                "colonne": standard, "metodo": metodo,
-                "motivo": motivo, "stato": stato_blocchi,
-            })
+                "colonne": standard,
+                "motivo": (
+                    "La proposta deriva dal significato attribuito agli scarti, dalla "
+                    "gestione delle scale, dalla dipendenza e dai pesi delle variabili."
+                ),
+                "stato": stato,
+                **selezione,
+            }
+            percorso["stato"] = stato
+            percorsi.append(percorso)
         else:
             risposta_estremi = interpretazione.get("significatoEstremi", "")
             stato = stato_blocchi
@@ -971,7 +1256,7 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
     blocchi_per_nome = {blocco["nome"]: blocco for blocco in blocchi_indipendenti}
     percorsi = _crea_percorsi(
         indipendenti, gruppi_con_blocco, ruoli, analisi_per_nome,
-        interpretazione, blocchi_per_nome,
+        interpretazione, blocchi_per_nome, len(risultato["originale"]["righe"]),
     )
 
     avvisi: list[str] = []

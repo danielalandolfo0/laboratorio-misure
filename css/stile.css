@@ -223,6 +223,11 @@ header p {
 .path-contract div { display: grid; grid-template-columns: 88px 1fr; gap: 8px; padding: 3px 0; }
 .path-contract dt { color: var(--muted); font-size: .66rem; font-weight: 700; }
 .path-contract dd { margin: 0; color: var(--ink); font-size: .68rem; line-height: 1.35; }
+.path-alternatives { margin-top: 10px; color: var(--muted); font-size: .68rem; line-height: 1.4; }
+.path-alternatives b { color: var(--ink); }
+.path-alternatives ul { margin: 5px 0 0; padding-left: 17px; }
+.path-alternatives li + li { margin-top: 4px; }
+.path-alternatives strong { display: inline; color: var(--blue-dark); font-size: inherit; }
 .plan-detail-title { margin: 0 0 8px; font-size: .82rem; }
 .comparison-plan-table { min-width: 850px; }
 .comparison-plan-table th small { display: block; max-width: 260px; margin-top: 4px; color: var(--muted); white-space: normal; font-weight: 500; }

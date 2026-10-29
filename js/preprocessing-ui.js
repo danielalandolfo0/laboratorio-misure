@@ -159,6 +159,14 @@
     </div>`;
   }
 
+  function domandaInput(id, titolo, testo, placeholder, tipo = "text") {
+    return `<div class="question-item">
+      <label for="${id}">${titolo}</label>
+      <p>${testo}</p>
+      <input class="semantic-input" id="${id}" data-answer="${id}" type="${tipo}" value="${escapeHtml(valoreRisposta(id))}" placeholder="${escapeHtml(placeholder)}">
+    </div>`;
+  }
+
   function nascondiPiano() {
     $("comparison-plan").hidden = true;
     $("gower-actions").hidden = true;
@@ -179,6 +187,14 @@
         ? pre.passi.map(passo => `${escapeHtml(passo.colonna)}: ${escapeHtml(passo.etichetta)}`).join(" · ")
         : "Nessuna trasformazione colonna per colonna";
       const calcolo = percorso.calcolo.disponibile ? "Calcolo disponibile" : "Calcolo non ancora collegato";
+      const parametri = Object.entries(percorso.parametri || {}).map(([chiave, valore]) =>
+        `${escapeHtml(chiave)} = ${escapeHtml(Array.isArray(valore) ? valore.join(", ") : valore)}`
+      ).join(" · ");
+      const alternative = (percorso.alternative || []).length
+        ? `<div class="path-alternatives"><b>Alternative da valutare</b><ul>${percorso.alternative.map(alternativa =>
+          `<li><strong>${escapeHtml(alternativa.nome)}</strong>: ${escapeHtml(alternativa.motivo)}</li>`
+        ).join("")}</ul></div>`
+        : "";
       return `<article class="plan-path${classe}">
         <p>Percorso ${indice + 1}</p>
         <h5>${escapeHtml(percorso.titolo)}</h5>
@@ -187,11 +203,14 @@
         <dl class="path-contract">
           <div><dt>Origine</dt><dd>${escapeHtml(pre.etichettaOrigine)}</dd></div>
           <div><dt>Trasformazioni</dt><dd>${passi}</dd></div>
+          ${parametri ? `<div><dt>Parametri</dt><dd>${parametri}</dd></div>` : ""}
           <div><dt>Mancanti</dt><dd>${escapeHtml(mancanti.descrizione)}</dd></div>
+          ${percorso.proprieta ? `<div><dt>Proprietà</dt><dd>${escapeHtml(percorso.proprieta)}</dd></div>` : ""}
           <div><dt>Stato</dt><dd>${escapeHtml(calcolo)}</dd></div>
         </dl>
         <span>${escapeHtml(pre.descrizione)}</span>
         <p>${escapeHtml(percorso.motivo)}</p>
+        ${alternative}
       </article>`;
     }).join("");
     $("comparison-plan-body").innerHTML = piano.blocchi.length
@@ -214,7 +233,10 @@
     const avvisiBlocchi = piano.blocchi.flatMap(blocco =>
       blocco.avvisi.map(avviso => `${blocco.nome}: ${avviso}`)
     );
-    const avvisi = [...piano.avvisi, ...avvisiBlocchi];
+    const avvisiPercorsi = piano.percorsi.flatMap(percorso =>
+      (percorso.avvisi || []).map(avviso => `${percorso.titolo}: ${avviso}`)
+    );
+    const avvisi = [...piano.avvisi, ...avvisiBlocchi, ...avvisiPercorsi];
     $("comparison-plan-warnings").innerHTML = avvisi.length
       ? `<p><strong>Prima del calcolo:</strong></p><ul>${avvisi.map(avviso => `<li>${escapeHtml(avviso)}</li>`).join("")}</ul>`
       : "";
@@ -387,6 +409,66 @@
       "Una data può essere soltanto descrittiva oppure contribuire al confronto.",
       [["escludi", "Non devono influire sul confronto"], ["vicinanza", "Date vicine significano casi simili"], ["durata", "Conta il tempo trascorso"], ["ordine", "Conta soltanto quale viene prima"], ["ignoto", "Non lo so"]]
     ));
+
+    const ruoliStandard = new Set(["quantita", "livello", "presenza", "binaria", "categoria", "data"]);
+    const indipendentiStandard = profiliInclusi.filter(profilo =>
+      !interpretazione.assegnazioni[profilo.nome] && ruoliStandard.has(interpretazione.colonne[profilo.nome].ruolo)
+    );
+    const percorsoNumerico = indipendentiStandard.length > 0 && indipendentiStandard.every(profilo => {
+      const colonna = risultato.colonne.find(elemento => elemento.nome === profilo.nome);
+      return interpretazione.colonne[profilo.nome].ruolo === "quantita"
+        && ["numerica", "numerica_costante"].includes(colonna?.tipo);
+    });
+    if (percorsoNumerico) {
+      domande.push(domandaAdattiva(
+        "comparabilitaScale", "Le quantità sono già confrontabili sulla stessa scala?",
+        "La risposta stabilisce se mantenere i valori originali oppure applicare una trasformazione specifica al percorso.",
+        [["comparabili", "Sì, uno stesso scarto ha significato comparabile"], ["diverse", "No, unità o dispersioni sono diverse"], ["limitate", "Hanno intervalli significativi e conta la posizione relativa"], ["ignoto", "Non lo so"]]
+      ));
+      domande.push(domandaAdattiva(
+        "confrontoQuantitativo", "Quale tipo di differenza deve definire la dissimilarità?",
+        "Questa è la scelta principale tra distanze sulle coordinate e confronti relativi per dati non negativi.",
+        [["assoluto", "Scarti tra le coordinate"], ["relativo", "Scarti relativi alla grandezza dei valori"], ["abbondanza", "Differenza complessiva tra abbondanze o conteggi"], ["frequenze", "Differenze tra profili di frequenza, dando rilievo alle componenti rare"], ["ignoto", "Non lo so"]]
+      ));
+      if (valoreRisposta("comparabilitaScale") === "diverse") domande.push(domandaAdattiva(
+        "gestioneScale", "Come devono essere rese confrontabili le scale?",
+        "La standardizzazione può essere applicata ai dati prima del confronto oppure incorporata nella distanza euclidea.",
+        [["trasforma", "Trasforma prima le colonne"], ["interna", "Mantieni i valori e standardizza nella distanza"], ["ignoto", "Non lo so"]]
+      ));
+      if (valoreRisposta("confrontoQuantitativo") === "assoluto") {
+        domande.push(domandaAdattiva(
+          "aggregazioneScarti", "Come devono essere aggregati gli scarti delle coordinate?",
+          "La scelta determina la geometria del confronto.",
+          [["lineare", "Somma degli scarti: Manhattan"], ["quadratica", "Scarti grandi più influenti: Euclidea"], ["massimo", "Conta soprattutto lo scarto massimo: Chebyshev"], ["minkowski", "Usa un esponente q personalizzato"], ["ignoto", "Non lo so"]]
+        ));
+        if (valoreRisposta("aggregazioneScarti") === "minkowski") domande.push(domandaInput(
+          "ordineMinkowski", "Quale esponente q deve essere usato?",
+          "Per ottenere una metrica occorre q ≥ 1.", "Per esempio 3", "number"
+        ));
+        if (indipendentiStandard.length >= 2) domande.push(domandaAdattiva(
+          "dipendenzaCoordinate", "Le correlazioni tra le variabili devono influire sul confronto?",
+          "Se sì, verrà valutata Mahalanobis; servono abbastanza osservazioni e una matrice di covarianza invertibile.",
+          [["no", "No, confronta le coordinate separatamente"], ["si", "Sì, considera la struttura di covarianza"], ["ignoto", "Non lo so"]]
+        ));
+        if (indipendentiStandard.length >= 2) {
+          domande.push(domandaAdattiva(
+            "importanzaCoordinate", "Le variabili hanno la stessa importanza?",
+            "Pesi diversi conducono a una distanza di Minkowski pesata.",
+            [["uguale", "Sì, stessa importanza"], ["diversa", "No, voglio specificare pesi diversi"], ["ignoto", "Non lo so"]]
+          ));
+          if (valoreRisposta("importanzaCoordinate") === "diversa") domande.push(domandaInput(
+            "pesiQuantitativi", "Inserisci un peso positivo per ogni variabile",
+            `Ordine delle variabili: ${indipendentiStandard.map(profilo => escapeHtml(profilo.nome)).join(", ")}.`,
+            "Per esempio 1, 2, 0.5"
+          ));
+        }
+      }
+      if (valoreRisposta("confrontoQuantitativo") === "relativo") domande.push(domandaAdattiva(
+        "valoriVicinoZero", "I valori nulli o molto vicini a zero sono frequenti?",
+        "Canberra enfatizza fortemente le differenze relative vicino allo zero.",
+        [["no", "No, non sono frequenti"], ["si", "Sì, sono frequenti e significativi"], ["ignoto", "Non lo so"]]
+      ));
+    }
     interpretazione.gruppi.forEach(gruppo => {
       const membri = profili.filter(profilo => interpretazione.colonne[profilo.nome]?.usa && interpretazione.assegnazioni[profilo.nome] === gruppo.id);
       const tipi = membri.map(profilo => risultato.colonne.find(colonna => colonna.nome === profilo.nome)?.tipo);
@@ -516,9 +598,10 @@
     disegnaQuestionario();
   });
   $("adaptive-questions").addEventListener("change", evento => {
-    if (evento.target.matches(".semantic-answer")) {
+    if (evento.target.matches(".semantic-answer, .semantic-input")) {
       interpretazione[evento.target.dataset.answer] = evento.target.value;
-      nascondiPiano();
+      if (evento.target.matches(".semantic-answer")) disegnaQuestionario();
+      else nascondiPiano();
     }
   });
   $("row-meaning").addEventListener("change", evento => {
