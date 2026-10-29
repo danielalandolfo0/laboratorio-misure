@@ -1158,11 +1158,12 @@ def _completa_specifica_percorso(
     percorso["preelaborazione"] = preelaborazione
     percorso["origine"] = preelaborazione["etichettaOrigine"]
     percorso["mancanti"] = mancanti
+    calcolabile = tipo in {"gower", "numerico"} and percorso["stato"] != "da_completare"
     percorso["calcolo"] = {
-        "disponibile": tipo == "gower" and percorso["stato"] != "da_completare",
+        "disponibile": calcolabile,
         "descrizione": (
             "La matrice è calcolabile nel sito."
-            if tipo == "gower" and percorso["stato"] != "da_completare"
+            if calcolabile
             else "Il piano è esplicito; il calcolo di questa famiglia sarà collegato nel modulo successivo."
         ),
     }
@@ -1468,6 +1469,188 @@ def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, 
     }
 
 
+def _trasforma_per_percorso(
+    valore: Any,
+    analisi: dict[str, Any],
+    metodo: str,
+) -> float | None:
+    """Applica esattamente la trasformazione dichiarata nel piano numerico."""
+    numero = leggi_numero(valore, analisi["separatore"])
+    if numero is None:
+        return None
+    if numero is INVALIDO:
+        raise ValueError(f"La colonna “{analisi['nome']}” contiene valori non numerici.")
+    numero = float(numero)
+    stats = analisi.get("statistiche", {})
+    if metodo in {"nessuno", "originale"}:
+        return numero
+    if metodo == "costante" or stats.get("deviazione") == 0:
+        return 0.0
+    if metodo == "zscore":
+        return (numero - stats["media"]) / stats["deviazione"]
+    if metodo == "robusto":
+        if stats.get("iqr", 0) == 0:
+            raise ValueError(f"La scala robusta non è definita per la colonna “{analisi['nome']}”.")
+        return (numero - stats["mediana"]) / stats["iqr"]
+    if metodo == "minmax":
+        ampiezza = stats["massimo"] - stats["minimo"]
+        return 0.0 if ampiezza == 0 else (numero - stats["minimo"]) / ampiezza
+    if metodo == "maxabs":
+        return 0.0 if stats.get("massimoAssoluto", 0) == 0 else numero / stats["massimoAssoluto"]
+    raise ValueError(f"Trasformazione numerica non riconosciuta: {metodo}.")
+
+
+def _cholesky(matrice: list[list[float]]) -> list[list[float]]:
+    p = len(matrice)
+    scala = max((abs(v) for riga in matrice for v in riga), default=1.0)
+    tolleranza = max(1.0, scala) * 1e-12
+    l = [[0.0] * p for _ in range(p)]
+    for i in range(p):
+        for j in range(i + 1):
+            somma = matrice[i][j] - sum(l[i][k] * l[j][k] for k in range(j))
+            if i == j:
+                if somma <= tolleranza:
+                    raise ValueError("La matrice di covarianza non è definita positiva.")
+                l[i][j] = math.sqrt(somma)
+            else:
+                l[i][j] = somma / l[j][j]
+    return l
+
+
+def _covarianza(righe: list[list[float]]) -> list[list[float]]:
+    n = len(righe)
+    p = len(righe[0])
+    if n <= p:
+        raise ValueError("Per Mahalanobis servono più righe complete del numero di colonne.")
+    medie = [sum(riga[j] for riga in righe) / n for j in range(p)]
+    return [[
+        sum((riga[j] - medie[j]) * (riga[k] - medie[k]) for riga in righe) / (n - 1)
+        for k in range(p)
+    ] for j in range(p)]
+
+
+def _distanza_numerica(
+    x: list[float],
+    y: list[float],
+    id_misura: str,
+    parametri: dict[str, Any],
+    cholesky_covarianza: list[list[float]] | None = None,
+) -> float | None:
+    scarti = [abs(a - b) for a, b in zip(x, y)]
+    if id_misura == "manhattan":
+        return sum(scarti)
+    if id_misura == "euclidean":
+        return math.sqrt(sum(scarto**2 for scarto in scarti))
+    if id_misura == "chebyshev":
+        return max(scarti, default=0.0)
+    if id_misura == "minkowski":
+        q = float(parametri["q"])
+        return sum(scarto**q for scarto in scarti) ** (1 / q)
+    if id_misura == "weighted_minkowski":
+        q = float(parametri["q"])
+        pesi = [float(peso) for peso in parametri["pesi"]]
+        return sum(peso * scarto**q for peso, scarto in zip(pesi, scarti)) ** (1 / q)
+    if id_misura == "standardized_euclidean":
+        scale = [float(scala) for scala in parametri["scale"]]
+        return math.sqrt(sum((scarto / scala) ** 2 for scarto, scala in zip(scarti, scale)))
+    if id_misura == "mahalanobis":
+        if cholesky_covarianza is None:
+            raise ValueError("La covarianza necessaria per Mahalanobis non è disponibile.")
+        differenze = [a - b for a, b in zip(x, y)]
+        z: list[float] = []
+        for i, differenza in enumerate(differenze):
+            residuo = differenza - sum(cholesky_covarianza[i][k] * z[k] for k in range(i))
+            z.append(residuo / cholesky_covarianza[i][i])
+        return math.sqrt(sum(valore**2 for valore in z))
+    if id_misura == "canberra":
+        return sum(
+            0.0 if abs(a) + abs(b) == 0 else abs(a - b) / (abs(a) + abs(b))
+            for a, b in zip(x, y)
+        )
+    if id_misura == "bray_curtis":
+        denominatore = sum(a + b for a, b in zip(x, y))
+        return None if denominatore == 0 else sum(scarti) / denominatore
+    if id_misura == "chi_square":
+        return math.sqrt(sum(
+            0.0 if a + b == 0 else (a - b) ** 2 / (a + b)
+            for a, b in zip(x, y)
+        ))
+    raise ValueError(f"Misura numerica non riconosciuta: {id_misura}.")
+
+
+def calcola_matrice_numerica(
+    risultato: dict[str, Any],
+    interpretazione: dict[str, Any],
+) -> dict[str, Any]:
+    piano = crea_piano_confronto(risultato, interpretazione)
+    if not piano["completo"]:
+        raise ValueError("Completa le informazioni richieste prima di calcolare la matrice.")
+    percorsi = [percorso for percorso in piano["percorsi"] if percorso["tipo"] == "numerico"]
+    if len(percorsi) != 1:
+        raise ValueError("Il piano non contiene un unico percorso numerico calcolabile.")
+    percorso = percorsi[0]
+    nomi = percorso["colonne"]
+    tabella = risultato["originale"]
+    if len(tabella["righe"]) > 1000:
+        raise ValueError("La matrice completa è limitata a 1000 righe per evitare di bloccare il browser.")
+    analisi_per_nome = {colonna["nome"]: colonna for colonna in risultato["colonne"]}
+    indici = [tabella["intestazioni"].index(nome) for nome in nomi]
+    metodi = {passo["colonna"]: passo["metodo"] for passo in percorso["preelaborazione"]["passi"]}
+
+    righe_numeriche: list[list[float]] = []
+    for riga in tabella["righe"]:
+        vettore: list[float] = []
+        for nome, indice in zip(nomi, indici):
+            metodo = metodi.get(nome, "nessuno")
+            valore = _trasforma_per_percorso(riga[indice], analisi_per_nome[nome], metodo)
+            if valore is None:
+                raise ValueError("Il percorso numerico non può essere calcolato finché contiene valori mancanti.")
+            vettore.append(valore)
+        righe_numeriche.append(vettore)
+
+    id_misura = percorso["idMisura"]
+    parametri = dict(percorso.get("parametri", {}))
+    if id_misura == "standardized_euclidean":
+        parametri["scale"] = [analisi_per_nome[nome]["statistiche"]["deviazione"] for nome in nomi]
+    fattore_cholesky = None
+    if id_misura == "mahalanobis":
+        fattore_cholesky = _cholesky(_covarianza(righe_numeriche))
+
+    n = len(righe_numeriche)
+    matrice: list[list[float | None]] = [[0.0 for _ in range(n)] for _ in range(n)]
+    for i in range(n):
+        for k in range(i + 1, n):
+            distanza = _distanza_numerica(
+                righe_numeriche[i], righe_numeriche[k], id_misura, parametri, fattore_cholesky
+            )
+            matrice[i][k] = distanza
+            matrice[k][i] = distanza
+
+    etichette = _etichette_righe(risultato, interpretazione)
+    righe_csv = [[etichetta, *riga] for etichetta, riga in zip(etichette, matrice)]
+    origine = percorso["preelaborazione"]["etichettaOrigine"].lower()
+    nota = f"Calcolata sulle colonne {', '.join(nomi)} usando {origine}."
+    if id_misura == "mahalanobis":
+        nota += " La covarianza empirica considera il pattern con cui le colonne variano insieme; nessuna colonna è stata eliminata."
+    return {
+        "metodo": percorso["metodo"], "colonne": nomi,
+        "etichette": etichette, "matrice": matrice,
+        "csv": crea_csv(["Riga", *etichette], righe_csv), "nota": nota,
+    }
+
+
+def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) -> dict[str, Any]:
+    piano = crea_piano_confronto(risultato, interpretazione)
+    calcolabili = [percorso for percorso in piano["percorsi"] if percorso["calcolo"]["disponibile"]]
+    if len(calcolabili) != 1:
+        raise ValueError("Il calcolo diretto richiede un unico percorso completo e calcolabile.")
+    if calcolabili[0]["tipo"] == "gower":
+        return calcola_matrice_gower(risultato, interpretazione)
+    if calcolabili[0]["tipo"] == "numerico":
+        return calcola_matrice_numerica(risultato, interpretazione)
+    raise ValueError("Questo tipo di matrice non è ancora calcolabile nel sito.")
+
+
 def _valore_csv(valore: Any) -> Any:
     if valore is None:
         return ""
@@ -1526,4 +1709,15 @@ def calcola_gower_json(testo: str, scelte_json: str = "[]", interpretazione_json
         gower = calcola_matrice_gower(risultato, interpretazione)
         return json.dumps({"ok": True, "gower": gower}, ensure_ascii=False, separators=(",", ":"))
     except (ValueError, TypeError, json.JSONDecodeError) as errore:
+        return json.dumps({"ok": False, "errore": str(errore)}, ensure_ascii=False, separators=(",", ":"))
+
+
+def calcola_matrice_json(testo: str, scelte_json: str = "[]", interpretazione_json: str = "{}") -> str:
+    try:
+        scelte = json.loads(scelte_json or "[]")
+        interpretazione = json.loads(interpretazione_json or "{}")
+        risultato = prepara_tabella(leggi_csv(testo), scelte)
+        matrice = calcola_matrice(risultato, interpretazione)
+        return json.dumps({"ok": True, "matrice": matrice}, ensure_ascii=False, separators=(",", ":"))
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError) as errore:
         return json.dumps({"ok": False, "errore": str(errore)}, ensure_ascii=False, separators=(",", ":"))

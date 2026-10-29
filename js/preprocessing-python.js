@@ -5,7 +5,7 @@
   let analizzaCsvPython = null;
   let creaCsvPython = null;
   let creaPianoPython = null;
-  let calcolaGowerPython = null;
+  let calcolaMatricePython = null;
 
   const ready = (async () => {
     if (typeof loadPyodide !== "function") {
@@ -14,13 +14,13 @@
     const pyodide = await loadPyodide({
       indexURL: "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/"
     });
-    const risposta = await fetch("python/preprocessing.py?v=20261029-3", { cache: "no-cache" });
+    const risposta = await fetch("python/preprocessing.py?v=20261029-4", { cache: "no-cache" });
     if (!risposta.ok) throw new Error("Non è stato possibile caricare il modulo Python di preprocessing.");
     await pyodide.runPythonAsync(await risposta.text());
     analizzaCsvPython = pyodide.globals.get("analizza_csv_json");
     creaCsvPython = pyodide.globals.get("crea_csv_json");
     creaPianoPython = pyodide.globals.get("crea_piano_json");
-    calcolaGowerPython = pyodide.globals.get("calcola_gower_json");
+    calcolaMatricePython = pyodide.globals.get("calcola_matrice_json");
   })();
 
   async function preparaTabella(testo, scelte = []) {
@@ -48,16 +48,16 @@
     return risposta.piano;
   }
 
-  async function calcolaGower(testo, scelte, interpretazione) {
+  async function calcolaMatrice(testo, scelte, interpretazione) {
     await ready;
-    const risposta = JSON.parse(calcolaGowerPython(
+    const risposta = JSON.parse(calcolaMatricePython(
       testo,
       JSON.stringify(scelte),
       JSON.stringify(interpretazione)
     ));
     if (!risposta.ok) throw new Error(risposta.errore);
-    return risposta.gower;
+    return risposta.matrice;
   }
 
-  window.Preprocessing = { ready, preparaTabella, creaCsv, creaPiano, calcolaGower };
+  window.Preprocessing = { ready, preparaTabella, creaCsv, creaPiano, calcolaMatrice };
 })();

@@ -10,7 +10,7 @@
   let interpretazione = { colonne: {}, gruppi: [], assegnazioni: {}, prossimoGruppo: 1 };
   let vista = "lavoro";
   let pianoCorrente = null;
-  let gowerCorrente = null;
+  let matriceCorrente = null;
 
   function escapeHtml(valore) {
     return String(valore).replace(/[&<>"']/g, carattere => ({
@@ -197,12 +197,12 @@
     $("gower-actions").hidden = true;
     $("gower-result").hidden = true;
     pianoCorrente = null;
-    gowerCorrente = null;
+    matriceCorrente = null;
   }
 
   function disegnaPiano(piano) {
     pianoCorrente = piano;
-    gowerCorrente = null;
+    matriceCorrente = null;
     $("gower-result").hidden = true;
     $("comparison-plan-paths").innerHTML = piano.percorsi.map((percorso, indice) => {
       const classe = percorso.stato === "da_completare" ? " incomplete" : "";
@@ -270,34 +270,38 @@
       : piano.conteggioPercorsi === 1
         ? "È stato individuato un unico percorso di confronto."
         : `${piano.conteggioPercorsi} percorsi verranno calcolati separatamente, senza combinarli automaticamente.`;
-    $("gower-actions").hidden = !(piano.completo && piano.percorsi.some(percorso => percorso.tipo === "gower" && percorso.calcolo.disponibile));
+    const percorsiCalcolabili = piano.percorsi.filter(percorso => percorso.calcolo.disponibile);
+    $("gower-actions").hidden = !(piano.completo && percorsiCalcolabili.length === 1);
+    if (percorsiCalcolabili.length === 1) {
+      $("calculate-gower").textContent = "Calcola la matrice finale";
+    }
     $("comparison-plan").hidden = false;
   }
 
-  function disegnaMatriceGower(gower) {
-    const limite = Math.min(12, gower.etichette.length);
-    const etichette = gower.etichette.slice(0, limite);
+  function disegnaMatrice(risposta) {
+    const limite = Math.min(12, risposta.etichette.length);
+    const etichette = risposta.etichette.slice(0, limite);
     $("gower-matrix-head").innerHTML = `<tr><th>Riga</th>${etichette.map(etichetta => `<th>${escapeHtml(etichetta)}</th>`).join("")}</tr>`;
-    $("gower-matrix-body").innerHTML = gower.matrice.slice(0, limite).map((riga, indice) => `<tr>
+    $("gower-matrix-body").innerHTML = risposta.matrice.slice(0, limite).map((riga, indice) => `<tr>
       <th scope="row">${escapeHtml(etichette[indice])}</th>
       ${riga.slice(0, limite).map(valore => `<td>${valore === null ? "—" : escapeHtml(formatoNumero(valore))}</td>`).join("")}
     </tr>`).join("");
-    $("gower-result-title").textContent = gower.metodo;
-    $("gower-result-caption").textContent = `${gower.etichette.length} × ${gower.etichette.length}. ${gower.nota}${limite < gower.etichette.length ? ` Anteprima delle prime ${limite} righe.` : ""}`;
+    $("gower-result-title").textContent = risposta.metodo;
+    $("gower-result-caption").textContent = `${risposta.etichette.length} × ${risposta.etichette.length}. ${risposta.nota}${limite < risposta.etichette.length ? ` Anteprima delle prime ${limite} righe.` : ""}`;
     $("download-gower").disabled = false;
     $("gower-result").hidden = false;
   }
 
-  async function calcolaGower() {
+  async function calcolaMatrice() {
     if (!pianoCorrente) return;
     const pulsante = $("calculate-gower");
     const testo = pulsante.textContent;
     pulsante.disabled = true;
     pulsante.textContent = "Calcolo…";
     try {
-      gowerCorrente = await P.calcolaGower(testoOriginale, scelte, interpretazione);
+      matriceCorrente = await P.calcolaMatrice(testoOriginale, scelte, interpretazione);
       nascondiErrore();
-      disegnaMatriceGower(gowerCorrente);
+      disegnaMatrice(matriceCorrente);
     } catch (errore) {
       mostraErrore(errore.message);
     } finally {
@@ -306,12 +310,12 @@
     }
   }
 
-  function scaricaGower() {
-    if (!gowerCorrente) return;
-    const url = URL.createObjectURL(new Blob(["\uFEFF" + gowerCorrente.csv], { type: "text/csv;charset=utf-8" }));
+  function scaricaMatrice() {
+    if (!matriceCorrente) return;
+    const url = URL.createObjectURL(new Blob(["\uFEFF" + matriceCorrente.csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = "matrice_gower.csv";
+    link.download = "matrice_distanze.csv";
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -446,9 +450,9 @@
     });
     if (percorsoNumerico) {
       domande.push(domandaAdattiva(
-        "confrontoQuantitativo", "Che cosa rappresentano insieme questi numeri?",
-        "Questa informazione serve a distinguere misure ordinarie, abbondanze e frequenze. Non occorre conoscere i nomi delle distanze.",
-        [["assoluto", "Caratteristiche misurate per ogni riga"], ["abbondanza", "Abbondanze o conteggi, come specie o eventi"], ["frequenze", "Frequenze, dove anche le componenti rare sono importanti"], ["relativo", "Valori per cui conta soprattutto la differenza in proporzione"], ["ignoto", "Non lo so — usa la scelta consigliata"]]
+        "confrontoQuantitativo", "Che tipo di valori contengono le colonne selezionate?",
+        "Scegli la descrizione più vicina ai tuoi dati. La risposta serve a stabilire che cosa debba significare la differenza tra due righe.",
+        [["assoluto", "Misure di caratteristiche, per esempio età, altezza o temperatura"], ["abbondanza", "Quantità o conteggi, per esempio specie, prodotti o eventi"], ["frequenze", "Frequenze: voglio dare rilievo anche alle componenti rare"], ["relativo", "Misure per cui conta soprattutto la differenza percentuale o proporzionale"], ["ignoto", "Non lo so — usa la scelta consigliata"]]
       ));
 
       const confronto = valoreRisposta("confrontoQuantitativo");
@@ -483,9 +487,9 @@
           "Questa è un'impostazione avanzata. Inserisci un numero almeno pari a 1; valori maggiori danno più peso alle differenze grandi.", "Per esempio 3", "number"
         ));
         if (indipendentiStandard.length >= 2 && haCorrelazioniForti(indipendentiStandard)) domande.push(domandaAdattiva(
-          "dipendenzaCoordinate", "Alcune colonne tendono a variare insieme. Vuoi evitare che informazioni simili contino più volte?",
-          "Il sito ha rilevato una forte relazione numerica tra almeno due colonne. L'opzione sì usa un confronto che tiene conto di queste relazioni.",
-          [["si", "Sì, evita di contare più volte la stessa informazione"], ["no", "No, considera ogni colonna separatamente"], ["ignoto", "Non lo so — considera le colonne separatamente"]]
+          "dipendenzaCoordinate", "Alcune colonne seguono quasi lo stesso andamento tra le righe. La distanza deve tenere conto di questo legame?",
+          "Nessuna colonna verrà eliminata. Se scegli sì, il calcolo considererà anche il pattern con cui le colonne variano insieme, usando la loro covarianza.",
+          [["si", "Sì, considera anche il legame tra le colonne"], ["no", "No, misura gli scarti colonna per colonna"], ["ignoto", "Non lo so — usa il confronto colonna per colonna"]]
         ));
         if (indipendentiStandard.length >= 2) {
           domande.push(domandaAdattiva(
@@ -601,8 +605,8 @@
   $("view-work").addEventListener("click", () => { vista = "lavoro"; disegnaTabella(); });
   $("download-work").addEventListener("click", scaricaTabella);
   $("prepare-comparison-plan").addEventListener("click", preparaPiano);
-  $("calculate-gower").addEventListener("click", calcolaGower);
-  $("download-gower").addEventListener("click", scaricaGower);
+  $("calculate-gower").addEventListener("click", calcolaMatrice);
+  $("download-gower").addEventListener("click", scaricaMatrice);
   $("scaling-body").addEventListener("change", evento => {
     if (evento.target.matches(".column-choice")) aggiornaScelta(evento.target);
   });

@@ -272,7 +272,31 @@ assert piano_numerico["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"]
 assert [
     passo["metodo"] for passo in piano_numerico["percorsi"][0]["preelaborazione"]["passi"]
 ] == ["zscore", "zscore"]
-assert piano_numerico["percorsi"][0]["calcolo"]["disponibile"] is False
+assert piano_numerico["percorsi"][0]["calcolo"]["disponibile"] is True
+
+matrice_numerica = p.calcola_matrice_numerica(scale_diverse, risposte_accessibili)
+assert matrice_numerica["metodo"] == "Distanza euclidea"
+assert matrice_numerica["matrice"][0][0] == 0
+quasi_uguali(matrice_numerica["matrice"][0][1], math.sqrt(3))
+assert matrice_numerica["matrice"][1][0] == matrice_numerica["matrice"][0][1]
+assert matrice_numerica["csv"].splitlines()[0] == "Riga;Riga 1;Riga 2;Riga 3"
+
+matrice_bray = p.calcola_matrice_numerica(
+    scale_simili,
+    {**risposte_accessibili, "confrontoQuantitativo": "abbondanza"},
+)
+quasi_uguali(matrice_bray["matrice"][0][1], 2 / 24)
+
+quasi_uguali(p._distanza_numerica([1, 2], [4, 6], "manhattan", {}), 7)
+quasi_uguali(p._distanza_numerica([1, 2], [4, 6], "euclidean", {}), 5)
+quasi_uguali(p._distanza_numerica([1, 2], [4, 6], "chebyshev", {}), 4)
+quasi_uguali(p._distanza_numerica([1, 2], [4, 6], "minkowski", {"q": 3}), 91 ** (1 / 3))
+quasi_uguali(
+    p._distanza_numerica([1, 2], [4, 6], "weighted_minkowski", {"q": 2, "pesi": [2, 0.5]}),
+    math.sqrt(26),
+)
+quasi_uguali(p._distanza_numerica([0, 2], [0, 6], "canberra", {}), 0.5)
+quasi_uguali(p._distanza_numerica([1, 2], [3, 4], "chi_square", {}), math.sqrt(1 + 2 / 3))
 
 piano_numerico_estremi = p.crea_piano_confronto(
     robusto_comune,
