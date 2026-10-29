@@ -115,7 +115,10 @@
     $("preview-body").innerHTML = righe.slice(0, limiteRighe).map(riga =>
       `<tr>${riga.slice(0, limiteColonne).map(valore => `<td>${escapeHtml(formatoNumero(valore))}</td>`).join("")}</tr>`
     ).join("");
-    $("preview-caption").textContent = `Anteprima: ${limiteRighe} di ${righe.length} righe${limiteColonne < risultato.originale.intestazioni.length ? ` e ${limiteColonne} di ${risultato.originale.intestazioni.length} colonne` : ""}.`;
+    const origine = vista === "originale"
+      ? "Valori originali: sono la base dei percorsi che non richiedono trasformazioni."
+      : "Anteprima diagnostica: non viene usata automaticamente da tutti i percorsi.";
+    $("preview-caption").textContent = `${origine} ${limiteRighe} di ${righe.length} righe${limiteColonne < risultato.originale.intestazioni.length ? ` e ${limiteColonne} di ${risultato.originale.intestazioni.length} colonne` : ""}.`;
     $("view-original").classList.toggle("active", vista === "originale");
     $("view-work").classList.toggle("active", vista === "lavoro");
   }
@@ -170,12 +173,24 @@
     $("gower-result").hidden = true;
     $("comparison-plan-paths").innerHTML = piano.percorsi.map((percorso, indice) => {
       const classe = percorso.stato === "da_completare" ? " incomplete" : "";
+      const pre = percorso.preelaborazione;
+      const mancanti = percorso.mancanti;
+      const passi = pre.passi.length
+        ? pre.passi.map(passo => `${escapeHtml(passo.colonna)}: ${escapeHtml(passo.etichetta)}`).join(" · ")
+        : "Nessuna trasformazione colonna per colonna";
+      const calcolo = percorso.calcolo.disponibile ? "Calcolo disponibile" : "Calcolo non ancora collegato";
       return `<article class="plan-path${classe}">
         <p>Percorso ${indice + 1}</p>
         <h5>${escapeHtml(percorso.titolo)}</h5>
         <strong>${escapeHtml(percorso.metodo)}</strong>
-        <span>${escapeHtml(percorso.origine)}</span>
         <small>Dati: ${percorso.colonne.map(escapeHtml).join(", ")}</small>
+        <dl class="path-contract">
+          <div><dt>Origine</dt><dd>${escapeHtml(pre.etichettaOrigine)}</dd></div>
+          <div><dt>Trasformazioni</dt><dd>${passi}</dd></div>
+          <div><dt>Mancanti</dt><dd>${escapeHtml(mancanti.descrizione)}</dd></div>
+          <div><dt>Stato</dt><dd>${escapeHtml(calcolo)}</dd></div>
+        </dl>
+        <span>${escapeHtml(pre.descrizione)}</span>
         <p>${escapeHtml(percorso.motivo)}</p>
       </article>`;
     }).join("");
@@ -208,7 +223,7 @@
       : piano.conteggioPercorsi === 1
         ? "È stato individuato un unico percorso di confronto."
         : `${piano.conteggioPercorsi} percorsi verranno calcolati separatamente, senza combinarli automaticamente.`;
-    $("gower-actions").hidden = !(piano.completo && piano.percorsi.some(percorso => percorso.tipo === "gower"));
+    $("gower-actions").hidden = !(piano.completo && piano.percorsi.some(percorso => percorso.tipo === "gower" && percorso.calcolo.disponibile));
     $("comparison-plan").hidden = false;
   }
 

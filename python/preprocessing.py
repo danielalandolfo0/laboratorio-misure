@@ -729,6 +729,131 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
 
 RUOLI_GOWER = {"quantita", "livello", "presenza", "binaria", "categoria", "data"}
 
+ETICHETTE_TRASFORMAZIONE = {
+    "zscore": "Z-score",
+    "robusto": "Scala robusta (mediana e IQR)",
+    "minmax": "Min–max",
+    "maxabs": "Max-abs",
+    "costante": "Sostituzione con 0 (feature costante)",
+    "nessuno": "Nessuna trasformazione",
+}
+
+
+def _politica_mancanti(
+    nomi: list[str],
+    analisi_per_nome: dict[str, dict[str, Any]],
+    tipo_percorso: str,
+) -> dict[str, Any]:
+    """Dichiara, senza impliciti, come il percorso tratta i valori mancanti."""
+    colonne = [nome for nome in nomi if analisi_per_nome[nome]["mancanti"] > 0]
+    if not colonne:
+        return {
+            "presenza": False,
+            "strategia": "non_necessaria",
+            "descrizione": "Nessun valore mancante nelle colonne utilizzate.",
+            "pronta": True,
+            "colonne": [],
+        }
+    if tipo_percorso == "gower":
+        return {
+            "presenza": True,
+            "strategia": "esclusione_pairwise",
+            "descrizione": (
+                "Gower omette, per ogni coppia di righe, i contributi non osservabili "
+                "e ricalcola il denominatore sui soli contributi disponibili."
+            ),
+            "pronta": True,
+            "colonne": colonne,
+        }
+    return {
+        "presenza": True,
+        "strategia": "da_definire",
+        "descrizione": (
+            "Il significato dei mancanti è stato raccolto, ma questo percorso richiede "
+            "ancora una scelta operativa tra imputazione, esclusione o un metodo pairwise."
+        ),
+        "pronta": False,
+        "colonne": colonne,
+    }
+
+
+def _preelaborazione_numerica(
+    nomi: list[str], analisi_per_nome: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    passi = []
+    for nome in nomi:
+        metodo = analisi_per_nome[nome].get("metodo", "nessuno")
+        passi.append({
+            "colonna": nome,
+            "metodo": metodo,
+            "etichetta": ETICHETTE_TRASFORMAZIONE.get(metodo, metodo),
+        })
+    trasformazioni = [passo for passo in passi if passo["metodo"] != "nessuno"]
+    return {
+        "origine": "tabella_trasformata",
+        "etichettaOrigine": "Tabella trasformata per questo percorso",
+        "usaTabellaTrasformata": True,
+        "passi": passi,
+        "descrizione": (
+            "Le trasformazioni elencate vengono applicate soltanto alle colonne di "
+            "questo percorso."
+            if trasformazioni
+            else "Le scale sono mantenute: nessuna trasformazione è applicata."
+        ),
+    }
+
+
+def _preelaborazione_originale(descrizione: str) -> dict[str, Any]:
+    return {
+        "origine": "valori_originali",
+        "etichettaOrigine": "Valori originali",
+        "usaTabellaTrasformata": False,
+        "passi": [],
+        "descrizione": descrizione,
+    }
+
+
+def _completa_specifica_percorso(
+    percorso: dict[str, Any],
+    analisi_per_nome: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Aggiunge origine, trasformazioni, mancanti e disponibilità del calcolo."""
+    tipo = percorso["tipo"]
+    nomi = percorso["colonne"]
+    if tipo == "numerico":
+        preelaborazione = _preelaborazione_numerica(nomi, analisi_per_nome)
+    elif tipo == "gower":
+        preelaborazione = _preelaborazione_originale(
+            "Gower parte dai valori originali e costruisce internamente contributi "
+            "confrontabili; l’anteprima trasformata non entra nel calcolo."
+        )
+    elif tipo == "gruppo":
+        preelaborazione = _preelaborazione_originale(
+            "Il gruppo è confrontato come un unico oggetto. Un riscalamento separato "
+            "delle colonne potrebbe modificarne forma, direzione o ordinamento."
+        )
+    else:
+        preelaborazione = _preelaborazione_originale(
+            "Il confronto separato usa la rappresentazione coerente con il significato "
+            "della singola caratteristica."
+        )
+
+    mancanti = _politica_mancanti(nomi, analisi_per_nome, tipo)
+    if not mancanti["pronta"]:
+        percorso["stato"] = "da_completare"
+    percorso["preelaborazione"] = preelaborazione
+    percorso["origine"] = preelaborazione["etichettaOrigine"]
+    percorso["mancanti"] = mancanti
+    percorso["calcolo"] = {
+        "disponibile": tipo == "gower" and percorso["stato"] != "da_completare",
+        "descrizione": (
+            "La matrice è calcolabile nel sito."
+            if tipo == "gower" and percorso["stato"] != "da_completare"
+            else "Il piano è esplicito; il calcolo di questa famiglia sarà collegato nel modulo successivo."
+        ),
+    }
+    return percorso
+
 
 def _crea_percorsi(
     indipendenti: list[str],
@@ -769,7 +894,7 @@ def _crea_percorsi(
                 motivo = "Usa la tabella riscalata e combina le differenze delle caratteristiche numeriche."
             percorsi.append({
                 "tipo": "numerico", "titolo": "Caratteristiche numeriche indipendenti",
-                "colonne": standard, "metodo": metodo, "origine": "Tabella di lavoro",
+                "colonne": standard, "metodo": metodo,
                 "motivo": motivo, "stato": stato_blocchi,
             })
         else:
@@ -788,7 +913,6 @@ def _crea_percorsi(
             percorsi.append({
                 "tipo": "gower", "titolo": "Caratteristiche indipendenti di tipo misto",
                 "colonne": standard, "metodo": metodo,
-                "origine": "Valori originali; Gower applica il proprio riscalamento",
                 "motivo": motivo, "stato": stato,
             })
 
@@ -796,17 +920,17 @@ def _crea_percorsi(
         blocco = blocchi_per_nome[nome]
         percorsi.append({
             "tipo": "separato", "titolo": ETICHETTE_RUOLO.get(ruoli[nome], "Confronto separato"),
-            "colonne": [nome], "metodo": blocco["misura"], "origine": "Confronto separato",
+            "colonne": [nome], "metodo": blocco["misura"],
             "motivo": blocco["motivo"], "stato": blocco["stato"],
         })
 
     for gruppo, blocco in gruppi_con_blocco:
         percorsi.append({
             "tipo": "gruppo", "titolo": blocco["nome"], "colonne": blocco["colonne"],
-            "metodo": blocco["misura"], "origine": blocco["interpretazione"],
+            "metodo": blocco["misura"],
             "motivo": blocco["motivo"], "stato": blocco["stato"],
         })
-    return percorsi
+    return [_completa_specifica_percorso(percorso, analisi_per_nome) for percorso in percorsi]
 
 
 def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, Any]) -> dict[str, Any]:
@@ -863,11 +987,24 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
     elif incluse_con_estremi and interpretazione.get("significatoEstremi") in {"errori", "controllare"}:
         avvisi.append("Controlla i valori estremi prima di calcolare le distanze.")
 
-    completo = bool(blocchi) and not avvisi and all(b["stato"] != "da_completare" for b in blocchi)
+    for percorso in percorsi:
+        if not percorso["mancanti"]["pronta"]:
+            colonne = ", ".join(percorso["mancanti"]["colonne"])
+            avvisi.append(
+                f"Definisci la strategia operativa per i valori mancanti nel percorso "
+                f"“{percorso['titolo']}” ({colonne})."
+            )
+
+    completo = (
+        bool(blocchi)
+        and not avvisi
+        and all(b["stato"] != "da_completare" for b in blocchi)
+        and all(p["stato"] != "da_completare" for p in percorsi)
+    )
     return {
         "blocchi": blocchi, "percorsi": percorsi, "avvisi": avvisi,
         "completo": completo, "conteggioBlocchi": len(blocchi),
-        "conteggioPercorsi": len(percorsi),
+        "conteggioPercorsi": len(percorsi), "versioneContratto": 1,
     }
 
 

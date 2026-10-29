@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Laboratorio interattivo per preparare dati tabellari e comprendere misure tra vettori, dati binari e stringhe.">
   <title>Laboratorio delle misure</title>
-  <link rel="stylesheet" href="css/stile.css?v=20261028-9">
+  <link rel="stylesheet" href="css/stile.css?v=20261029-1">
   <script>
     if ("scrollRestoration" in history) history.scrollRestoration = "manual";
     window.addEventListener("pageshow", () => {
@@ -32,8 +32,8 @@
     <div class="prep-heading">
       <div>
         <p class="section-label">Preelaborazione</p>
-        <h2 id="prep-title">Carica e riscala la tua tabella</h2>
-        <p>Ogni riga è un’istanza e ogni colonna una feature. Viene creata una tabella di lavoro senza modificare il file originale.</p>
+        <h2 id="prep-title">Carica e interpreta la tua tabella</h2>
+        <p>Ogni riga è un’istanza e ogni colonna una feature. Il file originale resta invariato; le trasformazioni vengono applicate soltanto se richieste dal percorso di confronto.</p>
       </div>
     </div>
 
@@ -54,15 +54,15 @@
     <div class="csv-output" id="csv-output" hidden>
       <div class="csv-output-head">
         <div class="csv-file-info"><span>File analizzato</span><strong id="csv-file-name"></strong><small id="csv-dimensions"></small></div>
-        <button class="secondary-action" id="download-work" type="button" disabled>Scarica la tabella riscalata</button>
+        <button class="secondary-action" id="download-work" type="button" disabled>Scarica l’anteprima trasformata</button>
       </div>
 
       <div class="scaling-wrap">
-        <h3>Riscalamento</h3>
-        <p>Tipo e metodo vengono suggeriti automaticamente confrontando anche la dispersione delle feature numeriche. Le scelte possono essere modificate e i valori mancanti restano mancanti.</p>
+        <h3>Diagnosi delle feature e trasformazioni candidate</h3>
+        <p>Questa analisi non determina ancora la matrice usata nel calcolo. Le trasformazioni sono candidate modificabili e saranno utilizzate soltanto dai percorsi che le richiedono; Gower, profili e altre famiglie possono partire dai valori originali.</p>
         <div class="data-table-wrap">
           <table class="data-table scaling-table">
-            <thead><tr><th>Feature</th><th>Tipo di dato</th><th>Metodo scelto</th><th>Parametri</th><th>Mancanti</th></tr></thead>
+            <thead><tr><th>Feature</th><th>Tipo di dato</th><th>Trasformazione candidata</th><th>Parametri</th><th>Mancanti</th></tr></thead>
             <tbody id="scaling-body"></tbody>
           </table>
         </div>
@@ -76,7 +76,7 @@
           </div>
           <div class="view-switch" aria-label="Scegli la tabella da visualizzare">
             <button id="view-original" type="button">Originale</button>
-            <button class="active" id="view-work" type="button">Di lavoro</button>
+            <button class="active" id="view-work" type="button">Trasformata (anteprima)</button>
           </div>
         </div>
         <div class="data-table-wrap">
@@ -299,8 +299,8 @@
 
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
-  <script defer src="js/preprocessing-python.js?v=20261028-8"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261028-9"></script>
+  <script defer src="js/preprocessing-python.js?v=20261029-1"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261029-1"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>
