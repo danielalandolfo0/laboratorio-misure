@@ -9,9 +9,10 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 - preprocessing Python eseguito localmente nel browser tramite Pyodide;
 - diagnosi preliminare delle scale e trasformazioni candidate tra nessuna, z-score, scala robusta, min–max e max-abs;
 - conservazione dei mancanti, segnalazione delle feature costanti e anteprima originale/trasformata;
-- anteprima ed esportazione della tabella trasformata, senza assumerne l’uso automatico nel calcolo;
+- anteprima ed esportazione della tabella trasformata, con uso esplicito nel percorso che la richiede;
 - piano di confronto che dichiara, per ogni percorso, origine dei dati, trasformazioni, politica sui mancanti e disponibilità del calcolo;
-- questionario quantitativo adattivo su confrontabilità delle scale, significato degli scarti, aggregazione, covarianza e pesi;
+- questionario quantitativo in linguaggio non tecnico: il sito diagnostica automaticamente scale, dispersioni, valori estremi e relazioni forti tra colonne, mentre all’utente chiede soltanto il significato dei dati e le priorità del confronto;
+- scelta consigliata disponibile quando l’utente non conosce la risposta, senza bloccare il piano;
 - registro decisionale verificato per Manhattan, Euclidea, Chebyshev, Minkowski, Minkowski pesata, euclidea standardizzata, Mahalanobis, Canberra, Bray–Curtis e χ² simmetrica;
 - famiglia di Minkowski: forma generale, Manhattan, Euclidea, Chebyshev, versione pesata ed Euclidea standardizzata;
 - Mahalanobis, Canberra, Bray–Curtis e χ² simmetrica;

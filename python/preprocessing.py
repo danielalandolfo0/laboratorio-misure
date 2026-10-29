@@ -795,7 +795,10 @@ REGISTRO_MISURE_NUMERICHE = {
 def _lista_numeri_positivi(testo: Any) -> list[float] | None:
     if not isinstance(testo, str) or not testo.strip():
         return None
-    parti = [parte.strip() for parte in re.split(r"[,;\s]+", testo) if parte.strip()]
+    if ";" in testo:
+        parti = [parte.strip().replace(",", ".") for parte in testo.split(";") if parte.strip()]
+    else:
+        parti = [parte.strip() for parte in re.split(r"[,\s]+", testo) if parte.strip()]
     try:
         valori = [float(parte) for parte in parti]
     except ValueError:
@@ -854,27 +857,50 @@ def _specifica_misura_numerica(
     parametri: dict[str, Any] = {}
     alternative: list[dict[str, str]] = []
     confronto = interpretazione.get("confrontoQuantitativo", "")
-    scale = interpretazione.get("comparabilitaScale", "")
+    scale = interpretazione.get("comparabilitaScale", "")  # compatibilità con risposte salvate
+    tipo_quantita = interpretazione.get("tipoQuantita", "")
     politica_preelaborazione = "originale"
 
-    if scale in {"", "ignoto"}:
-        avvisi.append("Indica se le quantità siano già confrontabili sulla stessa scala.")
-        stato = "da_completare"
+    metodi_automatici = {
+        analisi_per_nome[nome].get("metodo", "nessuno")
+        for nome in nomi
+    }
+    riscalamento_rilevato = bool(
+        metodi_automatici & {"zscore", "robusto", "maxabs", "minmax"}
+    )
+
+    # Le vecchie risposte restano interpretabili; nel nuovo flusso il sito decide
+    # automaticamente quando le dispersioni sono chiaramente differenti.
+    if confronto in {"relativo", "abbondanza", "frequenze"}:
+        politica_preelaborazione = "originale"
     elif scale == "diverse":
         gestione = interpretazione.get("gestioneScale", "")
         if gestione in {"", "ignoto"}:
-            avvisi.append("Scegli se trasformare le colonne o standardizzare dentro la distanza.")
-            stato = "da_completare"
+            politica_preelaborazione = "trasformazioni_candidate"
         elif gestione == "trasforma":
             politica_preelaborazione = "trasformazioni_candidate"
         else:
             politica_preelaborazione = "standardizzazione_interna"
     elif scale == "limitate":
         politica_preelaborazione = "minmax"
+    elif scale == "comparabili":
+        politica_preelaborazione = "originale"
+    elif riscalamento_rilevato:
+        politica_preelaborazione = "trasformazioni_candidate"
+    elif tipo_quantita == "stesso":
+        politica_preelaborazione = "originale"
+    elif tipo_quantita in {"diverse", "ignoto"} or confronto == "ignoto":
+        politica_preelaborazione = "zscore_prudenziale"
+    else:
+        avvisi.append(
+            "Indica se le colonne misurano lo stesso tipo di quantità; "
+            "questa informazione non può essere ricavata con certezza dai soli numeri."
+        )
+        stato = "da_completare"
 
     minimi = [analisi_per_nome[nome].get("statistiche", {}).get("minimo") for nome in nomi]
     non_negative = all(valore is not None and valore >= 0 for valore in minimi)
-    if confronto in {"", "ignoto"}:
+    if confronto == "":
         id_misura = "euclidean"
         avvisi.append("Indica quale tipo di differenza debba definire la dissimilarità.")
         stato = "da_completare"
@@ -884,10 +910,10 @@ def _specifica_misura_numerica(
         if not non_negative:
             avvisi.append("Il percorso relativo richiede quantità non negative in questa guida decisionale.")
             stato = "da_completare"
-        if interpretazione.get("valoriVicinoZero") in {"", "ignoto"}:
+        if interpretazione.get("valoriVicinoZero") == "":
             avvisi.append("Indica se valori nulli o prossimi a zero siano frequenti.")
             stato = "da_completare"
-        elif interpretazione.get("valoriVicinoZero") == "si":
+        elif interpretazione.get("valoriVicinoZero") in {"si", "ignoto"}:
             avvisi.append("Canberra può far dominare le componenti piccole: verifica che questo effetto sia desiderato.")
         alternative.append({
             "id": "bray_curtis", "nome": REGISTRO_MISURE_NUMERICHE["bray_curtis"]["nome"],
@@ -921,9 +947,15 @@ def _specifica_misura_numerica(
             "massimo": "chebyshev",
             "minkowski": "minkowski",
         }
+        if aggregazione == "ignoto" or confronto == "ignoto":
+            ha_estremi = any(
+                analisi_per_nome[nome].get("statistiche", {}).get("estremi", 0) > 0
+                for nome in nomi
+            )
+            aggregazione = "lineare" if ha_estremi else "quadratica"
         id_misura = mappa.get(aggregazione, "euclidean")
-        if aggregazione in {"", "ignoto"}:
-            avvisi.append("Indica come debbano essere aggregati gli scarti delle coordinate.")
+        if aggregazione == "":
+            avvisi.append("Indica che cosa debba rendere due righe molto diverse.")
             stato = "da_completare"
         if aggregazione == "minkowski":
             try:
@@ -936,11 +968,8 @@ def _specifica_misura_numerica(
             else:
                 parametri["q"] = q
 
-        dipendenza = interpretazione.get("dipendenzaCoordinate", "") if len(nomi) >= 2 else "no"
-        if dipendenza in {"", "ignoto"}:
-            avvisi.append("Indica se la correlazione tra le variabili debba influire sul confronto.")
-            stato = "da_completare"
-        elif dipendenza == "si":
+        dipendenza = interpretazione.get("dipendenzaCoordinate", "no") if len(nomi) >= 2 else "no"
+        if dipendenza == "si":
             id_misura = "mahalanobis"
             politica_preelaborazione = "originale"
             if numero_istanze <= len(nomi) or not _covarianza_empirica_invertibile(nomi, analisi_per_nome):
@@ -950,11 +979,8 @@ def _specifica_misura_numerica(
                 )
                 stato = "da_completare"
 
-        importanza = interpretazione.get("importanzaCoordinate", "") if len(nomi) >= 2 else "uguale"
-        if importanza in {"", "ignoto"}:
-            avvisi.append("Indica se le variabili abbiano la stessa importanza.")
-            stato = "da_completare"
-        elif importanza == "diversa" and id_misura != "mahalanobis":
+        importanza = interpretazione.get("importanzaCoordinate", "uguale") if len(nomi) >= 2 else "uguale"
+        if importanza == "diversa" and id_misura != "mahalanobis":
             pesi = _lista_numeri_positivi(interpretazione.get("pesiQuantitativi"))
             if pesi is None or len(pesi) != len(nomi):
                 avvisi.append(f"Inserisci esattamente {len(nomi)} pesi strettamente positivi.")
@@ -1100,8 +1126,16 @@ def _completa_specifica_percorso(
             )
         elif politica == "trasformazioni_candidate":
             preelaborazione = _preelaborazione_numerica(nomi, analisi_per_nome)
+        elif politica == "zscore_prudenziale":
+            preelaborazione = _preelaborazione_numerica(nomi, analisi_per_nome, "zscore")
+            preelaborazione["descrizione"] = (
+                "Le colonne misurano quantità diverse o il loro significato non è noto con certezza. "
+                "Sono quindi riequilibrate con lo z-score, così nessuna prevale soltanto perché usa numeri più grandi."
+            )
         else:
-            preelaborazione = _preelaborazione_originale("Le quantità sono già confrontabili.")
+            preelaborazione = _preelaborazione_originale(
+                "Il sito non ha rilevato differenze di scala che richiedano un riequilibrio."
+            )
     elif tipo == "gower":
         preelaborazione = _preelaborazione_originale(
             "Gower parte dai valori originali e costruisce internamente contributi "

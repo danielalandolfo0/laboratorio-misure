@@ -167,6 +167,31 @@
     </div>`;
   }
 
+  function notaAutomatica(titolo, testo) {
+    return `<div class="question-item automatic-note">
+      <strong>${escapeHtml(titolo)}</strong>
+      <p>${escapeHtml(testo)}</p>
+    </div>`;
+  }
+
+  function haCorrelazioniForti(profili) {
+    const colonne = profili.map(profilo => risultato.colonne.find(colonna => colonna.nome === profilo.nome));
+    for (let i = 0; i < colonne.length; i += 1) {
+      for (let j = i + 1; j < colonne.length; j += 1) {
+        const coppie = (colonne[i]?.valoriNumerici || []).map((x, indice) => [x, colonne[j]?.valoriNumerici?.[indice]])
+          .filter(([x, y]) => typeof x === "number" && typeof y === "number");
+        if (coppie.length < 4) continue;
+        const mediaX = coppie.reduce((somma, [x]) => somma + x, 0) / coppie.length;
+        const mediaY = coppie.reduce((somma, [, y]) => somma + y, 0) / coppie.length;
+        const numeratore = coppie.reduce((somma, [x, y]) => somma + (x - mediaX) * (y - mediaY), 0);
+        const scalaX = Math.sqrt(coppie.reduce((somma, [x]) => somma + (x - mediaX) ** 2, 0));
+        const scalaY = Math.sqrt(coppie.reduce((somma, [, y]) => somma + (y - mediaY) ** 2, 0));
+        if (scalaX > 0 && scalaY > 0 && Math.abs(numeratore / (scalaX * scalaY)) >= 0.8) return true;
+      }
+    }
+    return false;
+  }
+
   function nascondiPiano() {
     $("comparison-plan").hidden = true;
     $("gower-actions").hidden = true;
@@ -421,52 +446,64 @@
     });
     if (percorsoNumerico) {
       domande.push(domandaAdattiva(
-        "comparabilitaScale", "Le quantità sono già confrontabili sulla stessa scala?",
-        "La risposta stabilisce se mantenere i valori originali oppure applicare una trasformazione specifica al percorso.",
-        [["comparabili", "Sì, uno stesso scarto ha significato comparabile"], ["diverse", "No, unità o dispersioni sono diverse"], ["limitate", "Hanno intervalli significativi e conta la posizione relativa"], ["ignoto", "Non lo so"]]
+        "confrontoQuantitativo", "Che cosa rappresentano insieme questi numeri?",
+        "Questa informazione serve a distinguere misure ordinarie, abbondanze e frequenze. Non occorre conoscere i nomi delle distanze.",
+        [["assoluto", "Caratteristiche misurate per ogni riga"], ["abbondanza", "Abbondanze o conteggi, come specie o eventi"], ["frequenze", "Frequenze, dove anche le componenti rare sono importanti"], ["relativo", "Valori per cui conta soprattutto la differenza in proporzione"], ["ignoto", "Non lo so — usa la scelta consigliata"]]
       ));
-      domande.push(domandaAdattiva(
-        "confrontoQuantitativo", "Quale tipo di differenza deve definire la dissimilarità?",
-        "Questa è la scelta principale tra distanze sulle coordinate e confronti relativi per dati non negativi.",
-        [["assoluto", "Scarti tra le coordinate"], ["relativo", "Scarti relativi alla grandezza dei valori"], ["abbondanza", "Differenza complessiva tra abbondanze o conteggi"], ["frequenze", "Differenze tra profili di frequenza, dando rilievo alle componenti rare"], ["ignoto", "Non lo so"]]
+
+      const confronto = valoreRisposta("confrontoQuantitativo");
+      if (confronto === "ignoto") domande.push(notaAutomatica(
+        "Scelta consigliata automatica",
+        "Il sito riequilibrerà le colonne per prudenza, assegnerà loro la stessa importanza e sceglierà una misura poco sensibile ai valori estremi quando necessario."
       ));
-      if (valoreRisposta("comparabilitaScale") === "diverse") domande.push(domandaAdattiva(
-        "gestioneScale", "Come devono essere rese confrontabili le scale?",
-        "La standardizzazione può essere applicata ai dati prima del confronto oppure incorporata nella distanza euclidea.",
-        [["trasforma", "Trasforma prima le colonne"], ["interna", "Mantieni i valori e standardizza nella distanza"], ["ignoto", "Non lo so"]]
-      ));
-      if (valoreRisposta("confrontoQuantitativo") === "assoluto") {
+      if (confronto === "assoluto") {
+        const riscalamentoAutomatico = indipendentiStandard.some(profilo => {
+          const colonna = risultato.colonne.find(elemento => elemento.nome === profilo.nome);
+          return ["zscore", "robusto", "maxabs", "minmax"].includes(colonna?.metodo);
+        });
+        if (riscalamentoAutomatico) {
+          domande.push(notaAutomatica(
+            "Riequilibrio automatico delle colonne",
+            "Il sito ha rilevato scale, dispersioni o valori estremi che renderebbero dominante almeno una colonna. Applicherà automaticamente il riscalamento più adatto e userà quei valori nel confronto finale."
+          ));
+        } else {
+          domande.push(domandaAdattiva(
+            "tipoQuantita", "Le colonne misurano lo stesso tipo di quantità?",
+            "Per esempio, più misure espresse tutte in centimetri sono dello stesso tipo; età, reddito e pressione sono quantità diverse.",
+            [["stesso", "Sì, misurano lo stesso tipo di quantità"], ["diverse", "No, misurano quantità diverse"], ["ignoto", "Non lo so — riequilibrale per prudenza"]]
+          ));
+        }
         domande.push(domandaAdattiva(
-          "aggregazioneScarti", "Come devono essere aggregati gli scarti delle coordinate?",
-          "La scelta determina la geometria del confronto.",
-          [["lineare", "Somma degli scarti: Manhattan"], ["quadratica", "Scarti grandi più influenti: Euclidea"], ["massimo", "Conta soprattutto lo scarto massimo: Chebyshev"], ["minkowski", "Usa un esponente q personalizzato"], ["ignoto", "Non lo so"]]
+          "aggregazioneScarti", "Quando due righe devono essere considerate molto diverse?",
+          "Scegli l'effetto che vuoi ottenere; il sito tradurrà la risposta nella misura matematica adatta.",
+          [["lineare", "Quando differiscono in molte caratteristiche, anche di poco"], ["quadratica", "Quando presentano alcune differenze grandi"], ["massimo", "Quando basta una sola differenza molto grande"], ["minkowski", "Voglio impostare manualmente la sensibilità (avanzato)"], ["ignoto", "Non lo so — usa la scelta consigliata"]]
         ));
         if (valoreRisposta("aggregazioneScarti") === "minkowski") domande.push(domandaInput(
-          "ordineMinkowski", "Quale esponente q deve essere usato?",
-          "Per ottenere una metrica occorre q ≥ 1.", "Per esempio 3", "number"
+          "ordineMinkowski", "Sensibilità personalizzata q",
+          "Questa è un'impostazione avanzata. Inserisci un numero almeno pari a 1; valori maggiori danno più peso alle differenze grandi.", "Per esempio 3", "number"
         ));
-        if (indipendentiStandard.length >= 2) domande.push(domandaAdattiva(
-          "dipendenzaCoordinate", "Le correlazioni tra le variabili devono influire sul confronto?",
-          "Se sì, verrà valutata Mahalanobis; servono abbastanza osservazioni e una matrice di covarianza invertibile.",
-          [["no", "No, confronta le coordinate separatamente"], ["si", "Sì, considera la struttura di covarianza"], ["ignoto", "Non lo so"]]
+        if (indipendentiStandard.length >= 2 && haCorrelazioniForti(indipendentiStandard)) domande.push(domandaAdattiva(
+          "dipendenzaCoordinate", "Alcune colonne tendono a variare insieme. Vuoi evitare che informazioni simili contino più volte?",
+          "Il sito ha rilevato una forte relazione numerica tra almeno due colonne. L'opzione sì usa un confronto che tiene conto di queste relazioni.",
+          [["si", "Sì, evita di contare più volte la stessa informazione"], ["no", "No, considera ogni colonna separatamente"], ["ignoto", "Non lo so — considera le colonne separatamente"]]
         ));
         if (indipendentiStandard.length >= 2) {
           domande.push(domandaAdattiva(
-            "importanzaCoordinate", "Le variabili hanno la stessa importanza?",
-            "Pesi diversi conducono a una distanza di Minkowski pesata.",
-            [["uguale", "Sì, stessa importanza"], ["diversa", "No, voglio specificare pesi diversi"], ["ignoto", "Non lo so"]]
+            "importanzaCoordinate", "Alcune caratteristiche devono contare più delle altre?",
+            "Se non hai indicazioni specifiche, il sito assegna la stessa importanza a tutte.",
+            [["uguale", "No, devono contare allo stesso modo"], ["diversa", "Sì, voglio assegnare importanze diverse"], ["ignoto", "Non lo so — assegna la stessa importanza"]]
           ));
           if (valoreRisposta("importanzaCoordinate") === "diversa") domande.push(domandaInput(
-            "pesiQuantitativi", "Inserisci un peso positivo per ogni variabile",
-            `Ordine delle variabili: ${indipendentiStandard.map(profilo => escapeHtml(profilo.nome)).join(", ")}.`,
-            "Per esempio 1, 2, 0.5"
+            "pesiQuantitativi", "Quanto deve contare ciascuna caratteristica?",
+            `Inserisci un numero positivo per ogni colonna, nell'ordine: ${indipendentiStandard.map(profilo => escapeHtml(profilo.nome)).join(", ")}. Un valore doppio indica un'importanza doppia.`,
+            "Per esempio 1; 2; 0,5"
           ));
         }
       }
-      if (valoreRisposta("confrontoQuantitativo") === "relativo") domande.push(domandaAdattiva(
-        "valoriVicinoZero", "I valori nulli o molto vicini a zero sono frequenti?",
-        "Canberra enfatizza fortemente le differenze relative vicino allo zero.",
-        [["no", "No, non sono frequenti"], ["si", "Sì, sono frequenti e significativi"], ["ignoto", "Non lo so"]]
+      if (confronto === "relativo") domande.push(domandaAdattiva(
+        "valoriVicinoZero", "Ci sono spesso valori uguali o molto vicini a zero?",
+        "Quando si confrontano differenze in proporzione, valori molto piccoli possono avere un peso elevato.",
+        [["no", "No, accade raramente"], ["si", "Sì, e questi valori sono significativi"], ["ignoto", "Non lo so — mostrami un avviso nel risultato"]]
       ));
     }
     interpretazione.gruppi.forEach(gruppo => {

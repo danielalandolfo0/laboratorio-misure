@@ -14,7 +14,7 @@
     const pyodide = await loadPyodide({
       indexURL: "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/"
     });
-    const risposta = await fetch("python/preprocessing.py?v=20261029-2", { cache: "no-cache" });
+    const risposta = await fetch("python/preprocessing.py?v=20261029-3", { cache: "no-cache" });
     if (!risposta.ok) throw new Error("Non è stato possibile caricare il modulo Python di preprocessing.");
     await pyodide.runPythonAsync(await risposta.text());
     analizzaCsvPython = pyodide.globals.get("analizza_csv_json");

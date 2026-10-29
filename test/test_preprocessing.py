@@ -122,6 +122,58 @@ assert scale_simili["trasformate"] == [[1, 10], [2, 11], [3, 12]]
 scale_diverse = p.prepara_tabella(p.leggi_csv("a,b\n1,100\n2,200\n3,300"))
 assert [colonna["metodo"] for colonna in scale_diverse["colonne"]] == ["zscore", "zscore"]
 
+# Nel nuovo flusso le differenze numeriche evidenti sono gestite senza chiedere
+# all'utente di conoscere il concetto di scala statistica.
+risposte_accessibili = {
+    "riga": "oggetto",
+    "confrontoQuantitativo": "assoluto",
+    "aggregazioneScarti": "quadratica",
+    "importanzaCoordinate": "ignoto",
+    "colonne": {
+        "a": {"ruolo": "quantita", "usa": True},
+        "b": {"ruolo": "quantita", "usa": True},
+    },
+}
+piano_scale_automatiche = p.crea_piano_confronto(scale_diverse, risposte_accessibili)
+assert piano_scale_automatiche["completo"] is True
+assert piano_scale_automatiche["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"] is True
+assert [
+    passo["metodo"]
+    for passo in piano_scale_automatiche["percorsi"][0]["preelaborazione"]["passi"]
+] == ["zscore", "zscore"]
+
+# Se le dispersioni sembrano simili ma le colonne hanno significati diversi,
+# la risposta semantica attiva comunque un riequilibrio prudenziale.
+piano_quantita_diverse = p.crea_piano_confronto(
+    scale_simili,
+    {**risposte_accessibili, "tipoQuantita": "diverse"},
+)
+assert piano_quantita_diverse["completo"] is True
+assert [
+    passo["metodo"]
+    for passo in piano_quantita_diverse["percorsi"][0]["preelaborazione"]["passi"]
+] == ["zscore", "zscore"]
+
+piano_scelta_consigliata = p.crea_piano_confronto(
+    scale_simili,
+    {
+        **risposte_accessibili,
+        "confrontoQuantitativo": "ignoto",
+        "aggregazioneScarti": "ignoto",
+    },
+)
+assert piano_scelta_consigliata["completo"] is True
+assert piano_scelta_consigliata["percorsi"][0]["idMisura"] == "euclidean"
+assert piano_scelta_consigliata["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"] is True
+
+piano_abbondanze_accessibile = p.crea_piano_confronto(
+    scale_simili,
+    {**risposte_accessibili, "confrontoQuantitativo": "abbondanza"},
+)
+assert piano_abbondanze_accessibile["completo"] is True
+assert piano_abbondanze_accessibile["percorsi"][0]["idMisura"] == "bray_curtis"
+assert piano_abbondanze_accessibile["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"] is False
+
 una_numerica = p.prepara_tabella(p.leggi_csv("a,gruppo\n1,x\n2,y\n3,z"))
 assert una_numerica["colonne"][0]["metodo"] == "nessuno"
 assert "Non ci sono altre feature numeriche" in una_numerica["colonne"][0]["motivo"]
@@ -307,6 +359,13 @@ pesata = misura_da(
 )
 assert pesata["idMisura"] == "weighted_minkowski"
 assert pesata["parametri"] == {"pesi": [1.0, 2.0], "q": 2}
+
+pesata_decimali_italiani = misura_da(
+    aggregazioneScarti="quadratica",
+    importanzaCoordinate="diversa",
+    pesiQuantitativi="1; 2,5",
+)
+assert pesata_decimali_italiani["parametri"] == {"pesi": [1.0, 2.5], "q": 2}
 
 standardizzata = misura_da(
     comparabilitaScale="diverse",
