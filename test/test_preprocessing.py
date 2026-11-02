@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 import pathlib
 import sys
 
@@ -200,6 +201,11 @@ def risposte_automatiche(nomi):
     }
 
 
+def carica_fixture(nome):
+    percorso = Path(__file__).resolve().parents[1] / "examples" / "collaudo" / nome
+    return p.prepara_tabella(p.leggi_csv(percorso.read_text(encoding="utf-8")))
+
+
 dati_debolmente_correlati = p.prepara_tabella(p.leggi_csv(
     "a,b\n1,8\n2,1\n3,6\n4,3\n5,9\n6,2\n7,7\n8,4\n9,5\n10,10"
 ))
@@ -252,6 +258,50 @@ piano_misto_auto = p.crea_piano_confronto(
 assert piano_misto_auto["diagnosi"]["famigliaId"] == "misto"
 assert piano_misto_auto["diagnosi"]["proposta"]["idMisura"] == "gower_classica"
 assert piano_misto_auto["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"] is False
+
+# I CSV distribuiti con il sito coprono stabilmente i sei rami principali.
+fixture_ordinaria = carica_fixture("01_numerici_ordinari.csv")
+fixture_outlier = carica_fixture("02_numerici_outlier.csv")
+fixture_correlata = carica_fixture("03_numerici_correlati.csv")
+fixture_singolare = carica_fixture("04_numerici_covarianza_singolare.csv")
+fixture_sparsa = carica_fixture("05_numerici_sparsi.csv")
+fixture_mista = carica_fixture("06_dati_misti.csv")
+
+assert p.crea_piano_confronto(
+    fixture_ordinaria, risposte_automatiche(["a", "b"])
+)["diagnosi"]["proposta"]["idMisura"] == "euclidean"
+
+piano_fixture_outlier = p.crea_piano_confronto(
+    fixture_outlier,
+    {**risposte_automatiche(["a", "b"]), "significatoEstremi": "reali"},
+)
+assert piano_fixture_outlier["diagnosi"]["proposta"]["idMisura"] == "manhattan"
+assert {
+    passo["metodo"] for passo in piano_fixture_outlier["percorsi"][0]["preelaborazione"]["passi"]
+} == {"robusto"}
+
+assert p.crea_piano_confronto(
+    fixture_correlata, risposte_automatiche(["a", "b"])
+)["diagnosi"]["proposta"]["idMisura"] == "mahalanobis"
+
+piano_fixture_singolare = p.crea_piano_confronto(
+    fixture_singolare, risposte_automatiche(["a", "b"])
+)
+assert piano_fixture_singolare["diagnosi"]["indicatori"]["covarianzaUtilizzabile"] is False
+assert piano_fixture_singolare["diagnosi"]["proposta"]["idMisura"] == "euclidean"
+
+piano_fixture_sparsa = p.crea_piano_confronto(
+    fixture_sparsa, risposte_automatiche(["x", "y"])
+)
+assert piano_fixture_sparsa["diagnosi"]["indicatori"]["matriceSparsa"] is True
+assert piano_fixture_sparsa["diagnosi"]["proposta"]["politicaPreelaborazione"] == "maxabs_automatico"
+
+piano_fixture_mista = p.crea_piano_confronto(
+    fixture_mista, {"riga": "persona", "colonne": {}}
+)
+assert piano_fixture_mista["diagnosi"]["famigliaId"] == "misto"
+assert piano_fixture_mista["diagnosi"]["proposta"]["idMisura"] == "gower_classica"
+assert piano_fixture_mista["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"] is False
 
 una_numerica = p.prepara_tabella(p.leggi_csv("a,gruppo\n1,x\n2,y\n3,z"))
 assert una_numerica["colonne"][0]["metodo"] == "zscore"

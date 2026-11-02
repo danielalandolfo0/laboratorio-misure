@@ -42,6 +42,7 @@ laboratorio-misure/
 ├── js/preprocessing-ui.js  interfaccia della preparazione dei dati
 ├── js/misure.js            formule e controlli matematici
 ├── js/interfaccia.js       comportamento dell'interfaccia
+├── examples/collaudo/      CSV controllati per i rami decisionali principali
 ├── test/test-misure.js     test automatici
 ├── test/test_preprocessing.py test del modulo Python per i CSV
 └── package.json            comando per eseguire i test
@@ -72,6 +73,11 @@ esegui:
 npm test
 ```
 
+I sei file in `examples/collaudo/` verificano rispettivamente il percorso
+euclideo ordinario, la combinazione scala robusta–Manhattan, Mahalanobis,
+il ripiego euclideo per covarianza singolare, max-abs per dati sparsi e Gower
+per dati misti. Gli stessi casi sono inclusi nei test automatici.
+
 ## Come contribuire
 
 1. Modifica i file direttamente su GitHub oppure sul tuo computer.
@@ -79,9 +85,7 @@ npm test
 3. Per modifiche alle formule, aggiorna anche `test/test-misure.js`.
 4. Descrivi chiaramente nel messaggio di commit cosa hai cambiato.
 
-La tabella trasformata è un’anteprima diagnostica. Il piano di confronto
-stabilisce esplicitamente se un percorso debba usarla oppure partire dai valori
-originali. Per esempio, Gower applica il proprio riscalamento ai valori
-originali, mentre un percorso numerico può usare trasformazioni specifiche per
-le colonne selezionate.
+La tabella trasformata compare soltanto dopo la conferma di un piano interamente
+numerico. Nei percorsi misti rimane visibile soltanto la tabella originale:
+Gower applica internamente il proprio riscalamento ai valori originali.
 
