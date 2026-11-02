@@ -291,17 +291,61 @@ assert piano_fixture_singolare["diagnosi"]["indicatori"]["covarianzaUtilizzabile
 assert piano_fixture_singolare["diagnosi"]["proposta"]["idMisura"] == "euclidean"
 
 piano_fixture_sparsa = p.crea_piano_confronto(
-    fixture_sparsa, risposte_automatiche(["x", "y"])
+    fixture_sparsa,
+    {**risposte_automatiche(["x", "y"]), "significatoEstremi": "reali"},
 )
 assert piano_fixture_sparsa["diagnosi"]["indicatori"]["matriceSparsa"] is True
 assert piano_fixture_sparsa["diagnosi"]["proposta"]["politicaPreelaborazione"] == "maxabs_automatico"
 
 piano_fixture_mista = p.crea_piano_confronto(
-    fixture_mista, {"riga": "persona", "colonne": {}}
+    fixture_mista, {"riga": "persona", "zeriCondivisi": "si", "colonne": {}}
 )
 assert piano_fixture_mista["diagnosi"]["famigliaId"] == "misto"
 assert piano_fixture_mista["diagnosi"]["proposta"]["idMisura"] == "gower_classica"
 assert piano_fixture_mista["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"] is False
+
+def verifica_matrice_finale(risultato_matrice, dimensione):
+    matrice = risultato_matrice["matrice"]
+    assert len(matrice) == dimensione
+    assert all(len(riga) == dimensione for riga in matrice)
+    assert all(matrice[i][i] == 0 for i in range(dimensione))
+    for i in range(dimensione):
+        for j in range(dimensione):
+            assert matrice[i][j] == matrice[j][i]
+            assert matrice[i][j] is None or math.isfinite(matrice[i][j])
+
+
+matrici_fixture = [
+    p.calcola_matrice_numerica(fixture_ordinaria, risposte_automatiche(["a", "b"])),
+    p.calcola_matrice_numerica(
+        fixture_outlier,
+        {**risposte_automatiche(["a", "b"]), "significatoEstremi": "reali"},
+    ),
+    p.calcola_matrice_numerica(fixture_correlata, risposte_automatiche(["a", "b"])),
+    p.calcola_matrice_numerica(fixture_singolare, risposte_automatiche(["a", "b"])),
+    p.calcola_matrice_numerica(
+        fixture_sparsa,
+        {**risposte_automatiche(["x", "y"]), "significatoEstremi": "reali"},
+    ),
+    p.calcola_matrice_gower(
+        fixture_mista,
+        {"riga": "persona", "zeriCondivisi": "si", "colonne": {}},
+    ),
+]
+metodi_fixture = [
+    "Distanza euclidea",
+    "Distanza di Manhattan",
+    "Distanza di Mahalanobis",
+    "Distanza euclidea",
+    "Distanza euclidea",
+    "Dissimilarità di Gower classica",
+]
+dimensioni_fixture = [10, 8, 12, 12, 10, 8]
+for risultato_matrice, metodo, dimensione in zip(
+    matrici_fixture, metodi_fixture, dimensioni_fixture
+):
+    assert risultato_matrice["metodo"] == metodo
+    verifica_matrice_finale(risultato_matrice, dimensione)
 
 una_numerica = p.prepara_tabella(p.leggi_csv("a,gruppo\n1,x\n2,y\n3,z"))
 assert una_numerica["colonne"][0]["metodo"] == "zscore"
