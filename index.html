@@ -54,12 +54,12 @@
     <div class="csv-output" id="csv-output" hidden>
       <div class="csv-output-head">
         <div class="csv-file-info"><span>File analizzato</span><strong id="csv-file-name"></strong><small id="csv-dimensions"></small></div>
-        <button class="secondary-action" id="download-work" type="button" disabled>Scarica l’anteprima trasformata</button>
+        <button class="secondary-action" id="download-work" type="button" disabled hidden>Scarica la tabella trasformata</button>
       </div>
 
-      <div class="scaling-wrap" id="scaling-wrap">
-        <h3>Diagnosi delle feature e trasformazioni candidate</h3>
-        <p>Questa analisi non determina ancora la matrice usata nel calcolo. Le trasformazioni sono candidate modificabili e saranno utilizzate soltanto dai percorsi che le richiedono; Gower, profili e altre famiglie possono partire dai valori originali.</p>
+      <div class="scaling-wrap" id="scaling-wrap" hidden>
+        <h3>Riscalamento confermato</h3>
+        <p>Queste sono le trasformazioni utilizzate dal percorso numerico scelto. Se modifichi una voce, dovrai confermare nuovamente il piano prima di visualizzare la tabella trasformata.</p>
         <div class="data-table-wrap">
           <table class="data-table scaling-table">
             <thead><tr><th>Feature</th><th>Tipo di dato</th><th>Trasformazione candidata</th><th>Parametri</th><th>Mancanti</th></tr></thead>
@@ -74,9 +74,9 @@
             <h3>Anteprima della tabella</h3>
             <p id="preview-caption"></p>
           </div>
-          <div class="view-switch" aria-label="Scegli la tabella da visualizzare">
+          <div class="view-switch" id="preview-view-switch" aria-label="Scegli la tabella da visualizzare" hidden>
             <button id="view-original" type="button">Originale</button>
-            <button class="active" id="view-work" type="button">Trasformata (anteprima)</button>
+            <button class="active" id="view-work" type="button">Trasformata</button>
           </div>
         </div>
         <div class="data-table-wrap">
@@ -136,7 +136,7 @@
         <div class="adaptive-questions" id="adaptive-questions"></div>
 
         <div class="comparison-plan-actions">
-          <button class="action plan-action" id="prepare-comparison-plan" type="button">Prepara il piano di confronto</button>
+          <button class="action plan-action" id="prepare-comparison-plan" type="button">Conferma scelte e prepara il piano</button>
         </div>
 
         <section class="comparison-plan" id="comparison-plan" aria-labelledby="comparison-plan-title" hidden>
@@ -300,8 +300,8 @@
 
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
-  <script defer src="js/preprocessing-python.js?v=20261102-1"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261102-1"></script>
+  <script defer src="js/preprocessing-python.js?v=20261102-2"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261102-2"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>

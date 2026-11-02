@@ -116,8 +116,8 @@
       `<tr>${riga.slice(0, limiteColonne).map(valore => `<td>${escapeHtml(formatoNumero(valore))}</td>`).join("")}</tr>`
     ).join("");
     const origine = vista === "originale"
-      ? "Valori originali: sono la base dei percorsi che non richiedono trasformazioni."
-      : "Anteprima diagnostica: non viene usata automaticamente da tutti i percorsi.";
+      ? "Valori originali."
+      : "Valori trasformati secondo il riscalamento confermato nel piano di confronto.";
     $("preview-caption").textContent = `${origine} ${limiteRighe} di ${righe.length} righe${limiteColonne < risultato.originale.intestazioni.length ? ` e ${limiteColonne} di ${risultato.originale.intestazioni.length} colonne` : ""}.`;
     $("view-original").classList.toggle("active", vista === "originale");
     $("view-work").classList.toggle("active", vista === "lavoro");
@@ -181,6 +181,29 @@
     $("gower-result").hidden = true;
     pianoCorrente = null;
     matriceCorrente = null;
+    aggiornaVisibilitaTrasformazione(null);
+  }
+
+  function tabellaInteramenteNumerica() {
+    return Boolean(risultato) && risultato.colonne.length > 0 && risultato.colonne.every(colonna =>
+      colonna.tipo === "numerica" || colonna.tipo === "numerica_costante"
+    );
+  }
+
+  function aggiornaVisibilitaTrasformazione(piano) {
+    const confermata = Boolean(
+      piano
+      && piano.completo
+      && piano.diagnosi?.famigliaId === "quantitativo"
+      && tabellaInteramenteNumerica()
+    );
+    $("scaling-wrap").hidden = !confermata;
+    $("preview-view-switch").hidden = !confermata;
+    $("download-work").hidden = !confermata;
+    $("download-work").disabled = !confermata;
+    if (!confermata) vista = "originale";
+    else vista = "lavoro";
+    if (risultato) disegnaTabella();
   }
 
   function disegnaDiagnosi(diagnosi, completo) {
@@ -303,6 +326,7 @@
       $("calculate-gower").textContent = "Calcola la matrice finale";
     }
     $("comparison-plan").hidden = false;
+    aggiornaVisibilitaTrasformazione(piano);
   }
 
   function disegnaMatrice(risposta) {
@@ -414,22 +438,6 @@
     }).join("");
   }
 
-  function aggiornaAnteprimaPercorso(profiliInclusi) {
-    const indipendenti = profiliInclusi.filter(profilo => !interpretazione.assegnazioni[profilo.nome]);
-    const soloQuantitative = indipendenti.length > 0
-      && indipendenti.length === profiliInclusi.length
-      && indipendenti.every(profilo => {
-        const colonna = risultato.colonne.find(elemento => elemento.nome === profilo.nome);
-        return interpretazione.colonne[profilo.nome].ruolo === "quantita"
-          && ["numerica", "numerica_costante"].includes(colonna?.tipo);
-      });
-    $("scaling-wrap").hidden = !soloQuantitative;
-    $("view-work").hidden = !soloQuantitative;
-    $("download-work").hidden = !soloQuantitative;
-    if (!soloQuantitative && vista !== "originale") vista = "originale";
-    disegnaTabella();
-  }
-
   function disegnaQuestionario() {
     nascondiPiano();
     const profili = risultato.questionario.colonne;
@@ -452,7 +460,6 @@
     disegnaGruppi();
 
     const profiliInclusi = profili.filter(profilo => interpretazione.colonne[profilo.nome]?.usa);
-    aggiornaAnteprimaPercorso(profiliInclusi);
     const nomiInclusi = new Set(profiliInclusi.map(profilo => profilo.nome));
     const colonneIncluse = risultato.colonne.filter(colonna => nomiInclusi.has(colonna.nome));
     const ruoliInclusi = new Set(profiliInclusi.map(profilo => interpretazione.colonne[profilo.nome].ruolo));
@@ -566,9 +573,9 @@
     $("csv-file-name").textContent = nomeFile;
     $("csv-dimensions").textContent = `Matrice ${risultato.riepilogo.istanze} × ${risultato.riepilogo.feature} (istanze × feature)`;
     $("csv-output").hidden = false;
-    $("download-work").disabled = false;
     disegnaMetodi();
-    vista = "lavoro";
+    vista = "originale";
+    aggiornaVisibilitaTrasformazione(null);
     disegnaTabella();
     disegnaQuestionario();
   }
