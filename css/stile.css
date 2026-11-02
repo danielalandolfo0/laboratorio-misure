@@ -169,6 +169,7 @@ header p {
 .method-reason[hidden] { display: none; }
 .preview-toolbar { align-items: end; }
 .view-switch { display: flex; padding: 3px; background: rgba(111, 124, 148, .11); border-radius: 12px; }
+.view-switch[hidden] { display: none; }
 .view-switch button { padding: 7px 10px; color: var(--muted); background: transparent; border: 0; border-radius: 9px; cursor: pointer; font-size: .75rem; font-weight: 700; }
 .view-switch button.active { color: var(--blue-dark); background: white; box-shadow: 0 3px 10px rgba(58, 78, 114, .10); }
 .preview-table { min-width: max-content; }
