@@ -7,11 +7,14 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 - caricamento locale di tabelle CSV con intestazione;
 - riconoscimento di feature numeriche, binarie e non numeriche;
 - preprocessing Python eseguito localmente nel browser tramite Pyodide;
-- diagnosi preliminare delle scale e trasformazioni candidate tra nessuna, z-score, scala robusta, min–max e max-abs;
+- motore decisionale che distingue quantità numeriche indipendenti, dati misti e percorsi specializzati;
+- diagnosi automatica di outlier, rapporto tra dispersioni, sparsità, correlazioni, numerosità completa e condizionamento della covarianza;
+- riscalamento automatico dei percorsi quantitativi tramite z-score, scala robusta o max-abs; le colonne costanti ricevono contributo nullo;
+- uso diretto dei valori originali nei percorsi misti di Gower, senza riscalamento preliminare;
 - conservazione dei mancanti, segnalazione delle feature costanti e anteprima originale/trasformata;
 - anteprima ed esportazione della tabella trasformata, con uso esplicito nel percorso che la richiede;
 - piano di confronto che dichiara, per ogni percorso, origine dei dati, trasformazioni, politica sui mancanti e disponibilità del calcolo;
-- questionario quantitativo in linguaggio non tecnico: il sito diagnostica automaticamente scale, dispersioni, valori estremi e relazioni forti tra colonne, mentre all’utente chiede soltanto il significato dei dati e le priorità del confronto;
+- proposta automatica di Euclidea, Manhattan o Mahalanobis per le quantità, modificabile dall’utente senza domande tecniche obbligatorie;
 - scelta consigliata disponibile quando l’utente non conosce la risposta, senza bloccare il piano;
 - registro decisionale verificato per Manhattan, Euclidea, Chebyshev, Minkowski, Minkowski pesata, euclidea standardizzata, Mahalanobis, Canberra, Bray–Curtis e χ² simmetrica;
 - famiglia di Minkowski: forma generale, Manhattan, Euclidea, Chebyshev, versione pesata ed Euclidea standardizzata;

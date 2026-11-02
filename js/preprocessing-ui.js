@@ -148,13 +148,14 @@
     return interpretazione[id] || "";
   }
 
-  function domandaAdattiva(id, titolo, testo, opzioni) {
+  function domandaAdattiva(id, titolo, testo, opzioni, predefinito = "") {
+    const selezionato = valoreRisposta(id) || predefinito;
     return `<div class="question-item">
       <label for="${id}">${titolo}</label>
       <p>${testo}</p>
       <select class="semantic-answer" id="${id}" data-answer="${id}">
-        <option value="">Scegli una risposta</option>
-        ${opzioni.map(([valore, etichetta]) => `<option value="${valore}"${valoreRisposta(id) === valore ? " selected" : ""}>${etichetta}</option>`).join("")}
+        ${predefinito ? "" : '<option value="">Scegli una risposta</option>'}
+        ${opzioni.map(([valore, etichetta]) => `<option value="${valore}"${selezionato === valore ? " selected" : ""}>${etichetta}</option>`).join("")}
       </select>
     </div>`;
   }
@@ -174,24 +175,6 @@
     </div>`;
   }
 
-  function haCorrelazioniForti(profili) {
-    const colonne = profili.map(profilo => risultato.colonne.find(colonna => colonna.nome === profilo.nome));
-    for (let i = 0; i < colonne.length; i += 1) {
-      for (let j = i + 1; j < colonne.length; j += 1) {
-        const coppie = (colonne[i]?.valoriNumerici || []).map((x, indice) => [x, colonne[j]?.valoriNumerici?.[indice]])
-          .filter(([x, y]) => typeof x === "number" && typeof y === "number");
-        if (coppie.length < 4) continue;
-        const mediaX = coppie.reduce((somma, [x]) => somma + x, 0) / coppie.length;
-        const mediaY = coppie.reduce((somma, [, y]) => somma + y, 0) / coppie.length;
-        const numeratore = coppie.reduce((somma, [x, y]) => somma + (x - mediaX) * (y - mediaY), 0);
-        const scalaX = Math.sqrt(coppie.reduce((somma, [x]) => somma + (x - mediaX) ** 2, 0));
-        const scalaY = Math.sqrt(coppie.reduce((somma, [, y]) => somma + (y - mediaY) ** 2, 0));
-        if (scalaX > 0 && scalaY > 0 && Math.abs(numeratore / (scalaX * scalaY)) >= 0.8) return true;
-      }
-    }
-    return false;
-  }
-
   function nascondiPiano() {
     $("comparison-plan").hidden = true;
     $("gower-actions").hidden = true;
@@ -200,10 +183,54 @@
     matriceCorrente = null;
   }
 
+  function disegnaDiagnosi(diagnosi, completo) {
+    if (!diagnosi) {
+      $("comparison-diagnosis").innerHTML = "";
+      return;
+    }
+    const indicatori = diagnosi.indicatori || {};
+    const proposta = diagnosi.proposta || {};
+    const elementi = [];
+    elementi.push(["Famiglia rilevata", diagnosi.famiglia]);
+    if (diagnosi.famigliaId === "quantitativo") {
+      elementi.push(["Valori estremi", indicatori.outlier
+        ? `Rilevati in: ${(indicatori.colonneOutlier || []).join(", ")}`
+        : "Nessun outlier rilevante"]);
+      elementi.push(["Dispersioni", `Rapporto massimo/minimo ${formatoNumero(indicatori.rapportoDispersioni)} · ${indicatori.dispersioniSimili ? "simili" : "differenti"}`]);
+      elementi.push(["Zeri", indicatori.matriceSparsa
+        ? "Almeno l’80% dei valori è zero: proposta max-abs"
+        : "Matrice non classificata come sparsa"]);
+      elementi.push(["Relazioni tra colonne", indicatori.correlazioniForti
+        ? `Correlazione massima |r| = ${formatoNumero(indicatori.correlazioneMassimaAssoluta)}${indicatori.coppiaCorrelata?.length ? ` (${indicatori.coppiaCorrelata.join(" e ")})` : ""}`
+        : `Nessuna correlazione forte · massimo |r| = ${formatoNumero(indicatori.correlazioneMassimaAssoluta)}`]);
+      elementi.push(["Covarianza", indicatori.covarianzaUtilizzabile
+        ? `Utilizzabile${indicatori.condizionamentoCovarianza ? ` · condizionamento ≈ ${formatoNumero(indicatori.condizionamentoCovarianza)}` : ""}`
+        : `Non utilizzabile per Mahalanobis · ${indicatori.motivoCovarianza || "verifica non superata"}`]);
+    } else if (diagnosi.famigliaId === "misto") {
+      elementi.push(["Valori utilizzati", "Originali: nessun riscalamento preliminare"]);
+      elementi.push(["Valori estremi quantitativi", indicatori.outlier
+        ? `Rilevati in: ${(indicatori.colonneOutlier || []).join(", ")}`
+        : "Non rilevati"]);
+      elementi.push(["Valori mancanti", (indicatori.colonneMancanti || []).length
+        ? `Presenti in: ${indicatori.colonneMancanti.join(", ")}`
+        : "Assenti"]);
+    }
+    $("comparison-diagnosis").innerHTML = `<div class="diagnosis-heading">
+      <div><p>Diagnosi automatica</p><h5>${escapeHtml(proposta.misura || "Proposta da completare")}</h5></div>
+      <span>${completo ? "Proposta pronta" : "Da confermare"}</span>
+    </div>
+    <div class="diagnosis-grid">${elementi.map(([etichetta, valore]) => `<div>
+      <small>${escapeHtml(etichetta)}</small><strong>${escapeHtml(valore)}</strong>
+    </div>`).join("")}</div>
+    <p>${escapeHtml(proposta.motivo || "")}</p>
+    ${diagnosi.conferma ? `<em>${escapeHtml(diagnosi.conferma)}</em>` : ""}`;
+  }
+
   function disegnaPiano(piano) {
     pianoCorrente = piano;
     matriceCorrente = null;
     $("gower-result").hidden = true;
+    disegnaDiagnosi(piano.diagnosi, piano.completo);
     $("comparison-plan-paths").innerHTML = piano.percorsi.map((percorso, indice) => {
       const classe = percorso.stato === "da_completare" ? " incomplete" : "";
       const pre = percorso.preelaborazione;
@@ -387,6 +414,22 @@
     }).join("");
   }
 
+  function aggiornaAnteprimaPercorso(profiliInclusi) {
+    const indipendenti = profiliInclusi.filter(profilo => !interpretazione.assegnazioni[profilo.nome]);
+    const soloQuantitative = indipendenti.length > 0
+      && indipendenti.length === profiliInclusi.length
+      && indipendenti.every(profilo => {
+        const colonna = risultato.colonne.find(elemento => elemento.nome === profilo.nome);
+        return interpretazione.colonne[profilo.nome].ruolo === "quantita"
+          && ["numerica", "numerica_costante"].includes(colonna?.tipo);
+      });
+    $("scaling-wrap").hidden = !soloQuantitative;
+    $("view-work").hidden = !soloQuantitative;
+    $("download-work").hidden = !soloQuantitative;
+    if (!soloQuantitative && vista !== "originale") vista = "originale";
+    disegnaTabella();
+  }
+
   function disegnaQuestionario() {
     nascondiPiano();
     const profili = risultato.questionario.colonne;
@@ -409,6 +452,7 @@
     disegnaGruppi();
 
     const profiliInclusi = profili.filter(profilo => interpretazione.colonne[profilo.nome]?.usa);
+    aggiornaAnteprimaPercorso(profiliInclusi);
     const nomiInclusi = new Set(profiliInclusi.map(profilo => profilo.nome));
     const colonneIncluse = risultato.colonne.filter(colonna => nomiInclusi.has(colonna.nome));
     const ruoliInclusi = new Set(profiliInclusi.map(profilo => interpretazione.colonne[profilo.nome].ruolo));
@@ -419,9 +463,9 @@
       [["sconosciuto", "Il valore non è conosciuto"], ["non_applicabile", "La domanda non si applica"], ["assenza", "Indica assenza"], ["misto", "Dipende dalla colonna"], ["ignoto", "Non lo so"]]
     ));
     if (colonneIncluse.some(colonna => colonna.statistiche?.estremi > 0)) domande.push(domandaAdattiva(
-      "significatoEstremi", "I valori molto lontani dagli altri sono plausibili?",
-      "Sono stati osservati alcuni valori eccezionalmente alti o bassi.",
-      [["reali", "Sì, sono casi reali"], ["errori", "Probabilmente sono errori"], ["controllare", "Vanno controllati uno per uno"], ["ignoto", "Non lo so"]]
+      "significatoEstremi", "Il sito ha rilevato valori estremi. Sono osservazioni plausibili?",
+      "Se li confermi, il sito userà automaticamente un confronto meno sensibile agli scarti estremi.",
+      [["reali", "Sì, confermo che sono casi reali"], ["errori", "No, probabilmente sono errori"], ["controllare", "Voglio controllarli prima del calcolo"], ["ignoto", "Non lo so"]]
     ));
     if (ruoliInclusi.has("presenza")) domande.push(domandaAdattiva(
       "zeriCondivisi", "Due assenze in comune rendono simili due righe?",
@@ -461,37 +505,21 @@
         "Il sito riequilibrerà le colonne per prudenza, assegnerà loro la stessa importanza e sceglierà una misura poco sensibile ai valori estremi quando necessario."
       ));
       if (confronto === "assoluto") {
-        const riscalamentoAutomatico = indipendentiStandard.some(profilo => {
-          const colonna = risultato.colonne.find(elemento => elemento.nome === profilo.nome);
-          return ["zscore", "robusto", "maxabs", "minmax"].includes(colonna?.metodo);
-        });
-        if (riscalamentoAutomatico) {
-          domande.push(notaAutomatica(
-            "Riequilibrio automatico delle colonne",
-            "Il sito ha rilevato scale, dispersioni o valori estremi che renderebbero dominante almeno una colonna. Applicherà automaticamente il riscalamento più adatto e userà quei valori nel confronto finale."
-          ));
-        } else {
-          domande.push(domandaAdattiva(
-            "tipoQuantita", "Le colonne misurano lo stesso tipo di quantità?",
-            "Per esempio, più misure espresse tutte in centimetri sono dello stesso tipo; età, reddito e pressione sono quantità diverse.",
-            [["stesso", "Sì, misurano lo stesso tipo di quantità"], ["diverse", "No, misurano quantità diverse"], ["ignoto", "Non lo so — riequilibrale per prudenza"]]
-          ));
-        }
+        domande.push(notaAutomatica(
+          "Scelta automatica della misura",
+          "Il sito confronterà outlier, dispersioni e correlazioni. Proporrà Manhattan, Euclidea o Mahalanobis e applicherà il riscalamento coerente con la diagnosi."
+        ));
         domande.push(domandaAdattiva(
-          "aggregazioneScarti", "Quando due righe devono essere considerate molto diverse?",
-          "Scegli l'effetto che vuoi ottenere; il sito tradurrà la risposta nella misura matematica adatta.",
-          [["lineare", "Quando differiscono in molte caratteristiche, anche di poco"], ["quadratica", "Quando presentano alcune differenze grandi"], ["massimo", "Quando basta una sola differenza molto grande"], ["minkowski", "Voglio impostare manualmente la sensibilità (avanzato)"], ["ignoto", "Non lo so — usa la scelta consigliata"]]
+          "aggregazioneScarti", "Vuoi modificare la scelta automatica?",
+          "Lascia la scelta proposta se non hai una ragione precisa per imporre una diversa geometria del confronto.",
+          [["automatico", "No, usa la misura proposta dal sito"], ["lineare", "Sì: somma linearmente tutte le differenze"], ["quadratica", "Sì: dai più peso alle differenze grandi"], ["massimo", "Sì: considera soprattutto la differenza massima"], ["minkowski", "Sì: imposta manualmente la sensibilità (avanzato)"]],
+          "automatico"
         ));
         if (valoreRisposta("aggregazioneScarti") === "minkowski") domande.push(domandaInput(
           "ordineMinkowski", "Sensibilità personalizzata q",
           "Questa è un'impostazione avanzata. Inserisci un numero almeno pari a 1; valori maggiori danno più peso alle differenze grandi.", "Per esempio 3", "number"
         ));
-        if (indipendentiStandard.length >= 2 && haCorrelazioniForti(indipendentiStandard)) domande.push(domandaAdattiva(
-          "dipendenzaCoordinate", "Alcune colonne seguono quasi lo stesso andamento tra le righe. La distanza deve tenere conto di questo legame?",
-          "Nessuna colonna verrà eliminata. Se scegli sì, il calcolo considererà anche il pattern con cui le colonne variano insieme, usando la loro covarianza.",
-          [["si", "Sì, considera anche il legame tra le colonne"], ["no", "No, misura gli scarti colonna per colonna"], ["ignoto", "Non lo so — usa il confronto colonna per colonna"]]
-        ));
-        if (indipendentiStandard.length >= 2) {
+        if (indipendentiStandard.length >= 2 && !["", "automatico"].includes(valoreRisposta("aggregazioneScarti"))) {
           domande.push(domandaAdattiva(
             "importanzaCoordinate", "Alcune caratteristiche devono contare più delle altre?",
             "Se non hai indicazioni specifiche, il sito assegna la stessa importanza a tutte.",

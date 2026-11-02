@@ -115,9 +115,25 @@ sparse = p.prepara_tabella(
 assert sparse["colonne"][0]["metodo"] == "maxabs"
 assert [riga[0] for riga in sparse["trasformate"]] == [0, 0, 0, 0, 0, 0, 0, 0, 1, -0.5]
 
+piano_sparso_auto = p.crea_piano_confronto(
+    sparse,
+    {
+        "riga": "oggetto",
+        "confrontoQuantitativo": "assoluto",
+        "colonne": {
+            "x": {"ruolo": "quantita", "usa": True},
+            "id": {"ruolo": "identificativo", "usa": False},
+        },
+    },
+)
+assert piano_sparso_auto["diagnosi"]["indicatori"]["matriceSparsa"] is True
+assert piano_sparso_auto["diagnosi"]["proposta"]["politicaPreelaborazione"] == "maxabs_automatico"
+assert piano_sparso_auto["percorsi"][0]["preelaborazione"]["passi"][0]["metodo"] == "maxabs"
+
 scale_simili = p.prepara_tabella(p.leggi_csv("a,b\n1,10\n2,11\n3,12"))
-assert [colonna["metodo"] for colonna in scale_simili["colonne"]] == ["nessuno", "nessuno"]
-assert scale_simili["trasformate"] == [[1, 10], [2, 11], [3, 12]]
+assert [colonna["metodo"] for colonna in scale_simili["colonne"]] == ["zscore", "zscore"]
+quasi_uguali(scale_simili["trasformate"][0][0], -math.sqrt(1.5))
+quasi_uguali(scale_simili["trasformate"][0][1], -math.sqrt(1.5))
 
 scale_diverse = p.prepara_tabella(p.leggi_csv("a,b\n1,100\n2,200\n3,300"))
 assert [colonna["metodo"] for colonna in scale_diverse["colonne"]] == ["zscore", "zscore"]
@@ -174,9 +190,72 @@ assert piano_abbondanze_accessibile["completo"] is True
 assert piano_abbondanze_accessibile["percorsi"][0]["idMisura"] == "bray_curtis"
 assert piano_abbondanze_accessibile["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"] is False
 
+# Nuovo motore: per le quantità ordinarie la proposta è prodotta dai dati e può
+# essere modificata esplicitamente, ma non richiede domande tecniche preliminari.
+def risposte_automatiche(nomi):
+    return {
+        "riga": "oggetto",
+        "confrontoQuantitativo": "assoluto",
+        "colonne": {nome: {"ruolo": "quantita", "usa": True} for nome in nomi},
+    }
+
+
+dati_debolmente_correlati = p.prepara_tabella(p.leggi_csv(
+    "a,b\n1,8\n2,1\n3,6\n4,3\n5,9\n6,2\n7,7\n8,4\n9,5\n10,10"
+))
+piano_auto_euclideo = p.crea_piano_confronto(
+    dati_debolmente_correlati, risposte_automatiche(["a", "b"])
+)
+assert piano_auto_euclideo["diagnosi"]["famigliaId"] == "quantitativo"
+assert piano_auto_euclideo["diagnosi"]["proposta"]["idMisura"] == "euclidean"
+assert piano_auto_euclideo["percorsi"][0]["idMisura"] == "euclidean"
+assert [
+    passo["metodo"] for passo in piano_auto_euclideo["percorsi"][0]["preelaborazione"]["passi"]
+] == ["zscore", "zscore"]
+
+dati_fortemente_correlati = p.prepara_tabella(p.leggi_csv(
+    "a,b\n1,2.1\n2,3.8\n3,6.3\n4,7.7\n5,10.4\n6,11.6\n"
+    "7,14.5\n8,15.7\n9,18.2\n10,20.4\n11,21.5\n12,24.3"
+))
+piano_auto_mahalanobis = p.crea_piano_confronto(
+    dati_fortemente_correlati, risposte_automatiche(["a", "b"])
+)
+assert piano_auto_mahalanobis["diagnosi"]["indicatori"]["correlazioniForti"] is True
+assert piano_auto_mahalanobis["diagnosi"]["indicatori"]["covarianzaUtilizzabile"] is True
+assert piano_auto_mahalanobis["percorsi"][0]["idMisura"] == "mahalanobis"
+assert piano_auto_mahalanobis["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"] is True
+
+dati_correlati_singolari = p.prepara_tabella(p.leggi_csv(
+    "a,b\n1,2\n2,4\n3,6\n4,8\n5,10\n6,12\n7,14\n8,16\n9,18\n10,20\n11,22\n12,24"
+))
+piano_auto_singolare = p.crea_piano_confronto(
+    dati_correlati_singolari, risposte_automatiche(["a", "b"])
+)
+assert piano_auto_singolare["diagnosi"]["indicatori"]["correlazioniForti"] is True
+assert piano_auto_singolare["diagnosi"]["indicatori"]["covarianzaUtilizzabile"] is False
+assert piano_auto_singolare["percorsi"][0]["idMisura"] == "euclidean"
+
+piano_auto_robusto = p.crea_piano_confronto(
+    robusto_comune,
+    {**risposte_automatiche(["a", "b"]), "significatoEstremi": "reali"},
+)
+assert piano_auto_robusto["diagnosi"]["proposta"]["idMisura"] == "manhattan"
+assert piano_auto_robusto["percorsi"][0]["idMisura"] == "manhattan"
+assert [
+    passo["metodo"] for passo in piano_auto_robusto["percorsi"][0]["preelaborazione"]["passi"]
+] == ["robusto", "robusto"]
+
+dati_misti_auto = p.prepara_tabella(p.leggi_csv("a,categoria\n1,x\n2,y\n3,x\n4,z"))
+piano_misto_auto = p.crea_piano_confronto(
+    dati_misti_auto, {"riga": "oggetto", "colonne": {}}
+)
+assert piano_misto_auto["diagnosi"]["famigliaId"] == "misto"
+assert piano_misto_auto["diagnosi"]["proposta"]["idMisura"] == "gower_classica"
+assert piano_misto_auto["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"] is False
+
 una_numerica = p.prepara_tabella(p.leggi_csv("a,gruppo\n1,x\n2,y\n3,z"))
-assert una_numerica["colonne"][0]["metodo"] == "nessuno"
-assert "Non ci sono altre feature numeriche" in una_numerica["colonne"][0]["motivo"]
+assert una_numerica["colonne"][0]["metodo"] == "zscore"
+assert "standardizzate automaticamente" in una_numerica["colonne"][0]["motivo"]
 
 semantica = p.prepara_tabella(
     p.leggi_csv(
@@ -216,13 +295,13 @@ piano_semplice = p.crea_piano_confronto(
 )
 assert piano_semplice["completo"] is True
 misure_piano = {blocco["nome"]: blocco["misura"] for blocco in piano_semplice["blocchi"]}
-assert misure_piano["a"] == "Differenza tra ranghi normalizzata"
+assert misure_piano["a"] == "Differenza numerica"
 assert misure_piano["b"] == "Differenza numerica"
 assert misure_piano["flag"] == "Confronto asimmetrico di Jaccard"
 assert misure_piano["gruppo"] == "Uguale o diverso"
 assert piano_semplice["conteggioPercorsi"] == 1
 assert piano_semplice["percorsi"][0]["metodo"] == "Dissimilarità di Gower classica"
-assert piano_semplice["versioneContratto"] == 1
+assert piano_semplice["versioneContratto"] == 2
 assert piano_semplice["percorsi"][0]["preelaborazione"]["origine"] == "valori_originali"
 assert piano_semplice["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"] is False
 assert piano_semplice["percorsi"][0]["mancanti"]["strategia"] == "non_necessaria"

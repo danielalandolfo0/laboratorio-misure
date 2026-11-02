@@ -370,7 +370,6 @@ def applica_confronto_globale(colonne: list[dict[str, Any]]) -> None:
         for colonna in numeriche
     ]
     rapporto = 1 if len(numeriche) == 1 else max(scale) / min(scale)
-    confrontabili = rapporto <= 2
     robusto_applicabile = all(colonna["statistiche"]["iqr"] > 0 for colonna in numeriche)
     presenti_outlier = robusto_applicabile and any(
         colonna["statistiche"]["quotaEstremi"] > 0.01 for colonna in numeriche
@@ -391,8 +390,6 @@ def applica_confronto_globale(colonne: list[dict[str, Any]]) -> None:
         if presenti_outlier
         else "maxabs"
         if matrice_sparsa
-        else "nessuno"
-        if confrontabili
         else "zscore"
     )
 
@@ -409,14 +406,13 @@ def applica_confronto_globale(colonne: list[dict[str, Any]]) -> None:
             )
         elif metodo_comune == "maxabs":
             colonna["motivo"] = "La matrice numerica contiene molti valori uguali a zero."
-        elif metodo_comune == "nessuno":
-            colonna["motivo"] = (
-                "Non ci sono altre feature numeriche con cui bilanciare la scala."
-                if len(numeriche) == 1
-                else "Le feature numeriche hanno dispersioni simili."
-            )
         else:
-            colonna["motivo"] = "Le feature numeriche hanno dispersioni molto diverse."
+            colonna["motivo"] = (
+                "Le quantità vengono standardizzate automaticamente, anche quando le "
+                "dispersioni osservate sono simili."
+                if rapporto <= 2 else
+                "Le feature numeriche hanno dispersioni molto diverse."
+            )
 
 
 def _parole_nome(nome: str) -> set[str]:
@@ -454,19 +450,6 @@ def prepara_questionario(tabella: dict[str, Any], colonne: list[dict[str, Any]])
         nome_identificativo = bool(parole & PAROLE_IDENTIFICATIVO)
         nome_data = bool(parole & PAROLE_DATA)
         quota_date = sum(_sembra_data(v) for v in osservati) / len(osservati) if osservati else 0
-        interi = False
-        numeri: list[float] = []
-        if colonna["tipo"] == "numerica" and colonna.get("valoriNumerici"):
-            numeri = [v for v in colonna["valoriNumerici"] if isinstance(v, (int, float))]
-            interi = bool(numeri) and all(float(v).is_integer() for v in numeri)
-        piccola_scala = (
-            interi
-            and 2 < distinti <= 7
-            and min(numeri) >= 0
-            and max(numeri) <= 10
-            and max(numeri) - min(numeri) <= 10
-        )
-
         if nome_identificativo:
             ruolo, motivo = "identificativo", "Il titolo della colonna fa pensare a un codice identificativo."
         elif nome_data or quota_date >= 0.8:
@@ -478,8 +461,8 @@ def prepara_questionario(tabella: dict[str, Any], colonne: list[dict[str, Any]])
             ruolo, motivo = "categoria", "Poche etichette si ripetono in molte righe."
         elif colonna["tipo"] == "non_numerica":
             ruolo, motivo = "testo", "La colonna contiene molte scritte differenti."
-        elif colonna["tipo"] == "numerica" and (bool(parole & PAROLE_LIVELLO) or piccola_scala):
-            ruolo, motivo = "livello", "Sono presenti pochi valori interi ordinabili."
+        elif colonna["tipo"] == "numerica" and bool(parole & PAROLE_LIVELLO):
+            ruolo, motivo = "livello", "Il titolo della colonna fa pensare a livelli ordinati."
         else:
             ruolo, motivo = "quantita", "La colonna contiene valori numerici."
 
@@ -845,6 +828,297 @@ def _covarianza_empirica_invertibile(
     return rango == p
 
 
+def _righe_complete_numeriche(
+    nomi: list[str], analisi_per_nome: dict[str, dict[str, Any]]
+) -> list[list[float]]:
+    colonne = [analisi_per_nome[nome].get("valoriNumerici", []) for nome in nomi]
+    return [
+        [float(valore) for valore in valori]
+        for valori in zip(*colonne)
+        if all(isinstance(valore, (int, float)) for valore in valori)
+    ]
+
+
+def _inversa_gauss_jordan(matrice: list[list[float]]) -> list[list[float]] | None:
+    """Inverte una matrice quadrata con pivoting parziale; None se è numericamente singolare."""
+    n = len(matrice)
+    if n == 0 or any(len(riga) != n for riga in matrice):
+        return None
+    scala = max((abs(valore) for riga in matrice for valore in riga), default=0.0)
+    if scala == 0:
+        return None
+    tolleranza = scala * 1e-12
+    aumentata = [
+        [float(valore) for valore in riga]
+        + [1.0 if i == j else 0.0 for j in range(n)]
+        for i, riga in enumerate(matrice)
+    ]
+    for colonna in range(n):
+        pivot = max(range(colonna, n), key=lambda i: abs(aumentata[i][colonna]))
+        if abs(aumentata[pivot][colonna]) <= tolleranza:
+            return None
+        aumentata[colonna], aumentata[pivot] = aumentata[pivot], aumentata[colonna]
+        divisore = aumentata[colonna][colonna]
+        aumentata[colonna] = [valore / divisore for valore in aumentata[colonna]]
+        for i in range(n):
+            if i == colonna:
+                continue
+            fattore = aumentata[i][colonna]
+            aumentata[i] = [
+                valore - fattore * riferimento
+                for valore, riferimento in zip(aumentata[i], aumentata[colonna])
+            ]
+    return [riga[n:] for riga in aumentata]
+
+
+def _norma_infinito_matrice(matrice: list[list[float]]) -> float:
+    return max((sum(abs(valore) for valore in riga) for riga in matrice), default=0.0)
+
+
+def _diagnosi_numerica(
+    nomi: list[str], analisi_per_nome: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """Calcola indicatori riproducibili usati dalla proposta automatica."""
+    non_costanti = [
+        nome for nome in nomi
+        if analisi_per_nome[nome].get("statistiche", {}).get("deviazione", 0) > 0
+    ]
+    scale = []
+    for nome in non_costanti:
+        stats = analisi_per_nome[nome]["statistiche"]
+        scale.append(stats["iqr"] if stats["iqr"] > 0 else stats["deviazione"])
+    rapporto_scale = max(scale) / min(scale) if len(scale) >= 2 and min(scale) > 0 else 1.0
+
+    colonne_estreme = [
+        nome for nome in nomi
+        if analisi_per_nome[nome].get("statistiche", {}).get("quotaEstremi", 0) > 0.01
+    ]
+    robusto_applicabile = bool(non_costanti) and all(
+        analisi_per_nome[nome].get("statistiche", {}).get("iqr", 0) > 0
+        for nome in non_costanti
+    )
+    colonne_outlier = colonne_estreme if robusto_applicabile else []
+    colonne_costanti = [
+        nome for nome in nomi
+        if analisi_per_nome[nome].get("statistiche", {}).get("deviazione") == 0
+    ]
+    colonne_mancanti = [nome for nome in nomi if analisi_per_nome[nome].get("mancanti", 0) > 0]
+    valori_osservati = sum(
+        sum(isinstance(valore, (int, float)) for valore in analisi_per_nome[nome].get("valoriNumerici", []))
+        for nome in nomi
+    )
+    zeri_osservati = sum(
+        analisi_per_nome[nome].get("statistiche", {}).get("zeri", 0)
+        for nome in nomi
+    )
+    matrice_sparsa = valori_osservati > 0 and zeri_osservati / valori_osservati >= 0.8
+
+    correlazione_massima = 0.0
+    coppia_correlata: list[str] = []
+    for i, nome_x in enumerate(non_costanti):
+        valori_x = analisi_per_nome[nome_x].get("valoriNumerici", [])
+        for nome_y in non_costanti[i + 1:]:
+            valori_y = analisi_per_nome[nome_y].get("valoriNumerici", [])
+            coppie = [
+                (float(x), float(y))
+                for x, y in zip(valori_x, valori_y)
+                if isinstance(x, (int, float)) and isinstance(y, (int, float))
+            ]
+            if len(coppie) < 4:
+                continue
+            media_x = sum(x for x, _ in coppie) / len(coppie)
+            media_y = sum(y for _, y in coppie) / len(coppie)
+            numeratore = sum((x - media_x) * (y - media_y) for x, y in coppie)
+            norma_x = math.sqrt(sum((x - media_x) ** 2 for x, _ in coppie))
+            norma_y = math.sqrt(sum((y - media_y) ** 2 for _, y in coppie))
+            if norma_x == 0 or norma_y == 0:
+                continue
+            correlazione = abs(numeratore / (norma_x * norma_y))
+            if correlazione > correlazione_massima:
+                correlazione_massima = correlazione
+                coppia_correlata = [nome_x, nome_y]
+
+    righe_complete = _righe_complete_numeriche(non_costanti, analisi_per_nome)
+    covarianza_utilizzabile = False
+    condizionamento: float | None = None
+    righe_minime_covarianza = max(len(non_costanti) + 2, 5 * len(non_costanti))
+    if len(non_costanti) < 2:
+        motivo_covarianza = "Servono almeno due colonne quantitative non costanti."
+    elif colonne_costanti:
+        motivo_covarianza = "Sono presenti colonne costanti, che rendono singolare la covarianza completa."
+    elif len(righe_complete) < righe_minime_covarianza:
+        motivo_covarianza = (
+            f"Sono disponibili {len(righe_complete)} righe complete; la regola prudenziale "
+            f"ne richiede almeno {righe_minime_covarianza}."
+        )
+    else:
+        motivo_covarianza = "La matrice standardizzata deve ancora essere verificata."
+    if (
+        len(non_costanti) >= 2
+        and not colonne_costanti
+        and len(righe_complete) >= righe_minime_covarianza
+    ):
+        medie = [
+            sum(riga[j] for riga in righe_complete) / len(righe_complete)
+            for j in range(len(non_costanti))
+        ]
+        deviazioni = [
+            math.sqrt(sum((riga[j] - medie[j]) ** 2 for riga in righe_complete) / (len(righe_complete) - 1))
+            for j in range(len(non_costanti))
+        ]
+        standardizzate = [
+            [(riga[j] - medie[j]) / deviazioni[j] for j in range(len(non_costanti))]
+            for riga in righe_complete
+        ]
+        covarianza_standardizzata = _covarianza(standardizzate)
+        inversa = _inversa_gauss_jordan(covarianza_standardizzata)
+        if inversa is not None:
+            condizionamento = (
+                _norma_infinito_matrice(covarianza_standardizzata)
+                * _norma_infinito_matrice(inversa)
+            )
+            covarianza_utilizzabile = math.isfinite(condizionamento) and condizionamento <= 1e8
+            motivo_covarianza = (
+                "La covarianza standardizzata è invertibile e sufficientemente ben condizionata."
+                if covarianza_utilizzabile else
+                "La covarianza standardizzata è invertibile ma numericamente mal condizionata."
+            )
+        else:
+            motivo_covarianza = "La covarianza standardizzata è singolare."
+
+    correlazioni_forti = correlazione_massima >= 0.8
+    politica_senza_outlier = "maxabs_automatico" if matrice_sparsa else "zscore_automatico"
+    if colonne_outlier:
+        id_misura = "manhattan"
+        politica = "robusto_forzato" if robusto_applicabile else "zscore_automatico"
+        motivo = (
+            "Sono presenti valori estremi: la scala robusta limita la loro influenza e "
+            "Manhattan non eleva al quadrato gli scarti."
+            if robusto_applicabile else
+            "Sono presenti valori estremi, ma almeno una colonna ha IQR nullo: viene usato "
+            "lo z-score e Manhattan evita di elevare al quadrato gli scarti."
+        )
+    elif correlazioni_forti and covarianza_utilizzabile:
+        id_misura = "mahalanobis"
+        politica = politica_senza_outlier
+        motivo = (
+            "Sono state rilevate relazioni lineari forti e la covarianza è numericamente "
+            "utilizzabile; Mahalanobis considera il pattern con cui le colonne variano insieme. "
+            + ("Max-abs preserva gli zeri della matrice sparsa." if matrice_sparsa else "Lo z-score assegna alle colonne una scala comune.")
+        )
+    else:
+        id_misura = "euclidean"
+        politica = politica_senza_outlier
+        motivo = (
+            "Non sono presenti outlier rilevanti né una struttura di covarianza forte e "
+            "utilizzabile; "
+            + ("max-abs preserva gli zeri della matrice sparsa." if matrice_sparsa else "lo z-score assegna alle colonne una scala comune.")
+        )
+
+    return {
+        "outlier": bool(colonne_outlier),
+        "robustoApplicabile": robusto_applicabile,
+        "colonneOutlier": colonne_outlier,
+        "colonneEstremeNonRobuste": [] if robusto_applicabile else colonne_estreme,
+        "colonneCostanti": colonne_costanti,
+        "colonneMancanti": colonne_mancanti,
+        "matriceSparsa": matrice_sparsa,
+        "rapportoDispersioni": rapporto_scale,
+        "dispersioniSimili": rapporto_scale <= 2,
+        "correlazioneMassimaAssoluta": correlazione_massima,
+        "coppiaCorrelata": coppia_correlata,
+        "correlazioniForti": correlazioni_forti,
+        "righeComplete": len(righe_complete),
+        "righeMinimeCovarianza": righe_minime_covarianza,
+        "covarianzaUtilizzabile": covarianza_utilizzabile,
+        "motivoCovarianza": motivo_covarianza,
+        "condizionamentoCovarianza": condizionamento,
+        "soglie": {"quotaOutlier": 0.01, "rapportoDispersioni": 2, "correlazione": 0.8, "condizionamento": 1e8},
+        "proposta": {
+            "idMisura": id_misura,
+            "misura": REGISTRO_MISURE_NUMERICHE[id_misura]["nome"],
+            "politicaPreelaborazione": politica,
+            "motivo": motivo,
+        },
+    }
+
+
+def crea_diagnosi_decisionale(
+    incluse: list[str],
+    indipendenti: list[str],
+    ruoli: dict[str, str],
+    analisi_per_nome: dict[str, dict[str, Any]],
+    gruppi_presenti: bool,
+) -> dict[str, Any]:
+    """Classifica il percorso e formula una proposta prima delle preferenze dell'utente."""
+    standard = [nome for nome in indipendenti if ruoli.get(nome) in RUOLI_GOWER]
+    solo_quantitative = bool(standard) and len(standard) == len(indipendenti) and all(
+        ruoli.get(nome) == "quantita"
+        and analisi_per_nome[nome]["tipo"] in {"numerica", "numerica_costante"}
+        for nome in standard
+    )
+    if solo_quantitative and not gruppi_presenti:
+        indicatori = _diagnosi_numerica(standard, analisi_per_nome)
+        proposta = indicatori["proposta"]
+        return {
+            "famigliaId": "quantitativo",
+            "famiglia": "Dati quantitativi",
+            "colonne": standard,
+            "indicatori": indicatori,
+            "proposta": proposta,
+            "richiedeConferma": True,
+            "conferma": "Conferma che le colonne rappresentino misure quantitative indipendenti.",
+        }
+    if standard and len(standard) == len(indipendenti) and not gruppi_presenti:
+        quantitative = [
+            nome for nome in standard
+            if ruoli.get(nome) == "quantita" and analisi_per_nome[nome]["tipo"] in {"numerica", "numerica_costante"}
+        ]
+        outlier = [
+            nome for nome in quantitative
+            if analisi_per_nome[nome].get("statistiche", {}).get("quotaEstremi", 0) > 0.01
+        ]
+        robusta = bool(outlier)
+        return {
+            "famigliaId": "misto",
+            "famiglia": "Dati misti",
+            "colonne": standard,
+            "indicatori": {
+                "outlier": robusta,
+                "colonneOutlier": outlier,
+                "colonneMancanti": [nome for nome in standard if analisi_per_nome[nome].get("mancanti", 0) > 0],
+            },
+            "proposta": {
+                "idMisura": "gower_robusta" if robusta else "gower_classica",
+                "misura": "Dissimilarità di Gower robusta" if robusta else "Dissimilarità di Gower classica",
+                "politicaPreelaborazione": "valori_originali",
+                "motivo": (
+                    "Le variabili hanno tipi differenti e sono presenti outlier quantitativi; "
+                    "Gower robusta parte dai valori originali e usa una scala robusta internamente."
+                    if robusta else
+                    "Le variabili hanno tipi differenti; Gower parte dai valori originali e "
+                    "rende confrontabili internamente i contributi."
+                ),
+            },
+            "richiedeConferma": robusta,
+            "conferma": "Conferma che i valori estremi segnalati siano osservazioni plausibili." if robusta else "",
+        }
+    return {
+        "famigliaId": "specializzato" if incluse else "vuoto",
+        "famiglia": "Percorso specializzato" if incluse else "Nessun dato selezionato",
+        "colonne": incluse,
+        "indicatori": {},
+        "proposta": {
+            "idMisura": "da_definire",
+            "misura": "Determinata dai gruppi e dal significato delle colonne",
+            "politicaPreelaborazione": "specifica_del_percorso",
+            "motivo": "Profili, sequenze, composizioni e testi richiedono un ramo dedicato.",
+        },
+        "richiedeConferma": True,
+        "conferma": "Controlla la struttura assegnata alle colonne.",
+    }
+
+
 def _specifica_misura_numerica(
     nomi: list[str],
     analisi_per_nome: dict[str, dict[str, Any]],
@@ -858,19 +1132,11 @@ def _specifica_misura_numerica(
     alternative: list[dict[str, str]] = []
     confronto = interpretazione.get("confrontoQuantitativo", "")
     scale = interpretazione.get("comparabilitaScale", "")  # compatibilità con risposte salvate
-    tipo_quantita = interpretazione.get("tipoQuantita", "")
     politica_preelaborazione = "originale"
+    diagnosi = _diagnosi_numerica(nomi, analisi_per_nome)
 
-    metodi_automatici = {
-        analisi_per_nome[nome].get("metodo", "nessuno")
-        for nome in nomi
-    }
-    riscalamento_rilevato = bool(
-        metodi_automatici & {"zscore", "robusto", "maxabs", "minmax"}
-    )
-
-    # Le vecchie risposte restano interpretabili; nel nuovo flusso il sito decide
-    # automaticamente quando le dispersioni sono chiaramente differenti.
+    # Le vecchie risposte restano interpretabili. In assenza di una scelta salvata,
+    # il nuovo flusso riscala sempre le quantità ordinarie in modo automatico.
     if confronto in {"relativo", "abbondanza", "frequenze"}:
         politica_preelaborazione = "originale"
     elif scale == "diverse":
@@ -885,18 +1151,8 @@ def _specifica_misura_numerica(
         politica_preelaborazione = "minmax"
     elif scale == "comparabili":
         politica_preelaborazione = "originale"
-    elif riscalamento_rilevato:
-        politica_preelaborazione = "trasformazioni_candidate"
-    elif tipo_quantita == "stesso":
-        politica_preelaborazione = "originale"
-    elif tipo_quantita in {"diverse", "ignoto"} or confronto == "ignoto":
-        politica_preelaborazione = "zscore_prudenziale"
     else:
-        avvisi.append(
-            "Indica se le colonne misurano lo stesso tipo di quantità; "
-            "questa informazione non può essere ricavata con certezza dai soli numeri."
-        )
-        stato = "da_completare"
+        politica_preelaborazione = diagnosi["proposta"]["politicaPreelaborazione"]
 
     minimi = [analisi_per_nome[nome].get("statistiche", {}).get("minimo") for nome in nomi]
     non_negative = all(valore is not None and valore >= 0 for valore in minimi)
@@ -940,23 +1196,15 @@ def _specifica_misura_numerica(
             "motivo": "Alternativa se non si vuole dare particolare rilievo alle componenti rare.",
         })
     else:
-        aggregazione = interpretazione.get("aggregazioneScarti", "")
+        aggregazione = interpretazione.get("aggregazioneScarti", "automatico")
         mappa = {
             "lineare": "manhattan",
             "quadratica": "euclidean",
             "massimo": "chebyshev",
             "minkowski": "minkowski",
         }
-        if aggregazione == "ignoto" or confronto == "ignoto":
-            ha_estremi = any(
-                analisi_per_nome[nome].get("statistiche", {}).get("estremi", 0) > 0
-                for nome in nomi
-            )
-            aggregazione = "lineare" if ha_estremi else "quadratica"
-        id_misura = mappa.get(aggregazione, "euclidean")
-        if aggregazione == "":
-            avvisi.append("Indica che cosa debba rendere due righe molto diverse.")
-            stato = "da_completare"
+        scelta_automatica = aggregazione in {"", "automatico", "ignoto"} or confronto == "ignoto"
+        id_misura = diagnosi["proposta"]["idMisura"] if scelta_automatica else mappa.get(aggregazione, "euclidean")
         if aggregazione == "minkowski":
             try:
                 q = float(interpretazione.get("ordineMinkowski", ""))
@@ -968,7 +1216,7 @@ def _specifica_misura_numerica(
             else:
                 parametri["q"] = q
 
-        dipendenza = interpretazione.get("dipendenzaCoordinate", "no") if len(nomi) >= 2 else "no"
+        dipendenza = interpretazione.get("dipendenzaCoordinate", "") if len(nomi) >= 2 else "no"
         if dipendenza == "si":
             id_misura = "mahalanobis"
             politica_preelaborazione = "originale"
@@ -978,6 +1226,10 @@ def _specifica_misura_numerica(
                     "l’eliminazione delle dipendenze lineari oppure una regolarizzazione esplicita."
                 )
                 stato = "da_completare"
+
+        if scelta_automatica and id_misura == "mahalanobis" and not diagnosi["covarianzaUtilizzabile"]:
+            id_misura = "euclidean"
+            politica_preelaborazione = "zscore_automatico"
 
         importanza = interpretazione.get("importanzaCoordinate", "uguale") if len(nomi) >= 2 else "uguale"
         if importanza == "diversa" and id_misura != "mahalanobis":
@@ -1022,6 +1274,7 @@ def _specifica_misura_numerica(
         "avvisi": avvisi,
         "stato": stato,
         "politicaPreelaborazione": politica_preelaborazione,
+        "diagnosiAutomatica": diagnosi,
     }
 
 
@@ -1070,7 +1323,11 @@ def _preelaborazione_numerica(
 ) -> dict[str, Any]:
     passi = []
     for nome in nomi:
-        metodo = metodo_forzato or analisi_per_nome[nome].get("metodo", "nessuno")
+        metodo = (
+            "costante"
+            if analisi_per_nome[nome].get("tipo") == "numerica_costante"
+            else metodo_forzato or analisi_per_nome[nome].get("metodo", "nessuno")
+        )
         passi.append({
             "colonna": nome,
             "metodo": metodo,
@@ -1131,6 +1388,24 @@ def _completa_specifica_percorso(
             preelaborazione["descrizione"] = (
                 "Le colonne misurano quantità diverse o il loro significato non è noto con certezza. "
                 "Sono quindi riequilibrate con lo z-score, così nessuna prevale soltanto perché usa numeri più grandi."
+            )
+        elif politica == "zscore_automatico":
+            preelaborazione = _preelaborazione_numerica(nomi, analisi_per_nome, "zscore")
+            preelaborazione["descrizione"] = (
+                "Le quantità sono standardizzate automaticamente con lo z-score; "
+                "le colonne costanti ricevono contributo nullo."
+            )
+        elif politica == "maxabs_automatico":
+            preelaborazione = _preelaborazione_numerica(nomi, analisi_per_nome, "maxabs")
+            preelaborazione["descrizione"] = (
+                "La matrice contiene almeno l’80% di zeri: max-abs riequilibra le colonne "
+                "senza spostare lo zero; le colonne costanti ricevono contributo nullo."
+            )
+        elif politica == "robusto_forzato":
+            preelaborazione = _preelaborazione_numerica(nomi, analisi_per_nome, "robusto")
+            preelaborazione["descrizione"] = (
+                "Sono stati rilevati outlier: le quantità sono centrate sulla mediana e "
+                "divise per l’IQR; le colonne costanti ricevono contributo nullo."
             )
         else:
             preelaborazione = _preelaborazione_originale(
@@ -1289,6 +1564,9 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
             gruppi_con_blocco.append((gruppo, blocco))
 
     blocchi_per_nome = {blocco["nome"]: blocco for blocco in blocchi_indipendenti}
+    diagnosi = crea_diagnosi_decisionale(
+        incluse, indipendenti, ruoli, analisi_per_nome, bool(gruppi_con_blocco)
+    )
     percorsi = _crea_percorsi(
         indipendenti, gruppi_con_blocco, ruoli, analisi_per_nome,
         interpretazione, blocchi_per_nome, len(risultato["originale"]["righe"]),
@@ -1322,9 +1600,9 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
         and all(p["stato"] != "da_completare" for p in percorsi)
     )
     return {
-        "blocchi": blocchi, "percorsi": percorsi, "avvisi": avvisi,
+        "diagnosi": diagnosi, "blocchi": blocchi, "percorsi": percorsi, "avvisi": avvisi,
         "completo": completo, "conteggioBlocchi": len(blocchi),
-        "conteggioPercorsi": len(percorsi), "versioneContratto": 1,
+        "conteggioPercorsi": len(percorsi), "versioneContratto": 2,
     }
 
 

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Laboratorio interattivo per preparare dati tabellari e comprendere misure tra vettori, dati binari e stringhe.">
   <title>Laboratorio delle misure</title>
-  <link rel="stylesheet" href="css/stile.css?v=20261029-3">
+  <link rel="stylesheet" href="css/stile.css?v=20261102-1">
   <script>
     if ("scrollRestoration" in history) history.scrollRestoration = "manual";
     window.addEventListener("pageshow", () => {
@@ -57,7 +57,7 @@
         <button class="secondary-action" id="download-work" type="button" disabled>Scarica l’anteprima trasformata</button>
       </div>
 
-      <div class="scaling-wrap">
+      <div class="scaling-wrap" id="scaling-wrap">
         <h3>Diagnosi delle feature e trasformazioni candidate</h3>
         <p>Questa analisi non determina ancora la matrice usata nel calcolo. Le trasformazioni sono candidate modificabili e saranno utilizzate soltanto dai percorsi che le richiedono; Gower, profili e altre famiglie possono partire dai valori originali.</p>
         <div class="data-table-wrap">
@@ -147,6 +147,7 @@
             </div>
           </div>
           <p id="comparison-plan-intro"></p>
+          <div class="comparison-diagnosis" id="comparison-diagnosis"></div>
           <div class="plan-paths" id="comparison-plan-paths"></div>
           <h5 class="plan-detail-title">Dettaglio delle caratteristiche</h5>
           <div class="data-table-wrap">
@@ -299,8 +300,8 @@
 
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
-  <script defer src="js/preprocessing-python.js?v=20261029-4"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261029-4"></script>
+  <script defer src="js/preprocessing-python.js?v=20261102-1"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261102-1"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>

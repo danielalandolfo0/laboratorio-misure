@@ -210,6 +210,20 @@ header p {
 .comparison-plan-heading h4 { margin: 0; font-size: 1.1rem; }
 .comparison-plan-heading .section-label { margin-bottom: 5px; }
 .comparison-plan > p { margin: 7px 0 13px; color: var(--muted); font-size: .78rem; }
+.comparison-diagnosis { margin-bottom: 16px; padding: 16px; background: rgba(8, 124, 255, .055); border: 1px solid rgba(8, 124, 255, .15); border-radius: 16px; }
+.comparison-diagnosis:empty { display: none; }
+.diagnosis-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.diagnosis-heading p { margin: 0 0 3px; color: var(--muted); font-size: .67rem; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; }
+.diagnosis-heading h5 { margin: 0; color: var(--blue-dark); font-size: 1rem; }
+.diagnosis-heading > span { padding: 5px 8px; color: var(--blue-dark); background: rgba(255, 255, 255, .62); border-radius: 999px; font-size: .66rem; font-weight: 750; white-space: nowrap; }
+.diagnosis-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 8px; margin-top: 13px; }
+.diagnosis-grid div { padding: 9px 10px; background: rgba(255, 255, 255, .48); border-radius: 10px; }
+.diagnosis-grid small,
+.diagnosis-grid strong { display: block; }
+.diagnosis-grid small { margin-bottom: 3px; color: var(--muted); font-size: .65rem; }
+.diagnosis-grid strong { color: var(--ink); font-size: .73rem; line-height: 1.35; }
+.comparison-diagnosis > p { margin: 11px 0 0; color: var(--muted); font-size: .75rem; line-height: 1.45; }
+.comparison-diagnosis > em { display: block; margin-top: 7px; color: var(--ink); font-size: .72rem; font-style: normal; font-weight: 650; }
 .plan-paths { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 11px; margin-bottom: 18px; }
 .plan-path { padding: 15px; background: rgba(8, 124, 255, .06); border: 1px solid rgba(8, 124, 255, .14); border-radius: 15px; }
 .plan-path.incomplete { background: rgba(239, 159, 39, .07); border-color: rgba(239, 159, 39, .22); }
