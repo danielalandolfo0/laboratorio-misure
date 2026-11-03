@@ -45,7 +45,11 @@
   }
 
   function disegnaMetodi() {
-    $("scaling-body").innerHTML = risultato.colonne.map((colonna, indice) => {
+    const selezionate = new Set(colonneNumericheSelezionate().map(c => c.nome));
+    $("scaling-body").innerHTML = risultato.colonne
+      .map((colonna, indice) => ({ colonna, indice }))
+      .filter(({ colonna }) => selezionate.has(colonna.nome))
+      .map(({ colonna, indice }) => {
       const s = colonna.statistiche;
       const parametri = colonna.metodo === "zscore"
         ? `media ${formatoNumero(s.media)} · σ ${formatoNumero(s.deviazione)}`
@@ -118,7 +122,7 @@
       ? pianoCorrente.anteprimaNumerica.righe
       : righeVista().map(riga => indici.map(indice => riga[indice]));
     const limiteRighe = Math.min(12, righe.length);
-    const limiteColonne = Math.min(20, risultato.originale.intestazioni.length);
+    const limiteColonne = Math.min(20, selezionate.length);
     const intestazioni = selezionate.slice(0, limiteColonne);
     $("preview-head").innerHTML = `<tr>${intestazioni.map(nome => `<th scope="col">${escapeHtml(nome)}</th>`).join("")}</tr>`;
     $("preview-body").innerHTML = righe.slice(0, limiteRighe).map(riga =>
@@ -525,6 +529,7 @@
       </tr>`;
     }).join("");
     disegnaGruppi();
+    disegnaMetodi();
     aggiornaFaseNumerica();
 
     const profiliInclusi = profili.filter(profilo => interpretazione.colonne[profilo.nome]?.usa);
@@ -776,6 +781,8 @@
     nascondiPiano();
   });
   $("add-column-group").addEventListener("click", () => {
+    riscalamentoConfermato = false;
+    interpretazione.riscalamentoConfermato = false;
     creaGruppo();
     disegnaQuestionario();
   });
@@ -822,6 +829,12 @@
     interpretazione.riscalamentoConfermato = false;
     disegnaQuestionario();
   });
+
+  // Le scelte di riscalamento seguono la selezione semantica delle colonne.
+  // La tabella di anteprima segue la conferma, prima del questionario.
+  const tabellaRuoli = $("meaning-body").closest(".data-table-wrap");
+  tabellaRuoli.after($("scaling-wrap"));
+  $("scaling-wrap").after(document.querySelector(".preview-block"));
 
   const zona = $("csv-drop-zone");
   ["dragenter", "dragover"].forEach(tipo => zona.addEventListener(tipo, evento => { evento.preventDefault(); zona.classList.add("dragging"); }));
