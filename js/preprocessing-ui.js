@@ -72,11 +72,11 @@
         </select></td>
         <td><div class="method-choice-wrap"><div class="method-choice-line"><select class="column-choice" data-choice="metodo" data-column="${indice}" aria-label="Metodo per la feature ${escapeHtml(colonna.nome)}"${colonna.tipo === "binaria" || colonna.tipo === "non_numerica" ? " disabled" : ""}>
           <option value="auto"${metodo === "auto" ? " selected" : ""}>${etichettaMetodo(colonna.metodoAutomatico)} (suggerito)</option>
-          <option value="zscore"${metodo === "zscore" ? " selected" : ""}>Z-score</option>
-          <option value="robusto"${metodo === "robusto" ? " selected" : ""}>Scala robusta</option>
-          <option value="minmax"${metodo === "minmax" ? " selected" : ""}>Min–max [0,1]</option>
-          <option value="maxabs"${metodo === "maxabs" ? " selected" : ""}>Max-abs</option>
-          <option value="nessuno"${metodo === "nessuno" ? " selected" : ""}>Nessuno</option>
+          <option value="zscore"${metodo === "zscore" ? " selected" : ""}>Confronta gli scarti dalla media (z-score)</option>
+          <option value="robusto"${metodo === "robusto" ? " selected" : ""}>Riduci l’effetto dei valori estremi sul riscalamento (robusto)</option>
+          <option value="minmax"${metodo === "minmax" ? " selected" : ""}>Porta i valori tra 0 e 1 (min–max)</option>
+          <option value="maxabs"${metodo === "maxabs" ? " selected" : ""}>Dividi per il valore massimo assoluto (max-abs)</option>
+          <option value="nessuno"${metodo === "nessuno" ? " selected" : ""}>Mantieni i valori originali</option>
         </select><button class="method-info-button" data-info-column="${indice}" type="button" aria-label="Informazioni sulla scelta per ${escapeHtml(colonna.nome)}" aria-controls="method-reason-${indice}" aria-expanded="false">i</button></div><p class="method-reason" id="method-reason-${indice}" hidden>${escapeHtml(colonna.motivo)}</p></div></td>
         <td><span class="method-params">${parametri}</span></td>
         <td>${colonna.mancanti}</td></tr>`;
@@ -294,26 +294,26 @@
 
   function editorMisuraNumerica(percorso) {
     const opzioni = [
-      ["automatico", "Automatica (consigliata)"],
-      ["euclidean", "Euclidea"], ["manhattan", "Manhattan"],
-      ["chebyshev", "Chebyshev"], ["minkowski", "Minkowski"],
-      ["weighted_minkowski", "Minkowski pesata (q=1 Manhattan, q=2 Euclidea)"],
-      ["weighted_chebyshev", "Chebyshev pesata"],
-      ["mahalanobis", "Mahalanobis"], ["canberra", "Canberra"],
-      ["bray_curtis", "Bray–Curtis"], ["chi_square", "Chi-quadrato simmetrica"]
+      ["automatico", "Usa la misura proposta dal sito"],
+      ["euclidean", "Vicinanza complessiva (euclidea)"], ["manhattan", "Somma le differenze (Manhattan)"],
+      ["chebyshev", "Conta la maggiore differenza (Chebyshev)"], ["minkowski", "Regola l’importanza degli scarti (Minkowski)"],
+      ["weighted_minkowski", "Dai importanza diversa alle colonne (Minkowski pesata)"],
+      ["weighted_chebyshev", "Conta la maggiore differenza ponderata (Chebyshev pesata)"],
+      ["mahalanobis", "Considera come le colonne variano insieme (Mahalanobis)"], ["canberra", "Confronta gli scarti relativi (Canberra)"],
+      ["bray_curtis", "Confronta quantità complessive (Bray–Curtis)"], ["chi_square", "Dai rilievo alle componenti piccole (chi-quadrato)"]
     ];
     const scelta = interpretazione.misuraNumericaManuale || "automatico";
     const esponente = ["minkowski", "weighted_minkowski"].includes(scelta);
     const pesata = ["weighted_minkowski", "weighted_chebyshev"].includes(scelta);
     const colonne = percorso.colonne;
     return `<div class="numeric-measure-editor">
-      <label for="numeric-measure-choice"><strong>Misura da calcolare</strong></label>
+      <label for="numeric-measure-choice"><strong>Come vuoi confrontare le righe?</strong></label>
       <select id="numeric-measure-choice">
         ${opzioni.map(([id, nome]) => `<option value="${id}"${id === scelta ? " selected" : ""}>${escapeHtml(nome)}</option>`).join("")}
       </select>
-      <p>Puoi modificare la raccomandazione; il piano ricontrolla i requisiti.</p>
-      ${esponente ? `<label for="numeric-measure-q">Esponente q (≥ 1)</label><input id="numeric-measure-q" type="number" min="1" step="0.5" value="${escapeHtml(interpretazione.ordineMisuraManuale || "2")}">` : ""}
-      ${pesata ? `<label for="numeric-measure-weights">Pesi positivi: ${colonne.map(escapeHtml).join(", ")}</label><input id="numeric-measure-weights" type="text" value="${escapeHtml(interpretazione.pesiMisuraManuale || colonne.map(() => "1").join("; "))}"><small>Separa i pesi con punto e virgola.</small>` : ""}
+      <p>Non serve conoscere il nome delle misure: scegli l’obiettivo che preferisci. Il sito verifica se è compatibile con i dati.</p>
+      ${esponente ? `<label for="numeric-measure-q">Quanto vuoi dare rilievo alle differenze grandi? (q ≥ 1)</label><input id="numeric-measure-q" type="number" min="1" step="0.5" value="${escapeHtml(interpretazione.ordineMisuraManuale || "2")}">` : ""}
+      ${pesata ? `<label for="numeric-measure-weights">Quanto conta ogni colonna? ${colonne.map(escapeHtml).join(", ")}</label><input id="numeric-measure-weights" type="text" value="${escapeHtml(interpretazione.pesiMisuraManuale || colonne.map(() => "1").join("; "))}"><small>Inserisci un numero positivo per colonna, separando con punto e virgola. Usa 1 per tutte se devono avere la stessa importanza.</small>` : ""}
       <button class="secondary-action" id="apply-numeric-measure" type="button">Applica misura</button>
     </div>`;
   }
@@ -543,8 +543,8 @@
       [["sconosciuto", "Il valore non è conosciuto"], ["non_applicabile", "La domanda non si applica"], ["assenza", "Indica assenza"], ["misto", "Dipende dalla colonna"], ["ignoto", "Non lo so"]]
     ));
     if (colonneIncluse.some(colonna => colonna.statistiche?.estremi > 0)) domande.push(domandaAdattiva(
-      "significatoEstremi", "Il sito ha rilevato valori estremi. Sono osservazioni plausibili?",
-      "Se li confermi, il sito userà automaticamente un confronto meno sensibile agli scarti estremi.",
+      "significatoEstremi", "Alcuni valori sono molto lontani dagli altri: sono corretti?",
+      "Il sito li ha individuati automaticamente. Indica se rappresentano situazioni reali o possibili errori.",
       [["reali", "Sì, confermo che sono casi reali"], ["errori", "No, probabilmente sono errori"], ["controllare", "Voglio controllarli prima del calcolo"], ["ignoto", "Non lo so"]]
     ));
     if (ruoliInclusi.has("presenza")) domande.push(domandaAdattiva(
@@ -574,8 +574,8 @@
     });
     if (percorsoNumerico) {
       domande.push(domandaAdattiva(
-        "confrontoQuantitativo", "Che tipo di valori contengono le colonne selezionate?",
-        "Scegli la descrizione più vicina ai tuoi dati. La risposta serve a stabilire che cosa debba significare la differenza tra due righe.",
+        "confrontoQuantitativo", "Che cosa rappresentano i numeri che vuoi confrontare?",
+        "Scegli la risposta più vicina ai tuoi dati. Non occorre conoscere alcuna formula.",
         [["assoluto", "Misure di caratteristiche, per esempio età, altezza o temperatura"], ["abbondanza", "Quantità o conteggi, per esempio specie, prodotti o eventi"], ["frequenze", "Frequenze: voglio dare rilievo anche alle componenti rare"], ["relativo", "Misure per cui conta soprattutto la differenza percentuale o proporzionale"], ["ignoto", "Non lo so — usa la scelta consigliata"]]
       ));
 
@@ -590,19 +590,19 @@
           "Il sito confronterà outlier, dispersioni e correlazioni. Proporrà Manhattan, Euclidea o Mahalanobis e applicherà il riscalamento coerente con la diagnosi."
         ));
         domande.push(domandaAdattiva(
-          "aggregazioneScarti", "Vuoi modificare la scelta automatica?",
-          "Lascia la scelta proposta se non hai una ragione precisa per imporre una diversa geometria del confronto.",
-          [["automatico", "No, usa la misura proposta dal sito"], ["lineare", "Sì: somma linearmente tutte le differenze"], ["quadratica", "Sì: dai più peso alle differenze grandi"], ["massimo", "Sì: considera soprattutto la differenza massima"], ["minkowski", "Sì: imposta manualmente la sensibilità (avanzato)"]],
+          "aggregazioneScarti", "Quali differenze tra due righe ti interessano di più?",
+          "Se non hai una preferenza, lascia che il sito scelga. Potrai cambiare la misura alla fine.",
+          [[["automatico", "Non ho preferenze: scegli il sito"], ["lineare", "Conta la somma delle differenze"], ["quadratica", "Dai più rilievo alle differenze grandi"], ["massimo", "Conta soprattutto la differenza più grande"], ["minkowski", "Voglio regolare io la sensibilità (avanzato)"]],
           "automatico"
         ));
         if (valoreRisposta("aggregazioneScarti") === "minkowski") domande.push(domandaInput(
-          "ordineMinkowski", "Sensibilità personalizzata q",
+          "ordineMinkowski", "Quanto devono pesare le differenze grandi? (avanzato)",
           "Questa è un'impostazione avanzata. Inserisci un numero almeno pari a 1; valori maggiori danno più peso alle differenze grandi.", "Per esempio 3", "number"
         ));
         if (indipendentiStandard.length >= 2 && !["", "automatico"].includes(valoreRisposta("aggregazioneScarti"))) {
           domande.push(domandaAdattiva(
-            "importanzaCoordinate", "Alcune caratteristiche devono contare più delle altre?",
-            "Se non hai indicazioni specifiche, il sito assegna la stessa importanza a tutte.",
+            "importanzaCoordinate", "Alcune colonne sono più importanti di altre per il tuo confronto?",
+            "Se non hai una preferenza, il sito assegna a tutte la stessa importanza.",
             [["uguale", "No, devono contare allo stesso modo"], ["diversa", "Sì, voglio assegnare importanze diverse"], ["ignoto", "Non lo so — assegna la stessa importanza"]]
           ));
           if (valoreRisposta("importanzaCoordinate") === "diversa") domande.push(domandaInput(
