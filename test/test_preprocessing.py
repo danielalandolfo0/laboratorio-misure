@@ -687,6 +687,12 @@ risposte_con_gruppo = {
 }
 piano_con_gruppo = p.crea_piano_confronto(dati_con_gruppo, risposte_con_gruppo)
 assert piano_con_gruppo["conteggioPercorsi"] == 2
+try:
+    p.calcola_matrice(dati_con_gruppo, risposte_con_gruppo)
+except ValueError as errore:
+    assert "aggregazione dei blocchi" in str(errore)
+else:
+    raise AssertionError("Non si può presentare un blocco isolato come matrice finale.")
 assert {tuple(percorso["colonne"]) for percorso in piano_con_gruppo["percorsi"]} == {
     ("c",), ("a", "b")
 }
