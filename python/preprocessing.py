@@ -1827,8 +1827,14 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
         avvisi.append("Indica che cosa rappresenta ogni riga.")
     if not blocchi:
         avvisi.append("Includi almeno una colonna nel confronto.")
-    if any(analisi_per_nome[n]["mancanti"] > 0 for n in incluse) and interpretazione.get("significatoMancanti") in {None, "", "ignoto"}:
-        avvisi.append("Indica che cosa significano le caselle vuote nelle colonne incluse.")
+    if interpretazione.get("significatoMancanti") in {None, "", "ignoto"}:
+        specifiche_mancanti = interpretazione.get("mancantiPerColonna") or {}
+        if any(
+            analisi_per_nome[n]["mancanti"] > 0
+            and specifiche_mancanti.get(n) not in {"escludi", "assenza", "zero"}
+            for n in incluse
+        ):
+            avvisi.append("Indica che cosa significano le caselle vuote nelle colonne incluse.")
     incluse_con_estremi = any(analisi_per_nome[n].get("statistiche", {}).get("estremi", 0) > 0 for n in incluse)
     if incluse_con_estremi and interpretazione.get("significatoEstremi") in {None, "", "ignoto"}:
         avvisi.append("Indica se i valori molto lontani dagli altri sono plausibili.")
