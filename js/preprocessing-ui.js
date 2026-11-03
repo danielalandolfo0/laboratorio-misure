@@ -107,10 +107,14 @@
   }
 
   function disegnaTabella() {
-    const righe = righeVista();
+    const selezionate = vista === "lavoro"
+      ? colonneNumericheSelezionate().map(c => c.nome)
+      : risultato.originale.intestazioni;
+    const indici = selezionate.map(nome => risultato.originale.intestazioni.indexOf(nome));
+    const righe = righeVista().map(riga => indici.map(indice => riga[indice]));
     const limiteRighe = Math.min(12, righe.length);
     const limiteColonne = Math.min(20, risultato.originale.intestazioni.length);
-    const intestazioni = risultato.originale.intestazioni.slice(0, limiteColonne);
+    const intestazioni = selezionate.slice(0, limiteColonne);
     $("preview-head").innerHTML = `<tr>${intestazioni.map(nome => `<th scope="col">${escapeHtml(nome)}</th>`).join("")}</tr>`;
     $("preview-body").innerHTML = righe.slice(0, limiteRighe).map(riga =>
       `<tr>${riga.slice(0, limiteColonne).map(valore => `<td>${escapeHtml(formatoNumero(valore))}</td>`).join("")}</tr>`
@@ -184,10 +188,19 @@
     aggiornaVisibilitaTrasformazione(null);
   }
 
+  function colonneNumericheSelezionate() {
+    if (!risultato) return [];
+    return risultato.colonne.filter(colonna => {
+      const risposta = interpretazione.colonne[colonna.nome];
+      return risposta?.usa && risposta.ruolo === "quantita"
+        && !interpretazione.assegnazioni[colonna.nome]
+        && ["numerica", "numerica_costante"].includes(colonna.tipo);
+    });
+  }
   function tabellaInteramenteNumerica() {
-    return Boolean(risultato) && risultato.colonne.length > 0 && risultato.colonne.every(colonna =>
-      colonna.tipo === "numerica" || colonna.tipo === "numerica_costante"
-    );
+    if (!risultato) return false;
+    const incluse = risultato.colonne.filter(c => interpretazione.colonne[c.nome]?.usa);
+    return incluse.length > 0 && incluse.length === colonneNumericheSelezionate().length;
   }
 
   function aggiornaVisibilitaTrasformazione(piano) {
@@ -196,6 +209,9 @@
       && piano.completo
       && piano.diagnosi?.famigliaId === "quantitativo"
       && tabellaInteramenteNumerica()
+      && piano.percorsi.length === 1
+      && piano.percorsi[0].tipo === "numerico"
+      && piano.percorsi[0].preelaborazione.usaTabellaTrasformata
     );
     $("scaling-wrap").hidden = !confermata;
     $("preview-view-switch").hidden = !confermata;
@@ -249,6 +265,32 @@
     ${diagnosi.conferma ? `<em>${escapeHtml(diagnosi.conferma)}</em>` : ""}`;
   }
 
+  function editorMisuraNumerica(percorso) {
+    const opzioni = [
+      ["automatico", "Automatica (consigliata)"],
+      ["euclidean", "Euclidea"], ["manhattan", "Manhattan"],
+      ["chebyshev", "Chebyshev"], ["minkowski", "Minkowski"],
+      ["weighted_minkowski", "Minkowski pesata (q=1 Manhattan, q=2 Euclidea)"],
+      ["weighted_chebyshev", "Chebyshev pesata"],
+      ["mahalanobis", "Mahalanobis"], ["canberra", "Canberra"],
+      ["bray_curtis", "Bray–Curtis"], ["chi_square", "Chi-quadrato simmetrica"]
+    ];
+    const scelta = interpretazione.misuraNumericaManuale || "automatico";
+    const esponente = ["minkowski", "weighted_minkowski"].includes(scelta);
+    const pesata = ["weighted_minkowski", "weighted_chebyshev"].includes(scelta);
+    const colonne = percorso.colonne;
+    return `<div class="numeric-measure-editor">
+      <label for="numeric-measure-choice"><strong>Misura da calcolare</strong></label>
+      <select id="numeric-measure-choice">
+        ${opzioni.map(([id, nome]) => `<option value="${id}"${id === scelta ? " selected" : ""}>${escapeHtml(nome)}</option>`).join("")}
+      </select>
+      <p>Puoi modificare la raccomandazione; il piano ricontrolla i requisiti.</p>
+      ${esponente ? `<label for="numeric-measure-q">Esponente q (≥ 1)</label><input id="numeric-measure-q" type="number" min="1" step="0.5" value="${escapeHtml(interpretazione.ordineMisuraManuale || "2")}">` : ""}
+      ${pesata ? `<label for="numeric-measure-weights">Pesi positivi: ${colonne.map(escapeHtml).join(", ")}</label><input id="numeric-measure-weights" type="text" value="${escapeHtml(interpretazione.pesiMisuraManuale || colonne.map(() => "1").join("; "))}"><small>Separa i pesi con punto e virgola.</small>` : ""}
+      <button class="secondary-action" id="apply-numeric-measure" type="button">Applica misura</button>
+    </div>`;
+  }
+
   function disegnaPiano(piano) {
     pianoCorrente = piano;
     matriceCorrente = null;
@@ -265,6 +307,7 @@
       const parametri = Object.entries(percorso.parametri || {}).map(([chiave, valore]) =>
         `${escapeHtml(chiave)} = ${escapeHtml(Array.isArray(valore) ? valore.join(", ") : valore)}`
       ).join(" · ");
+      const editorNumerico = percorso.tipo === "numerico" ? editorMisuraNumerica(percorso) : "";
       const alternative = (percorso.alternative || []).length
         ? `<div class="path-alternatives"><b>Alternative da valutare</b><ul>${percorso.alternative.map(alternativa =>
           `<li><strong>${escapeHtml(alternativa.nome)}</strong>: ${escapeHtml(alternativa.motivo)}</li>`
@@ -285,6 +328,7 @@
         </dl>
         <span>${escapeHtml(pre.descrizione)}</span>
         <p>${escapeHtml(percorso.motivo)}</p>
+        ${editorNumerico}
         ${alternative}
       </article>`;
     }).join("");
@@ -642,6 +686,20 @@
   $("prepare-comparison-plan").addEventListener("click", preparaPiano);
   $("calculate-gower").addEventListener("click", calcolaMatrice);
   $("download-gower").addEventListener("click", scaricaMatrice);
+  $("comparison-plan-paths").addEventListener("change", evento => {
+    if (evento.target.id !== "numeric-measure-choice") return;
+    interpretazione.misuraNumericaManuale = evento.target.value;
+    preparaPiano();
+  });
+  $("comparison-plan-paths").addEventListener("click", evento => {
+    if (evento.target.id !== "apply-numeric-measure") return;
+    interpretazione.misuraNumericaManuale = $("numeric-measure-choice").value;
+    const q = $("numeric-measure-q");
+    const pesi = $("numeric-measure-weights");
+    if (q) interpretazione.ordineMisuraManuale = q.value;
+    if (pesi) interpretazione.pesiMisuraManuale = pesi.value;
+    preparaPiano();
+  });
   $("scaling-body").addEventListener("change", evento => {
     if (evento.target.matches(".column-choice")) aggiornaScelta(evento.target);
   });
