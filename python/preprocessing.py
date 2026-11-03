@@ -1308,6 +1308,7 @@ def _specifica_misura_numerica(
     # Le scelte confermate del riscalamento governano le distanze
     # coordinate per coordinata. Le misure relative e Mahalanobis restano
     # sui valori originali per non alterarne il significato.
+    nota_preelaborazione = ""
     if interpretazione.get("riscalamentoConfermato"):
         if id_misura == "standardized_euclidean":
             id_misura = "euclidean"
@@ -1320,9 +1321,9 @@ def _specifica_misura_numerica(
             politica_preelaborazione = "trasformazioni_candidate"
         elif id_misura in {"mahalanobis", "canberra", "bray_curtis", "chi_square"}:
             politica_preelaborazione = "originale"
-            avvisi.append(
-                "La misura selezionata opera sui valori originali: la matrice "
-                "riscalata mostrata è consultabile ma non viene usata per questo calcolo."
+            nota_preelaborazione = (
+                "Questa misura usa i valori originali, non quelli riscalati: "
+                "la matrice trasformata rimane disponibile per consultazione."
             )
 
     misura = REGISTRO_MISURE_NUMERICHE[id_misura]
@@ -1337,6 +1338,7 @@ def _specifica_misura_numerica(
         "stato": stato,
         "politicaPreelaborazione": politica_preelaborazione,
         "diagnosiAutomatica": diagnosi,
+        "notaPreelaborazione": nota_preelaborazione,
     }
 
 
