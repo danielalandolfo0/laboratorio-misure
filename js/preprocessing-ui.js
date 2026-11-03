@@ -294,8 +294,13 @@
     }
   }
 
+  function richiedeRiscalamentoConfermato() {
+    return tabellaInteramenteNumerica() &&
+      !["relativo", "abbondanza", "frequenze"].includes(valoreRisposta("confrontoQuantitativo"));
+  }
+
   function aggiornaVisibilitaTrasformazione() {
-    const numerico = tabellaInteramenteNumerica();
+    const numerico = richiedeRiscalamentoConfermato();
     $("scaling-wrap").hidden = !numerico;
     $("confirm-numeric-scaling").hidden = !numerico || riscalamentoConfermato;
     $("numeric-scaling-status").textContent = !numerico ? ""
@@ -311,7 +316,7 @@
   }
 
   function aggiornaFaseNumerica() {
-    const numerico = tabellaInteramenteNumerica();
+    const numerico = richiedeRiscalamentoConfermato();
     const pronto = !numerico || riscalamentoConfermato;
     // Le domande devono essere visibili prima della conferma del riscalamento.
     $("adaptive-questions").hidden = false;
@@ -822,7 +827,7 @@
       const confronto = valoreRisposta("confrontoQuantitativo");
       if (confronto === "ignoto") domande.push(notaAutomatica(
         "Scelta consigliata automatica",
-        "Il sito riequilibrerà le colonne per prudenza, assegnerà loro la stessa importanza e sceglierà una misura poco sensibile ai valori estremi quando necessario."
+        "Il sito proporrà una scelta motivata dalla diagnosi, da confermare. I valori estremi e le correlazioni sono indizi, non regole che determinano automaticamente la misura corretta."
       ));
       if (confronto === "assoluto") {
         if (quantitativeIndipendenti.length >= 2) domande.push(domandaAdattiva(
@@ -833,7 +838,7 @@
         ));
         domande.push(notaAutomatica(
           "Scelta automatica della misura",
-          "Il sito confronterà outlier, dispersioni e correlazioni. Proporrà Manhattan, Euclidea o Mahalanobis e applicherà il riscalamento coerente con la diagnosi."
+          "Il sito ha analizzato valori estremi, dispersioni e correlazioni. La tua scelta determinerà la misura; i riscalamenti saranno usati soltanto dove pertinenti."
         ));
         if (valoreRisposta("dipendenzaCoordinate") !== "si") domande.push(domandaAdattiva(
           "aggregazioneScarti", "Quali differenze tra due righe ti interessano di più?",
