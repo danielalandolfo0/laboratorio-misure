@@ -13,6 +13,7 @@ from typing import Any
 
 MANCANTI = {"", "na", "n/a", "null", "?"}
 INVALIDO = object()
+ASSENZA_GOWER = object()  # Categoria assenza esplicitamente confermata; non equivale a un mancante.
 NUMERO_PUNTO = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
 NUMERO_VIRGOLA = re.compile(r"^[+-]?(?:\d+(?:,\d*)?|,\d+)(?:[eE][+-]?\d+)?$")
 
@@ -555,13 +556,18 @@ def _blocco_indipendente(nome: str, ruolo: str, analisi: dict[str, Any], interpr
             misura = "Differenza numerica"
             motivo = "Confronta quanto sono lontani i valori dopo averli riportati su una scala comune."
     elif ruolo == "livello":
-        risposta = interpretazione.get("ordineLivelli", "")
+        risposta = interpretazione.get("ordinePerColonna", {}).get(
+            nome, interpretazione.get("ordineLivelli", "")
+        )
         if risposta == "no":
             misura, motivo = "Uguale o diverso", "I livelli sono trattati come etichette perché l’ordine non ha significato."
         elif risposta == "si" and tipo == "non_numerica":
-            misura, motivo = "Da decidere", "Per livelli testuali occorre specificare esplicitamente l’ordine delle etichette."
-            avvisi.append("L’ordine dei livelli testuali non può essere ricavato senza una conferma.")
-            stato = "da_completare"
+            if interpretazione.get("ordiniLivelliGower", {}).get(nome, "").strip():
+                misura, motivo = "Differenza tra ranghi normalizzata", "Usa l’ordine esplicitamente indicato per i livelli testuali."
+            else:
+                misura, motivo = "Da decidere", "Per i livelli testuali occorre specificare l’ordine delle etichette."
+                avvisi.append("Indica l’ordine dei livelli testuali, separandoli con punto e virgola.")
+                stato = "da_completare"
         elif risposta == "si":
             misura, motivo = "Differenza tra ranghi normalizzata", "Tiene conto dell’ordine dei livelli e non della distanza numerica grezza."
         else:
@@ -569,12 +575,14 @@ def _blocco_indipendente(nome: str, ruolo: str, analisi: dict[str, Any], interpr
             avvisi.append("Rispondi alla domanda sull’ordine dei livelli.")
             stato = "da_completare"
     elif ruolo == "presenza":
-        if tipo != "binaria":
-            misura, motivo = "Da decidere", "Una presenza o assenza deve essere rappresentata da due valori."
+        if tipo not in {"binaria", "non_numerica", "numerica_costante"}:
+            misura, motivo = "Da decidere", "Una presenza o assenza deve avere al massimo due stati distinti."
             avvisi.append("Controlla il significato o il tipo di dato della colonna.")
             stato = "da_completare"
         else:
-            risposta = interpretazione.get("zeriCondivisi", "")
+            risposta = interpretazione.get("zeriCondivisiPerColonna", {}).get(
+                nome, interpretazione.get("zeriCondivisi", "")
+            )
             if risposta == "si":
                 misura, motivo = "Disaccordo binario", "Sia le presenze sia le assenze condivise contribuiscono alla somiglianza."
             elif risposta == "no":
@@ -584,8 +592,8 @@ def _blocco_indipendente(nome: str, ruolo: str, analisi: dict[str, Any], interpr
                 avvisi.append("Rispondi alla domanda sulle assenze condivise.")
                 stato = "da_completare"
     elif ruolo == "binaria":
-        if tipo != "binaria":
-            misura, motivo = "Da decidere", "Una risposta binaria deve essere rappresentata da due valori."
+        if tipo not in {"binaria", "non_numerica", "numerica_costante"}:
+            misura, motivo = "Da decidere", "Una risposta binaria deve contenere al massimo due stati."
             avvisi.append("Controlla il significato o il tipo di dato della colonna.")
             stato = "da_completare"
         else:
@@ -1761,6 +1769,27 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
         indipendenti, gruppi_con_blocco, ruoli, analisi_per_nome,
         interpretazione, blocchi_per_nome, len(risultato["originale"]["righe"]),
     )
+    # La configurazione completa di Gower viene verificata prima di
+    # dichiarare il piano pronto, non soltanto quando si avvia il calcolo.
+    for percorso in percorsi:
+        if percorso["tipo"] != "gower":
+            continue
+        try:
+            metadati = _metadati_gower(risultato, interpretazione, percorso)
+            esclusi = [nome for nome in percorso["colonne"]
+                       if nome not in {v["nome"] for v in metadati}]
+            percorso["colonneEscluseGower"] = esclusi
+            percorso["pesiGower"] = {v["nome"]: v["peso"] for v in metadati}
+            if esclusi:
+                percorso.setdefault("avvisi", []).append(
+                    "Colonne non informative escluse dal denominatore: " +
+                    ", ".join(esclusi) + "."
+                )
+        except ValueError as errore:
+            percorso["stato"] = "da_completare"
+            percorso["calcolo"]["disponibile"] = False
+            percorso["calcolo"]["descrizione"] = "Completa la configurazione di Gower."
+            percorso.setdefault("avvisi", []).append(str(errore))
 
     avvisi: list[str] = []
     if not interpretazione.get("riga"):
@@ -1850,59 +1879,219 @@ def _etichette_righe(risultato: dict[str, Any], interpretazione: dict[str, Any])
     return [f"Riga {indice + 1}" for indice in range(n)]
 
 
+def _politica_mancanti_gower(
+    nome: str, ruolo: str, ha_mancanti: bool, interpretazione: dict[str, Any]
+) -> str:
+    """Rende operativa la risposta sui mancanti senza inventare zeri numerici."""
+    if not ha_mancanti:
+        return "escludi"
+    specifiche = interpretazione.get("mancantiPerColonna") or {}
+    if not isinstance(specifiche, dict):
+        raise ValueError("Le risposte sui mancanti per colonna non sono valide.")
+    risposta = specifiche.get(nome)
+    if risposta in ("escludi", "assenza", "zero"):
+        politica = risposta
+    else:
+        globale = interpretazione.get("significatoMancanti", "")
+        if globale in ("sconosciuto", "non_applicabile"):
+            politica = "escludi"
+        elif globale == "assenza":
+            politica = "assenza"
+        else:
+            raise ValueError(
+                f"Specifica come trattare le caselle vuote della colonna “{nome}”."
+            )
+    if politica == "zero" and ruolo != "quantita":
+        raise ValueError(
+            f"Per la colonna “{nome}”, sostituire i mancanti con zero è ammesso solo "
+            "per quantità numeriche e richiede una scelta esplicita."
+        )
+    if politica == "assenza" and ruolo not in {"presenza", "binaria", "categoria"}:
+        raise ValueError(
+            f"La colonna “{nome}” non è una presenza o una categoria: "
+            "non si può interpretare automaticamente una casella vuota come assenza. "
+            "Scegli «escludi» oppure, per una quantità, conferma esplicitamente lo zero."
+        )
+    return politica
+
+
+def _valori_binari_gower(
+    grezzi: list[str], nome: str, ruolo: str, politica: str,
+    interpretazione: dict[str, Any], asimmetrica: bool,
+) -> list[str | int | None]:
+    """Per i binari asimmetrici determina la polarità, senza supporre A/B = 0/1."""
+    distinti = sorted({str(v).strip() for v in grezzi if not mancante(v)})
+    if len(distinti) > 2:
+        raise ValueError(
+            f"La colonna “{nome}” ha {len(distinti)} stati osservati: "
+            "non può essere trattata come binaria."
+        )
+    configurati = interpretazione.get("presenzaPositivaPerColonna") or {}
+    if not isinstance(configurati, dict):
+        raise ValueError("La configurazione degli stati di presenza non è valida.")
+    positivo = configurati.get(nome, "")
+    if positivo and positivo not in distinti:
+        raise ValueError(
+            f"Il valore indicato come presenza per “{nome}” non compare nella colonna."
+        )
+    if not positivo:
+        convenzioni_positive = {"1", "si", "sì", "yes", "true", "vero", "presente", "attivo"}
+        convenzioni_negative = {"0", "no", "false", "falso", "assente", "inattivo"}
+        candidati = [v for v in distinti if v.casefold() in convenzioni_positive]
+        altri = [v for v in distinti if v.casefold() in convenzioni_negative]
+        if len(candidati) == 1 and len(candidati) + len(altri) == len(distinti):
+            positivo = candidati[0]
+        elif len(distinti) == 1 and distinti[0].casefold() in convenzioni_negative:
+            # Per una colonna tutta di assenze, nessuna presenza è osservata.
+            positivo = None
+
+    if (asimmetrica or politica == "assenza") and positivo == "":
+        raise ValueError(
+            f"Per la colonna “{nome}” scegli quale stato indica la presenza. "
+            "Non è possibile ricavarlo automaticamente da queste etichette."
+        )
+    if not (asimmetrica or politica == "assenza"):
+        return [None if mancante(v) else str(v).strip() for v in grezzi]
+    return [
+        0 if mancante(v) and politica == "assenza" else
+        None if mancante(v) else
+        (1 if str(v).strip() == positivo else 0)
+        for v in grezzi
+    ]
+
+
 def _metadati_gower(
     risultato: dict[str, Any],
     interpretazione: dict[str, Any],
     percorso: dict[str, Any],
 ) -> list[dict[str, Any]]:
+    """Prepara i soli contributi informativi, con pesi e valori mancanti coerenti."""
     tabella = risultato["originale"]
     analisi_per_nome = {colonna["nome"]: colonna for colonna in risultato["colonne"]}
     profili = {profilo["nome"]: profilo for profilo in risultato["questionario"]["colonne"]}
     risposte = interpretazione.get("colonne", {})
     robusta = percorso["metodo"] == "Dissimilarità di Gower robusta"
+    pesi_configurati = interpretazione.get("pesiGower") or {}
+    if not isinstance(pesi_configurati, dict):
+        raise ValueError("I pesi di Gower devono essere specificati per colonna.")
     metadati: list[dict[str, Any]] = []
 
     for nome in percorso["colonne"]:
-        indice = tabella["intestazioni"].index(nome)
-        grezzi = [riga[indice] for riga in tabella["righe"]]
+        grezzi = [riga[tabella["intestazioni"].index(nome)] for riga in tabella["righe"]]
         ruolo = risposte.get(nome, {}).get("ruolo", profili[nome]["ruoloSuggerito"])
         analisi = analisi_per_nome[nome]
-
-        if ruolo == "quantita":
-            valori = [leggi_numero(valore, tabella["separatore"]) for valore in grezzi]
-            if any(valore is INVALIDO for valore in valori):
-                raise ValueError(f"La colonna “{nome}” contiene valori non numerici.")
-            osservati = [float(valore) for valore in valori if valore is not None]
-            intervallo = max(osservati) - min(osservati) if osservati else 0
-            if robusta and analisi.get("statistiche", {}).get("iqr", 0) > 0:
-                scala = 7 * analisi["statistiche"]["iqr"]
+        try:
+            peso = float(str(pesi_configurati.get(nome, "1")).strip().replace(",", "."))
+        except (ValueError, TypeError):
+            raise ValueError(f"Il peso Gower della colonna “{nome}” deve essere positivo.")
+        if not math.isfinite(peso) or peso <= 0:
+            raise ValueError(
+                f"Il peso Gower della colonna “{nome}” deve essere strettamente positivo."
+            )
+        politica = _politica_mancanti_gower(
+            nome, ruolo, any(mancante(v) for v in grezzi), interpretazione
+        )
+        asimmetrica = ruolo == "presenza" and (
+            (interpretazione.get("zeriCondivisiPerColonna") or {}).get(
+                nome, interpretazione.get("zeriCondivisi")
+            ) == "no"
+        )
+        if ruolo in {"presenza", "binaria"}:
+            if ruolo == "presenza" and (
+                (interpretazione.get("zeriCondivisiPerColonna") or {}).get(
+                    nome, interpretazione.get("zeriCondivisi")
+                ) not in {"si", "no"}
+            ):
+                raise ValueError(
+                    f"Per la colonna “{nome}” conferma se contano le assenze condivise."
+                )
+            valori = _valori_binari_gower(
+                grezzi, nome, ruolo, politica, interpretazione, asimmetrica
+            )
+            tipo, scala, limita = "nominale", None, False
+        elif ruolo == "quantita":
+            numeri = [leggi_numero(v, tabella["separatore"]) for v in grezzi]
+            if any(v is INVALIDO for v in numeri):
+                raise ValueError(f"La colonna “{nome}” contiene quantità non numeriche.")
+            valori = [
+                0.0 if v is None and politica == "zero" else v
+                for v in numeri
+            ]
+            osservati = [float(v) for v in valori if v is not None]
+            intervallo = max(osservati) - min(osservati) if osservati else 0.0
+            if robusta and osservati:
+                ordinati = sorted(osservati)
+                iqr = quantile(ordinati, 0.75) - quantile(ordinati, 0.25)
+                scala = 7 * iqr if iqr > 0 else intervallo
             else:
                 scala = intervallo
-            metadati.append({"nome": nome, "tipo": "numerica", "valori": valori, "scala": scala, "limita": robusta})
+            tipo, limita = "numerica", robusta
         elif ruolo == "data":
-            valori = [_leggi_data(valore) for valore in grezzi]
-            osservati = sorted({valore for valore in valori if valore is not None})
+            valori = [_leggi_data(v) for v in grezzi]
+            osservati = sorted({v for v in valori if v is not None})
             if interpretazione.get("usoDate") == "ordine":
-                massimo = max(1, len(osservati) - 1)
-                mappa = {valore: indice / massimo for indice, valore in enumerate(osservati)}
-                codificati = [None if valore is None else mappa[valore] for valore in valori]
-                metadati.append({"nome": nome, "tipo": "numerica", "valori": codificati, "scala": 1, "limita": False})
+                posizioni = {v: i / max(1, len(osservati) - 1) for i, v in enumerate(osservati)}
+                valori = [None if v is None else posizioni[v] for v in valori]
+                scala = 1.0
             else:
-                scala = osservati[-1] - osservati[0] if osservati else 0
-                metadati.append({"nome": nome, "tipo": "numerica", "valori": valori, "scala": scala, "limita": False})
-        elif ruolo == "livello" and interpretazione.get("ordineLivelli") == "si":
-            numeri = [leggi_numero(valore, tabella["separatore"]) for valore in grezzi]
-            if any(valore is INVALIDO for valore in numeri if valore is not None):
-                raise ValueError(f"Specifica l’ordine dei livelli della colonna “{nome}”.")
-            livelli = sorted({float(valore) for valore in numeri if valore is not None})
-            massimo = max(1, len(livelli) - 1)
-            mappa = {valore: indice / massimo for indice, valore in enumerate(livelli)}
-            valori = [None if valore is None else mappa[float(valore)] for valore in numeri]
-            metadati.append({"nome": nome, "tipo": "numerica", "valori": valori, "scala": 1, "limita": False})
+                scala = osservati[-1] - osservati[0] if osservati else 0.0
+            tipo, limita = "numerica", False
+        elif ruolo == "livello":
+            risposta = (interpretazione.get("ordinePerColonna") or {}).get(
+                nome, interpretazione.get("ordineLivelli")
+            )
+            if risposta not in {"si", "no"}:
+                raise ValueError(f"Conferma se la colonna “{nome}” è ordinata.")
+            if risposta == "no":
+                valori = [None if mancante(v) else str(v).strip() for v in grezzi]
+                tipo, scala, limita = "nominale", None, False
+            else:
+                osservati = [str(v).strip() for v in grezzi if not mancante(v)]
+                numeri = [leggi_numero(v, tabella["separatore"]) for v in osservati]
+                if all(v is not INVALIDO and v is not None for v in numeri):
+                    livelli = sorted({float(v) for v in numeri})
+                    mappa = {val: i / max(1, len(livelli) - 1)
+                             for i, val in enumerate(livelli)}
+                    valori = [
+                        None if mancante(v) else mappa[float(leggi_numero(v, tabella["separatore"]))]
+                        for v in grezzi
+                    ]
+                else:
+                    testo_ordine = (interpretazione.get("ordiniLivelliGower") or {}).get(nome, "")
+                    livelli = [val.strip() for val in testo_ordine.split(";") if val.strip()]
+                    if len(set(livelli)) != len(livelli) or set(livelli) != set(osservati):
+                        raise ValueError(
+                            f"Specifica per “{nome}” tutti e soli i livelli in ordine, "
+                            "separati da punto e virgola."
+                        )
+                    mappa = {val: i / max(1, len(livelli) - 1)
+                             for i, val in enumerate(livelli)}
+                    valori = [None if mancante(v) else mappa[str(v).strip()] for v in grezzi]
+                tipo, scala, limita = "numerica", 1.0, False
         else:
-            valori = [None if mancante(valore) else str(valore) for valore in grezzi]
-            asimmetrica = ruolo == "presenza" and interpretazione.get("zeriCondivisi") == "no"
-            metadati.append({"nome": nome, "tipo": "nominale", "valori": valori, "asimmetrica": asimmetrica})
+            valori = [
+                ASSENZA_GOWER if mancante(v) and politica == "assenza" else
+                None if mancante(v) else str(v).strip()
+                for v in grezzi
+            ]
+            tipo, scala, limita = "nominale", None, False
+
+        # Una variabile senza variabilità osservabile non deve diluire il
+        # contributo delle altre variabili nel denominatore.
+        distinti = {v for v in valori if v is not None}
+        if len(distinti) <= 1:
+            continue
+        metadati.append({
+            "nome": nome, "tipo": tipo, "valori": valori, "scala": scala,
+            "limita": limita, "asimmetrica": asimmetrica, "peso": peso,
+            "politicaMancanti": politica,
+        })
+
+    if not metadati:
+        raise ValueError(
+            "Tutte le colonne utilizzabili da Gower sono costanti o non osservate: "
+            "non è disponibile alcuna caratteristica discriminante."
+        )
     return metadati
 
 
@@ -1921,7 +2110,7 @@ def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, 
     for i in range(n):
         for k in range(i + 1, n):
             somma = 0.0
-            peso = 0
+            peso = 0.0
             for variabile in metadati:
                 a = variabile["valori"][i]
                 b = variabile["valori"][k]
@@ -1936,8 +2125,8 @@ def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, 
                     contributo = 0.0 if scala == 0 else abs(float(a) - float(b)) / scala
                     if variabile.get("limita"):
                         contributo = min(contributo, 1.0)
-                somma += contributo
-                peso += 1
+                somma += variabile["peso"] * contributo
+                peso += variabile["peso"]
             distanza = None if peso == 0 else somma / peso
             matrice[i][k] = distanza
             matrice[k][i] = distanza
@@ -1945,11 +2134,15 @@ def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, 
     etichette = _etichette_righe(risultato, interpretazione)
     righe_csv = [[etichetta, *riga] for etichetta, riga in zip(etichette, matrice)]
     nota = (
-        "Per le quantità, Gower robusta usa l’ampiezza tra Q1−3·IQR e Q3+3·IQR; "
-        "i contributi superiori a 1 vengono limitati a 1."
+        "Per le quantità, Gower robusta usa 7·IQR quando positivo, "
+        "con contributi limitati a 1."
         if percorso["metodo"] == "Dissimilarità di Gower robusta"
-        else "Per le quantità, Gower classica divide la differenza assoluta per l’intervallo osservato."
+        else "Per le quantità, Gower classica divide lo scarto per l’intervallo osservato."
     )
+    escluse = [nome for nome in percorso["colonne"] if nome not in {v["nome"] for v in metadati}]
+    if escluse:
+        nota += " Colonne prive di variabilità escluse dal denominatore: " + ", ".join(escluse) + "."
+    nota += " I pesi positivi sono applicati sia al numeratore sia al denominatore."
     return {
         "metodo": percorso["metodo"], "colonne": percorso["colonne"],
         "etichette": etichette, "matrice": matrice,
