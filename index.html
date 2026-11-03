@@ -58,14 +58,15 @@
       </div>
 
       <div class="scaling-wrap" id="scaling-wrap" hidden>
-        <h3>Riscalamento confermato</h3>
-        <p>Queste sono le trasformazioni utilizzate dal percorso numerico scelto. Se modifichi una voce, dovrai confermare nuovamente il piano prima di visualizzare la tabella trasformata.</p>
+        <h3>Riscalamento delle variabili numeriche</h3>
+        <p>Controlla la trasformazione proposta per ciascuna variabile selezionata. Puoi modificarla prima della conferma; la matrice trasformata comparirà solo dopo.</p><p id="numeric-scaling-status" role="status"></p>
         <div class="data-table-wrap">
           <table class="data-table scaling-table">
             <thead><tr><th>Feature</th><th>Tipo di dato</th><th>Trasformazione candidata</th><th>Parametri</th><th>Mancanti</th></tr></thead>
             <tbody id="scaling-body"></tbody>
           </table>
         </div>
+        <button class="action" id="confirm-numeric-scaling" type="button">Conferma il riscalamento e mostra la matrice</button>
       </div>
 
       <div class="preview-block">
@@ -301,7 +302,7 @@
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
   <script defer src="js/preprocessing-python.js?v=20261103-1"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261103-1"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261103-2"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>
