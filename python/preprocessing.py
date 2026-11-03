@@ -1780,6 +1780,24 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
                        if nome not in {v["nome"] for v in metadati}]
             percorso["colonneEscluseGower"] = esclusi
             percorso["pesiGower"] = {v["nome"]: v["peso"] for v in metadati}
+            mancanti_risolti = {v["nome"]: v["politicaMancanti"] for v in metadati
+                                if analisi_per_nome[v["nome"]]["mancanti"] > 0}
+            if mancanti_risolti:
+                etichette = {
+                    "escludi": "esclusi a coppie",
+                    "assenza": "trattati come assenza",
+                    "zero": "sostituiti esplicitamente con zero",
+                }
+                percorso["mancanti"]["strategia"] = (
+                    "esclusione_pairwise" if set(mancanti_risolti.values()) == {"escludi"}
+                    else "configurazione_per_colonna"
+                )
+                percorso["mancanti"]["descrizione"] = (
+                    "Per Gower: " + "; ".join(
+                        nome + ": " + etichette[politica]
+                        for nome, politica in mancanti_risolti.items()
+                    ) + ". Le coppie senza alcun contributo disponibile restano non definite."
+                )
             if esclusi:
                 percorso.setdefault("avvisi", []).append(
                     "Colonne non informative escluse dal denominatore: " +
@@ -1921,6 +1939,8 @@ def _valori_binari_gower(
 ) -> list[str | int | None]:
     """Per i binari asimmetrici determina la polarità, senza supporre A/B = 0/1."""
     distinti = sorted({str(v).strip() for v in grezzi if not mancante(v)})
+    if not distinti:
+        return [0 if politica == "assenza" else None for _ in grezzi]
     if len(distinti) > 2:
         raise ValueError(
             f"La colonna “{nome}” ha {len(distinti)} stati osservati: "
@@ -1937,11 +1957,24 @@ def _valori_binari_gower(
     if not positivo:
         convenzioni_positive = {"1", "si", "sì", "yes", "true", "vero", "presente", "attivo"}
         convenzioni_negative = {"0", "no", "false", "falso", "assente", "inattivo"}
-        candidati = [v for v in distinti if v.casefold() in convenzioni_positive]
-        altri = [v for v in distinti if v.casefold() in convenzioni_negative]
+
+        def polarita_testuale(valore: str) -> int | None:
+            testo = valore.casefold()
+            if testo in convenzioni_positive:
+                return 1
+            if testo in convenzioni_negative:
+                return 0
+            try:
+                numero = float(testo.replace(",", "."))
+            except ValueError:
+                return None
+            return int(numero) if numero in (0, 1) else None
+
+        candidati = [v for v in distinti if polarita_testuale(v) == 1]
+        altri = [v for v in distinti if polarita_testuale(v) == 0]
         if len(candidati) == 1 and len(candidati) + len(altri) == len(distinti):
             positivo = candidati[0]
-        elif len(distinti) == 1 and distinti[0].casefold() in convenzioni_negative:
+        elif len(distinti) == 1 and polarita_testuale(distinti[0]) == 0:
             # Per una colonna tutta di assenze, nessuna presenza è osservata.
             positivo = None
 
@@ -1991,6 +2024,11 @@ def _metadati_gower(
         politica = _politica_mancanti_gower(
             nome, ruolo, any(mancante(v) for v in grezzi), interpretazione
         )
+        # Se i soli valori osservati sono tutti uguali e i mancanti vengono
+        # esclusi, l'eventuale polarità binaria è irrilevante.
+        osservati_grezzi = {str(v).strip() for v in grezzi if not mancante(v)}
+        if politica == "escludi" and len(osservati_grezzi) <= 1:
+            continue
         asimmetrica = ruolo == "presenza" and (
             (interpretazione.get("zeriCondivisiPerColonna") or {}).get(
                 nome, interpretazione.get("zeriCondivisi")
