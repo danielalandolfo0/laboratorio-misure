@@ -752,6 +752,89 @@
     }).join("");
   }
 
+  function domandeConfigurazioneGower(profili) {
+    if (!profili.length) return "";
+    const campi = [];
+    const mancantiCSV = new Set(["", "na", "n/a", "null", "?"]);
+    const rispostaMancanti = valoreRisposta("significatoMancanti");
+    const rispostaZeri = valoreRisposta("zeriCondivisi");
+    const rispostaOrdini = valoreRisposta("ordineLivelli");
+
+    function menu(chiave, colonna, etichetta, opzioni, valore) {
+      return '<label><strong>' + escapeHtml(etichetta) + '</strong>' +
+        '<select class="gower-setting" data-gower-key="' + chiave + '" data-gower-column="' +
+        escapeHtml(colonna) + '">' +
+        opzioni.map(op => '<option value="' + escapeHtml(op[0]) + '"' +
+          (String(valore || "") === op[0] ? " selected" : "") + '>' +
+          escapeHtml(op[1]) + '</option>').join("") + '</select></label>';
+    }
+
+    campi.push('<div class="question-item"><strong>Configurazione delle caratteristiche in Gower</strong>' +
+      '<p>Ogni caratteristica contribuisce secondo il suo tipo. Puoi assegnare un peso positivo a ciascuna ' +
+      'colonna: 1 significa importanza uguale; 2 significa contributo doppio, a parità di disponibilità.</p></div>');
+    for (const profilo of profili) {
+      const nome = profilo.nome;
+      const ruolo = interpretazione.colonne[nome]?.ruolo;
+      const indice = risultato.originale.intestazioni.indexOf(nome);
+      const osservati = risultato.originale.righe.map(r => String(r[indice]).trim()).filter(
+        valore => !mancantiCSV.has(valore.toLocaleLowerCase())
+      );
+      const distinti = [...new Set(osservati)];
+      const tipo = risultato.colonne.find(c => c.nome === nome)?.tipo;
+      let elementi = '<div class="question-item"><strong>' + escapeHtml(nome) + '</strong>';
+      const peso = interpretazione.pesiGower?.[nome] ?? "1";
+      elementi += '<label>Importanza di questa caratteristica (peso positivo)' +
+        '<input class="gower-setting" data-gower-key="pesiGower" data-gower-column="' +
+        escapeHtml(nome) + '" type="text" value="' + escapeHtml(peso) +
+        '" placeholder="1"></label>';
+
+      if (risultato.colonne.find(c => c.nome === nome)?.mancanti > 0) {
+        const opzioni = [["", "Segui la risposta generale sulle caselle vuote"],
+          ["escludi", "Valore non disponibile: ignora questa colonna per la coppia"]];
+        if (["categoria", "binaria", "presenza"].includes(ruolo))
+          opzioni.push(["assenza", "Casella vuota = assenza (stato o categoria distinta)"]);
+        if (ruolo === "quantita")
+          opzioni.push(["zero", "Confermo esplicitamente che vuoto significa quantità zero"]);
+        elementi += menu("mancantiPerColonna", nome, "Come trattare i valori vuoti di questa colonna?",
+          opzioni, interpretazione.mancantiPerColonna?.[nome] || "");
+        if (rispostaMancanti === "assenza" && !["categoria", "binaria", "presenza"].includes(ruolo))
+          elementi += '<p>Per questa colonna, «assenza» non è uno zero automatico: scegli esplicitamente come trattarla.</p>';
+      }
+
+      if (ruolo === "presenza") {
+        elementi += menu("zeriCondivisiPerColonna", nome, "Le assenze condivise contano?",
+          [["", "Segui la risposta generale"],
+            ["si", "Sì, contano"], ["no", "No, escludile dal confronto"]],
+          interpretazione.zeriCondivisiPerColonna?.[nome] || "");
+        const valoriPresenti = distinti.map(v => [v, "La presenza è indicata da: " + v]);
+        elementi += menu("presenzaPositivaPerColonna", nome, "Quale valore indica la presenza?",
+          [["", "Riconosci automaticamente 1/sì/vero, se possibile"], ...valoriPresenti],
+          interpretazione.presenzaPositivaPerColonna?.[nome] || "");
+        if (rispostaZeri === "dipende")
+          elementi += '<p>Hai scelto «dipende»: specifica sopra se le assenze contano per questa colonna.</p>';
+      }
+
+      if (ruolo === "livello") {
+        elementi += menu("ordinePerColonna", nome, "I livelli di questa colonna sono ordinati?",
+          [["", "Segui la risposta generale"],
+            ["si", "Sì, hanno un ordine"], ["no", "No, sono semplici categorie"]],
+          interpretazione.ordinePerColonna?.[nome] || "");
+        const ordinale = interpretazione.ordinePerColonna?.[nome] || rispostaOrdini;
+        if (ordinale === "si" && tipo === "non_numerica") {
+          elementi += '<label>Elenca i livelli dal più basso al più alto, separati da ;' +
+            '<input class="gower-setting" data-gower-key="ordiniLivelliGower" data-gower-column="' +
+            escapeHtml(nome) + '" type="text" value="' +
+            escapeHtml(interpretazione.ordiniLivelliGower?.[nome] || "") +
+            '" placeholder="' + escapeHtml(distinti.join("; ")) + '"></label>';
+          elementi += '<p>Inserisci tutti i livelli osservati una sola volta. Non verrà inventato alcun ordine alfabetico.</p>';
+        }
+      }
+      elementi += '</div>';
+      campi.push(elementi);
+    }
+    return campi.join("");
+  }
+
   function disegnaQuestionario() {
     nascondiPiano();
     const profili = risultato.questionario.colonne;
@@ -880,6 +963,9 @@
         [["automatico", "Usa il criterio consigliato"], ["classica", "Usa l'intervallo osservato (Gower classica)"], ["robusta", "Limita l'influenza dei valori estremi sulla scala (Gower robusta)"]],
         "automatico"
       ));
+    }
+    if (!percorsoNumerico && indipendentiStandard.length) {
+      domande.push(domandeConfigurazioneGower(indipendentiStandard));
     }
     interpretazione.gruppi.forEach(gruppo => {
       const membri = profili.filter(profilo => interpretazione.colonne[profilo.nome]?.usa && interpretazione.assegnazioni[profilo.nome] === gruppo.id);
@@ -1043,6 +1129,16 @@
     disegnaQuestionario();
   });
   $("adaptive-questions").addEventListener("change", evento => {
+    if (evento.target.matches(".gower-setting")) {
+      const chiave = evento.target.dataset.gowerKey;
+      const colonna = evento.target.dataset.gowerColumn;
+      if (!["pesiGower", "mancantiPerColonna", "zeriCondivisiPerColonna",
+            "presenzaPositivaPerColonna", "ordinePerColonna", "ordiniLivelliGower"].includes(chiave)) return;
+      if (!interpretazione[chiave]) interpretazione[chiave] = {};
+      interpretazione[chiave][colonna] = evento.target.value;
+      disegnaQuestionario();
+      return;
+    }
     if (evento.target.matches(".semantic-answer, .semantic-input")) {
       interpretazione[evento.target.dataset.answer] = evento.target.value;
       if (evento.target.matches(".semantic-answer")) disegnaQuestionario();
