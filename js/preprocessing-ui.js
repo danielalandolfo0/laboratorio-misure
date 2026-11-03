@@ -111,7 +111,9 @@
       ? colonneNumericheSelezionate().map(c => c.nome)
       : risultato.originale.intestazioni;
     const indici = selezionate.map(nome => risultato.originale.intestazioni.indexOf(nome));
-    const righe = righeVista().map(riga => indici.map(indice => riga[indice]));
+    const righe = vista === "lavoro" && pianoCorrente?.anteprimaNumerica
+      ? pianoCorrente.anteprimaNumerica.righe
+      : righeVista().map(riga => indici.map(indice => riga[indice]));
     const limiteRighe = Math.min(12, righe.length);
     const limiteColonne = Math.min(20, risultato.originale.intestazioni.length);
     const intestazioni = selezionate.slice(0, limiteColonne);
@@ -122,7 +124,8 @@
     const origine = vista === "originale"
       ? "Valori originali."
       : "Valori trasformati secondo il riscalamento confermato nel piano di confronto.";
-    $("preview-caption").textContent = `${origine} ${limiteRighe} di ${righe.length} righe${limiteColonne < risultato.originale.intestazioni.length ? ` e ${limiteColonne} di ${risultato.originale.intestazioni.length} colonne` : ""}.`;
+    const totaleRighe = risultato.originale.righe.length;
+    $("preview-caption").textContent = `${origine} ${limiteRighe} di ${totaleRighe} righe${limiteColonne < selezionate.length ? ` e ${limiteColonne} di ${selezionate.length} colonne` : ""}.`;
     $("view-original").classList.toggle("active", vista === "originale");
     $("view-work").classList.toggle("active", vista === "lavoro");
   }
@@ -214,6 +217,7 @@
       && piano.percorsi[0].preelaborazione.usaTabellaTrasformata
     );
     $("scaling-wrap").hidden = !confermata;
+
     $("preview-view-switch").hidden = !confermata;
     $("download-work").hidden = !confermata;
     $("download-work").disabled = !confermata;
