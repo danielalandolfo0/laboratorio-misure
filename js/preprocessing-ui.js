@@ -560,7 +560,13 @@
       const passi = pre.passi.length
         ? pre.passi.map(passo => `${escapeHtml(passo.colonna)}: ${escapeHtml(passo.etichetta)}`).join(" · ")
         : "Nessuna trasformazione colonna per colonna";
-      const calcolo = percorso.calcolo.disponibile ? "Calcolo disponibile" : "Calcolo non ancora collegato";
+      const calcolo = percorso.calcolo.disponibile
+        ? "Calcolo disponibile"
+        : percorso.stato === "da_completare" ? "Completa la configurazione" : "Calcolo non ancora collegato";
+      const pesiGower = Object.entries(percorso.pesiGower || {}).map(([nome, peso]) =>
+        escapeHtml(nome) + ": " + formatoNumero(peso)
+      ).join(" · ");
+      const escluseGower = (percorso.colonneEscluseGower || []).map(escapeHtml).join(", ");
       const parametri = Object.entries(percorso.parametri || {}).map(([chiave, valore]) =>
         `${escapeHtml(chiave)} = ${escapeHtml(Array.isArray(valore) ? valore.join(", ") : valore)}`
       ).join(" · ");
@@ -579,6 +585,8 @@
           <div><dt>Origine</dt><dd>${escapeHtml(pre.etichettaOrigine)}</dd></div>
           <div><dt>Trasformazioni</dt><dd>${passi}</dd></div>
           ${parametri ? `<div><dt>Parametri</dt><dd>${parametri}</dd></div>` : ""}
+          ${pesiGower ? `<div><dt>Pesi Gower</dt><dd>${pesiGower}</dd></div>` : ""}
+          ${escluseGower ? `<div><dt>Colonne senza variabilità</dt><dd>Escluse dal denominatore: ${escluseGower}</dd></div>` : ""}
           <div><dt>Mancanti</dt><dd>${escapeHtml(mancanti.descrizione)}</dd></div>
           ${percorso.proprieta ? `<div><dt>Proprietà</dt><dd>${escapeHtml(percorso.proprieta)}</dd></div>` : ""}
           <div><dt>Stato</dt><dd>${escapeHtml(calcolo)}</dd></div>
@@ -866,7 +874,7 @@
     const domande = [];
     if (colonneIncluse.some(colonna => colonna.mancanti > 0)) domande.push(domandaAdattiva(
       "significatoMancanti", "Che cosa significa una casella vuota?",
-      "La risposta cambia il modo in cui due righe possono essere confrontate.",
+      "Un valore sconosciuto viene escluso per la coppia; una vera assenza, se confermata per la colonna, viene trattata come uno stato osservato.",
       [["sconosciuto", "Il valore non è conosciuto"], ["non_applicabile", "La domanda non si applica"], ["assenza", "Indica assenza"], ["misto", "Dipende dalla colonna"], ["ignoto", "Non lo so"]]
     ));
     if (colonneIncluse.some(colonna => colonna.statistiche?.estremi > 0)) domande.push(domandaAdattiva(
@@ -876,7 +884,7 @@
     ));
     if (ruoliInclusi.has("presenza")) domande.push(domandaAdattiva(
       "zeriCondivisi", "Due assenze in comune rendono simili due righe?",
-      "Pensa alle colonne di presenza/assenza: avere entrambi 0 può essere informativo oppure irrilevante.",
+      "Nella Gower con presenze asimmetriche, due assenze condivise non forniscono un contributo. Puoi modificare questa scelta per ciascuna colonna.",
       [["si", "Sì, anche l’assenza in comune conta"], ["no", "No, contano soprattutto le presenze"], ["dipende", "Dipende dalla colonna"], ["ignoto", "Non lo so"]]
     ));
     if (ruoliInclusi.has("livello")) domande.push(domandaAdattiva(
