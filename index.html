@@ -106,7 +106,14 @@
       <div class="scaling-wrap" id="scaling-wrap" hidden>
         <h3>Riscalamento delle variabili numeriche</h3>
         <p>Controlla la trasformazione proposta per ciascuna variabile selezionata. Puoi modificarla prima della conferma; la matrice trasformata comparirà solo dopo.</p>
-        <p>Formule applicate per colonna: z-score <span class="formula-inline">\( (x-\mu)/\sigma \)</span> (con \(\sigma^2=\frac1n\sum_i(x_i-\mu)^2\)); robusto <span class="formula-inline">\( (x-\operatorname{Med})/IQR \)</span>; min–max <span class="formula-inline">\( (x-\min)/(\max-\min) \)</span>; max-abs <span class="formula-inline">\( x/\max_i|x_i| \)</span>. Le variabili costanti vengono rappresentate con zero: non distinguono le osservazioni.</p><p id="numeric-scaling-status" role="status"></p>
+        <p>Il sito suggerisce come rendere confrontabili le colonne. Puoi lasciare le scelte proposte oppure cambiarle. Nessuna trasformazione modifica il file originale.</p>
+        <details class="scaling-explanation">
+          <summary>Vuoi sapere come funzionano i diversi riscalamenti?</summary>
+          <p><strong>Z-score:</strong> confronta i valori rispetto alla media e alla variabilità della colonna. <strong>Robusto:</strong> usa mediana e intervallo tra i quartili, meno influenzati dai valori estremi. <strong>Min–max:</strong> porta il minimo osservato a 0 e il massimo a 1. <strong>Max-abs:</strong> divide per il valore assoluto più grande e conserva lo zero.</p>
+          <p>Le formule sono: z-score \( (x-\mu)/\sigma \), con \(\sigma^2=\frac1n\sum_i(x_i-\mu)^2\); robusto \( (x-\operatorname{Med})/IQR \); min–max \( (x-\min)/(\max-\min) \); max-abs \( x/\max_i|x_i| \).</p>
+          <p>Se una colonna è costante, il sito può rappresentarla con zero: non distingue le righe. Un riscalamento robusto non rende automaticamente insensibile agli outlier la distanza calcolata.</p>
+        </details>
+        <p id="numeric-scaling-status" role="status"></p>
         <div class="data-table-wrap">
           <table class="data-table scaling-table">
             <thead><tr><th>Feature</th><th>Tipo di dato</th><th>Trasformazione candidata</th><th>Parametri</th><th>Mancanti</th></tr></thead>
@@ -303,8 +310,8 @@
 
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
-  <script defer src="js/preprocessing-python.js?v=20261103-5"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261103-5"></script>
+  <script defer src="js/preprocessing-python.js?v=20261103-6"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261103-6"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>
