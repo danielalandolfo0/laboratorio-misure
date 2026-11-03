@@ -931,30 +931,35 @@ def _diagnosi_numerica(
 
     righe_complete = _righe_complete_numeriche(non_costanti, analisi_per_nome)
     covarianza_utilizzabile = False
+    covarianza_singolare = False
     condizionamento: float | None = None
     righe_minime_covarianza = max(len(non_costanti) + 2, 5 * len(non_costanti))
+    campione_limitato = len(righe_complete) < righe_minime_covarianza
     if len(non_costanti) < 2:
         motivo_covarianza = "Servono almeno due colonne quantitative non costanti."
     elif colonne_costanti:
-        motivo_covarianza = "Sono presenti colonne costanti, che rendono singolare la covarianza completa."
-    elif len(righe_complete) < righe_minime_covarianza:
+        covarianza_singolare = True
         motivo_covarianza = (
-            f"Sono disponibili {len(righe_complete)} righe complete; la regola prudenziale "
-            f"ne richiede almeno {righe_minime_covarianza}."
+            "Una o più colonne sono costanti: la matrice di covarianza completa è singolare."
+        )
+    elif len(righe_complete) <= len(non_costanti):
+        covarianza_singolare = True
+        motivo_covarianza = (
+            f"Con {len(righe_complete)} righe complete e {len(non_costanti)} colonne, "
+            "la covarianza campionaria non può avere rango pieno."
         )
     else:
-        motivo_covarianza = "La matrice standardizzata deve ancora essere verificata."
-    if (
-        len(non_costanti) >= 2
-        and not colonne_costanti
-        and len(righe_complete) >= righe_minime_covarianza
-    ):
+        # La soglia 5p è soltanto una cautela sulla stabilità della stima:
+        # NON deve impedire di diagnosticare una dipendenza lineare esatta.
         medie = [
             sum(riga[j] for riga in righe_complete) / len(righe_complete)
             for j in range(len(non_costanti))
         ]
         deviazioni = [
-            math.sqrt(sum((riga[j] - medie[j]) ** 2 for riga in righe_complete) / (len(righe_complete) - 1))
+            math.sqrt(
+                sum((riga[j] - medie[j]) ** 2 for riga in righe_complete)
+                / (len(righe_complete) - 1)
+            )
             for j in range(len(non_costanti))
         ]
         standardizzate = [
@@ -963,19 +968,38 @@ def _diagnosi_numerica(
         ]
         covarianza_standardizzata = _covarianza(standardizzate)
         inversa = _inversa_gauss_jordan(covarianza_standardizzata)
-        if inversa is not None:
+        if inversa is None:
+            covarianza_singolare = True
+            motivo_covarianza = (
+                "La matrice di covarianza è singolare: alcune colonne contengono "
+                "informazioni linearmente dipendenti. Aggiungere righe che rispettano "
+                "le stesse relazioni non risolve il problema."
+            )
+        else:
             condizionamento = (
                 _norma_infinito_matrice(covarianza_standardizzata)
                 * _norma_infinito_matrice(inversa)
             )
-            covarianza_utilizzabile = math.isfinite(condizionamento) and condizionamento <= 1e8
-            motivo_covarianza = (
-                "La covarianza standardizzata è invertibile e sufficientemente ben condizionata."
-                if covarianza_utilizzabile else
-                "La covarianza standardizzata è invertibile ma numericamente mal condizionata."
+            covarianza_utilizzabile = (
+                math.isfinite(condizionamento) and condizionamento <= 1e8
             )
-        else:
-            motivo_covarianza = "La covarianza standardizzata è singolare."
+            if not covarianza_utilizzabile:
+                motivo_covarianza = (
+                    "La covarianza è invertibile ma numericamente mal condizionata: "
+                    "Mahalanobis classica potrebbe essere instabile."
+                )
+            elif campione_limitato:
+                motivo_covarianza = (
+                    "La covarianza è invertibile e supera il controllo numerico, "
+                    f"ma sono disponibili solo {len(righe_complete)} righe complete "
+                    f"per {len(non_costanti)} colonne. La soglia prudenziale "
+                    f"di {righe_minime_covarianza} non è un requisito matematico: "
+                    "la stima può però essere poco stabile."
+                )
+            else:
+                motivo_covarianza = (
+                    "La covarianza è invertibile e sufficientemente ben condizionata."
+                )
 
     correlazioni_forti = correlazione_massima >= 0.8
     politica_senza_outlier = "maxabs_automatico" if matrice_sparsa else "zscore_automatico"
@@ -988,6 +1012,16 @@ def _diagnosi_numerica(
             if robusto_applicabile else
             "Sono presenti valori estremi, ma almeno una colonna ha IQR nullo: viene usato "
             "lo z-score e Manhattan evita di elevare al quadrato gli scarti."
+        )
+    elif covarianza_singolare:
+        id_misura = "euclidean"
+        politica = politica_senza_outlier
+        motivo = (
+            "Attenzione: le colonne selezionate presentano una dipendenza lineare "
+            "che rende singolare la covarianza. Mahalanobis classica non è applicabile. "
+            "L'Euclidea resta calcolabile, ma può contare più volte la stessa "
+            "informazione: verifica se alcune colonne devono essere escluse o "
+            "se la ripetizione è intenzionale."
         )
     elif correlazioni_forti and covarianza_utilizzabile:
         id_misura = "mahalanobis"
@@ -1022,6 +1056,8 @@ def _diagnosi_numerica(
         "righeComplete": len(righe_complete),
         "righeMinimeCovarianza": righe_minime_covarianza,
         "covarianzaUtilizzabile": covarianza_utilizzabile,
+        "covarianzaSingolare": covarianza_singolare,
+        "campioneLimitato": campione_limitato,
         "motivoCovarianza": motivo_covarianza,
         "condizionamentoCovarianza": condizionamento,
         "soglie": {"quotaOutlier": 0.01, "rapportoDispersioni": 2, "correlazione": 0.8, "condizionamento": 1e8},
