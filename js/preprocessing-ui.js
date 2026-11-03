@@ -593,7 +593,7 @@
         domande.push(domandaAdattiva(
           "aggregazioneScarti", "Quali differenze tra due righe ti interessano di più?",
           "Se non hai una preferenza, lascia che il sito scelga. Potrai cambiare la misura alla fine.",
-          [[["automatico", "Non ho preferenze: scegli il sito"], ["lineare", "Conta la somma delle differenze"], ["quadratica", "Dai più rilievo alle differenze grandi"], ["massimo", "Conta soprattutto la differenza più grande"], ["minkowski", "Voglio regolare io la sensibilità (avanzato)"]],
+          [["automatico", "Non ho preferenze: scegli il sito"], ["lineare", "Conta la somma delle differenze"], ["quadratica", "Dai più rilievo alle differenze grandi"], ["massimo", "Conta soprattutto la differenza più grande"], ["minkowski", "Voglio regolare io la sensibilità (avanzato)"]],
           "automatico"
         ));
         if (valoreRisposta("aggregazioneScarti") === "minkowski") domande.push(domandaInput(
