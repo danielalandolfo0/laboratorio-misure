@@ -1181,6 +1181,21 @@ def _specifica_misura_numerica(
     else:
         politica_preelaborazione = diagnosi["proposta"]["politicaPreelaborazione"]
 
+    if diagnosi["covarianzaSingolare"]:
+        gestione = interpretazione.get("gestioneDipendenzaLineare", "")
+        if gestione != "mantieni":
+            avvisi.append(
+                "Le colonne presentano dipendenza lineare: prima di scegliere la "
+                "distanza conferma se vuoi mantenere tutte le caratteristiche, "
+                "accettando che informazioni ripetute influenzino il risultato, "
+                "oppure escludi le colonne ridondanti."
+            )
+            stato = "da_completare"
+        else:
+            # La conferma non rende invertibile la covarianza: abilita
+            # soltanto misure di coordinate che restano ben definite.
+            pass
+
     minimi = [analisi_per_nome[nome].get("statistiche", {}).get("minimo") for nome in nomi]
     non_negative = all(valore is not None and valore >= 0 for valore in minimi)
     if confronto == "":
