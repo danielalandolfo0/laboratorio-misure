@@ -1035,6 +1035,17 @@ def _diagnosi_numerica(
             "informazione: verifica se alcune colonne devono essere escluse o "
             "se la ripetizione è intenzionale."
         )
+    elif correlazioni_forti and covarianza_utilizzabile and campione_limitato:
+        id_misura = "euclidean"
+        politica = politica_senza_outlier
+        motivo = (
+            "Sono state rilevate relazioni lineari forti e la covarianza è invertibile, "
+            f"ma le {len(righe_complete)} righe complete sono poche rispetto alle "
+            f"{len(non_costanti)} colonne per stimare stabilmente tali relazioni. "
+            "Per prudenza viene proposta l'Euclidea; Mahalanobis resta una scelta "
+            "avanzata, da usare soltanto se il contesto giustifica la stima della covarianza. "
+            + ("Max-abs preserva gli zeri della matrice sparsa." if matrice_sparsa else "Lo z-score assegna alle colonne una scala comune.")
+        )
     elif correlazioni_forti and covarianza_utilizzabile:
         id_misura = "mahalanobis"
         politica = politica_senza_outlier

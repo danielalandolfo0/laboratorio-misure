@@ -244,10 +244,11 @@
         : "Non risultano valori oltre i limiti della regola statistica utilizzata. Questo non garantisce che ogni valore sia corretto.";
       const scale = range.length < 2
         ? "È selezionata una sola colonna numerica."
-        : "Ampiezze osservate: " + range.map(c => c.nome + ": " + formatoNumero(c.ampiezza)).join("; ") + ". " +
+        : "Intervalli osservati (massimo − minimo): " + range.map(c => c.nome + ": " + formatoNumero(c.ampiezza)).join("; ") + ". " +
+          "Rapporto tra la dispersione maggiore e la minore: " + formatoNumero(d.rapportoDispersioni) + ". " +
           (d.dispersioniSimili
-            ? "Le dispersioni considerate dal controllo non differiscono molto."
-            : "Le dispersioni considerate dal controllo differiscono. Un riscalamento può impedire che una colonna domini solo per la grandezza dei numeri.");
+            ? "Secondo il criterio esplorativo adottato, le dispersioni non differiscono molto."
+            : "Secondo il criterio esplorativo adottato, le dispersioni differiscono. Un riscalamento impedisce che una colonna domini soltanto perché varia di più.");
       let andamento = "Non sono state rilevate relazioni lineari forti tra le coppie di colonne controllabili.";
       if (perfette.length) {
         andamento = "Alcune coppie seguono un andamento lineare perfetto: " +
@@ -262,7 +263,7 @@
         '<div class="question-item"><strong>' + escapeHtml(titolo) + '</strong><p>' + escapeHtml(descrizione) + '</p></div>';
       const spiegazioni = [
         riga("Ci sono valori molto diversi dagli altri?", outlier),
-        riga("Le colonne usano numeri di grandezza simile?", scale),
+        riga("Le colonne hanno dispersioni simili?", scale),
         riga("Alcune colonne cambiano insieme?", andamento)
       ];
       if (d.covarianzaSingolare) {

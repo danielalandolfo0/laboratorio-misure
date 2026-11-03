@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import json
 from pathlib import Path
 import pathlib
 import sys
@@ -25,6 +26,7 @@ def risposte_quantitative(**modifiche):
         "confrontoQuantitativo": "assoluto",
         "aggregazioneScarti": "quadratica",
         "dipendenzaCoordinate": "no",
+        "gestioneDipendenzaLineare": "mantieni",
         "importanzaCoordinate": "uguale",
         "colonne": {
             "a": {"ruolo": "quantita", "usa": True},
@@ -62,11 +64,11 @@ robusto_comune = p.prepara_tabella(
     p.leggi_csv("a,b\n10,100\n12,105\n11,98\n9,102\n13,101\n10,99\n12,104\n80,103")
 )
 assert robusto_comune["colonne"][0]["metodo"] == "robusto"
-assert robusto_comune["colonne"][1]["metodo"] == "robusto"
-assert robusto_comune["colonne"][1]["metodoAutomatico"] == "robusto"
-assert "scala robusta comune" in robusto_comune["colonne"][1]["motivo"]
+assert robusto_comune["colonne"][1]["metodo"] == "zscore"
+assert robusto_comune["colonne"][1]["metodoAutomatico"] == "zscore"
+assert robusto_comune["colonne"][1]["motivo"] == "Non emergono outlier rilevanti."
 quasi_uguali(p.statistiche([riga[0] for riga in robusto_comune["trasformate"]])["iqr"], 1)
-quasi_uguali(p.statistiche([riga[1] for riga in robusto_comune["trasformate"]])["iqr"], 1)
+quasi_uguali(p.statistiche([riga[1] for riga in robusto_comune["trasformate"]])["deviazione"], 1)
 
 decimali = p.prepara_tabella(p.leggi_csv("x;y\n1,5;2,5\n2,5;3,5"))
 assert decimali["originale"]["separatore"] == ";"
@@ -146,6 +148,9 @@ risposte_accessibili = {
     "confrontoQuantitativo": "assoluto",
     "aggregazioneScarti": "quadratica",
     "importanzaCoordinate": "ignoto",
+    # In questo esempio b = 100a: manteniamo intenzionalmente entrambe le
+    # colonne e accettiamo che l'informazione ripetuta incida sul confronto.
+    "gestioneDipendenzaLineare": "mantieni",
     "colonne": {
         "a": {"ruolo": "quantita", "usa": True},
         "b": {"ruolo": "quantita", "usa": True},
@@ -231,6 +236,35 @@ assert piano_auto_mahalanobis["diagnosi"]["indicatori"]["covarianzaUtilizzabile"
 assert piano_auto_mahalanobis["percorsi"][0]["idMisura"] == "mahalanobis"
 assert piano_auto_mahalanobis["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"] is True
 
+dati_correlati_campione_limitato = p.prepara_tabella(p.leggi_csv(
+    "a,b\n1,2.1\n2,3.8\n3,6.3\n4,7.7\n5,10.4\n6,11.6\n7,14.5\n8,15.7"
+))
+piano_campione_limitato = p.crea_piano_confronto(
+    dati_correlati_campione_limitato, risposte_automatiche(["a", "b"])
+)
+indicatori_limitati = piano_campione_limitato["diagnosi"]["indicatori"]
+assert indicatori_limitati["correlazioniForti"] is True
+assert indicatori_limitati["covarianzaUtilizzabile"] is True
+assert indicatori_limitati["campioneLimitato"] is True
+assert piano_campione_limitato["diagnosi"]["proposta"]["idMisura"] == "euclidean"
+assert piano_campione_limitato["percorsi"][0]["idMisura"] == "euclidean"
+assert "Per prudenza" in piano_campione_limitato["diagnosi"]["proposta"]["motivo"]
+
+piano_campione_limitato_manuale = p.crea_piano_confronto(
+    dati_correlati_campione_limitato,
+    {**risposte_automatiche(["a", "b"]), "misuraNumericaManuale": "mahalanobis"},
+)
+assert piano_campione_limitato_manuale["percorsi"][0]["idMisura"] == "mahalanobis"
+assert piano_campione_limitato_manuale["percorsi"][0]["stato"] == "pronto"
+
+diagnosi_json = json.loads(p.analizza_diagnosi_numerica_json(
+    "a,b\n1,2.1\n2,3.8\n3,6.3\n4,7.7\n5,10.4\n6,11.6\n7,14.5\n8,15.7",
+    "[]", '["a","b"]',
+))
+assert diagnosi_json["ok"] is True
+assert diagnosi_json["diagnosi"]["campioneLimitato"] is True
+assert diagnosi_json["diagnosi"]["proposta"]["idMisura"] == "euclidean"
+
 dati_correlati_singolari = p.prepara_tabella(p.leggi_csv(
     "a,b\n1,2\n2,4\n3,6\n4,8\n5,10\n6,12\n7,14\n8,16\n9,18\n10,20\n11,22\n12,24"
 ))
@@ -289,6 +323,15 @@ piano_fixture_singolare = p.crea_piano_confronto(
 )
 assert piano_fixture_singolare["diagnosi"]["indicatori"]["covarianzaUtilizzabile"] is False
 assert piano_fixture_singolare["diagnosi"]["proposta"]["idMisura"] == "euclidean"
+assert piano_fixture_singolare["completo"] is False
+
+risposte_singolari_confermate = {
+    **risposte_automatiche(["a", "b"]),
+    "gestioneDipendenzaLineare": "mantieni",
+}
+assert p.crea_piano_confronto(
+    fixture_singolare, risposte_singolari_confermate
+)["completo"] is True
 
 piano_fixture_sparsa = p.crea_piano_confronto(
     fixture_sparsa,
@@ -322,7 +365,7 @@ matrici_fixture = [
         {**risposte_automatiche(["a", "b"]), "significatoEstremi": "reali"},
     ),
     p.calcola_matrice_numerica(fixture_correlata, risposte_automatiche(["a", "b"])),
-    p.calcola_matrice_numerica(fixture_singolare, risposte_automatiche(["a", "b"])),
+    p.calcola_matrice_numerica(fixture_singolare, risposte_singolari_confermate),
     p.calcola_matrice_numerica(
         fixture_sparsa,
         {**risposte_automatiche(["x", "y"]), "significatoEstremi": "reali"},
@@ -349,7 +392,7 @@ for risultato_matrice, metodo, dimensione in zip(
 
 una_numerica = p.prepara_tabella(p.leggi_csv("a,gruppo\n1,x\n2,y\n3,z"))
 assert una_numerica["colonne"][0]["metodo"] == "zscore"
-assert "standardizzate automaticamente" in una_numerica["colonne"][0]["motivo"]
+assert una_numerica["colonne"][0]["motivo"] == "Non emergono outlier rilevanti."
 
 semantica = p.prepara_tabella(
     p.leggi_csv(
@@ -564,6 +607,13 @@ pesata_decimali_italiani = misura_da(
 )
 assert pesata_decimali_italiani["parametri"] == {"pesi": [1.0, 2.5], "q": 2}
 
+chebyshev_pesata = misura_da(
+    misuraNumericaManuale="weighted_chebyshev",
+    pesiMisuraManuale="1; 2",
+)
+assert chebyshev_pesata["idMisura"] == "weighted_chebyshev"
+assert chebyshev_pesata["parametri"] == {"pesi": [1.0, 2.0]}
+
 standardizzata = misura_da(
     comparabilitaScale="diverse",
     gestioneScale="interna",
@@ -590,7 +640,8 @@ raggiunte = {
     misura_da(aggregazioneScarti="quadratica")["idMisura"],
     misura_da(aggregazioneScarti="massimo")["idMisura"],
     misura_da(aggregazioneScarti="minkowski", ordineMinkowski="3")["idMisura"],
-    pesata["idMisura"], standardizzata["idMisura"], mahalanobis["idMisura"],
+    pesata["idMisura"], chebyshev_pesata["idMisura"],
+    standardizzata["idMisura"], mahalanobis["idMisura"],
     canberra["idMisura"],
     misura_da(confrontoQuantitativo="abbondanza")["idMisura"],
     misura_da(confrontoQuantitativo="frequenze")["idMisura"],
