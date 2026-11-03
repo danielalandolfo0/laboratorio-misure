@@ -458,6 +458,19 @@ def prepara_questionario(tabella: dict[str, Any], colonne: list[dict[str, Any]])
         elif colonna["tipo"] == "binaria":
             ruolo = "presenza" if parole & PAROLE_PRESENZA else "binaria"
             motivo = "La colonna contiene soltanto due valori, 0 e 1."
+        elif colonna["tipo"] == "non_numerica" and distinti == 2 and (
+            {v.casefold() for v in osservati}
+            <= {"si", "sì", "yes", "true", "vero", "presente", "attivo",
+                "no", "false", "falso", "assente", "inattivo"}
+        ) and any(
+            v.casefold() in {"si", "sì", "yes", "true", "vero", "presente", "attivo"}
+            for v in osservati
+        ) and any(
+            v.casefold() in {"no", "false", "falso", "assente", "inattivo"}
+            for v in osservati
+        ):
+            ruolo = "presenza" if parole & PAROLE_PRESENZA else "binaria"
+            motivo = "Sono stati riconosciuti due stati testuali come sì/no o vero/falso."
         elif colonna["tipo"] == "non_numerica" and distinti <= min(12, max(4, round(len(osservati) * 0.25))):
             ruolo, motivo = "categoria", "Poche etichette si ripetono in molte righe."
         elif colonna["tipo"] == "non_numerica":
