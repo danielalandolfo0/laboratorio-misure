@@ -762,4 +762,117 @@ assert piano_misto_classico["percorsi"][0]["metodo"] == "Dissimilarità di Gower
 assert piano_misto_robusto["percorsi"][0]["metodo"] == "Dissimilarità di Gower robusta"
 assert piano_misto_robusto["percorsi"][0]["calcolo"]["disponibile"] is True
 
+
+# --- Gower: regressioni sulle scelte semantiche e sui pesi. ---
+def piano_gower_per(csv_testo, **config):
+    preparato = p.prepara_tabella(p.leggi_csv(csv_testo))
+    interpretazione = {"riga": "oggetto", **config}
+    return preparato, p.crea_piano_confronto(preparato, interpretazione), interpretazione
+
+
+dati_pesati, piano_pesato, risposte_pesate = piano_gower_per(
+    "a,classe\n0,A\n10,B\n10,A",
+    colonne={"a": {"ruolo": "quantita", "usa": True},
+             "classe": {"ruolo": "categoria", "usa": True}},
+    pesiGower={"a": "2", "classe": "1"},
+)
+assert piano_pesato["completo"], piano_pesato
+matrice_pesata = p.calcola_matrice_gower(dati_pesati, risposte_pesate)
+quasi_uguali(matrice_pesata["matrice"][0][2], 2 / 3)
+assert piano_pesato["percorsi"][0]["pesiGower"] == {"a": 2.0, "classe": 1.0}
+piano_peso_nullo = p.crea_piano_confronto(
+    dati_pesati, {**risposte_pesate, "pesiGower": {"a": "0"}}
+)
+assert piano_peso_nullo["completo"] is False
+assert any("strettamente positivo" in testo
+           for testo in piano_peso_nullo["percorsi"][0]["avvisi"])
+
+# Le colonne costanti non riducono le distanze delle caratteristiche informative.
+dati_costanti, piano_costanti, risposte_costanti = piano_gower_per(
+    "classe,costante\nrosso,5\nblu,5\nrosso,5",
+    colonne={"classe": {"ruolo": "categoria", "usa": True},
+             "costante": {"ruolo": "quantita", "usa": True}},
+)
+assert piano_costanti["completo"], piano_costanti
+assert piano_costanti["percorsi"][0]["colonneEscluseGower"] == ["costante"]
+quasi_uguali(p.calcola_matrice_gower(dati_costanti, risposte_costanti)["matrice"][0][1], 1)
+tutti_costanti, piano_tutti_costanti, _ = piano_gower_per(
+    "classe,costante\nrosso,5\nrosso,5\nrosso,5",
+    colonne={"classe": {"ruolo": "categoria", "usa": True},
+             "costante": {"ruolo": "quantita", "usa": True}},
+)
+assert not piano_tutti_costanti["completo"]
+assert any("costanti" in testo for testo in piano_tutti_costanti["percorsi"][0]["avvisi"])
+
+# "Sconosciuto" omette i valori vuoti, "assenza" diventa un valore vero e proprio.
+dati_assenze, piano_sconosciuto, risposte_sconosciuto = piano_gower_per(
+    "presente,classe\n1,A\n,A\n0,B",
+    colonne={"presente": {"ruolo": "presenza", "usa": True},
+             "classe": {"ruolo": "categoria", "usa": True}},
+    zeriCondivisi="si", significatoMancanti="sconosciuto",
+)
+assert piano_sconosciuto["completo"], piano_sconosciuto
+quasi_uguali(p.calcola_matrice_gower(dati_assenze, risposte_sconosciuto)["matrice"][0][1], 0)
+risposte_assenza = {**risposte_sconosciuto, "significatoMancanti": "assenza"}
+assert p.crea_piano_confronto(dati_assenze, risposte_assenza)["completo"]
+quasi_uguali(p.calcola_matrice_gower(dati_assenze, risposte_assenza)["matrice"][0][1], .5)
+
+dati_zero, piano_zero_non_confermato, risposte_zero = piano_gower_per(
+    "numero,classe\n1,A\n,B\n3,A",
+    colonne={"numero": {"ruolo": "quantita", "usa": True},
+             "classe": {"ruolo": "categoria", "usa": True}},
+    significatoMancanti="assenza",
+)
+assert not piano_zero_non_confermato["completo"]
+risposte_zero["mancantiPerColonna"] = {"numero": "zero"}
+assert p.crea_piano_confronto(dati_zero, risposte_zero)["completo"]
+quasi_uguali(p.calcola_matrice_gower(dati_zero, risposte_zero)["matrice"][0][1], 2 / 3)
+
+# Positività binaria: "sì/no" è interpretato; etichette arbitrarie richiedono conferma.
+dati_si_no, piano_si_no, risposte_si_no = piano_gower_per(
+    "presente,classe\nsì,A\nno,A\nno,B",
+    colonne={"presente": {"ruolo": "presenza", "usa": True},
+             "classe": {"ruolo": "categoria", "usa": True}},
+    zeriCondivisi="no",
+)
+assert piano_si_no["completo"], piano_si_no
+matrice_si_no = p.calcola_matrice_gower(dati_si_no, risposte_si_no)["matrice"]
+quasi_uguali(matrice_si_no[0][1], .5)
+quasi_uguali(matrice_si_no[1][2], 1)
+dati_ab, piano_ab, risposte_ab = piano_gower_per(
+    "presente,classe\nA,x\nB,x\nB,y",
+    colonne={"presente": {"ruolo": "presenza", "usa": True},
+             "classe": {"ruolo": "categoria", "usa": True}},
+    zeriCondivisi="no",
+)
+assert not piano_ab["completo"]
+risposte_ab["presenzaPositivaPerColonna"] = {"presente": "A"}
+assert p.crea_piano_confronto(dati_ab, risposte_ab)["completo"]
+
+# La scelta sulle assenze può variare tra due caratteristiche binarie.
+dati_binari, piano_binari, risposte_binari = piano_gower_per(
+    "primo,secondo,classe\n1,0,x\n0,0,x\n0,1,y",
+    colonne={"primo": {"ruolo": "presenza", "usa": True},
+             "secondo": {"ruolo": "presenza", "usa": True},
+             "classe": {"ruolo": "categoria", "usa": True}},
+    zeriCondivisi="si",
+    zeriCondivisiPerColonna={"primo": "no", "secondo": "si"},
+)
+assert piano_binari["completo"], piano_binari
+quasi_uguali(p.calcola_matrice_gower(dati_binari, risposte_binari)["matrice"][1][2], 1)
+
+# I livelli testuali devono essere esplicitamente ordinati.
+dati_ordinali, piano_ordinali, risposte_ordinali = piano_gower_per(
+    "livello,classe\nbasso,x\nmedio,x\nalto,y",
+    colonne={"livello": {"ruolo": "livello", "usa": True},
+             "classe": {"ruolo": "categoria", "usa": True}},
+    ordineLivelli="si",
+)
+assert not piano_ordinali["completo"]
+risposte_ordinali["ordiniLivelliGower"] = {"livello": "basso; medio; alto"}
+assert p.crea_piano_confronto(dati_ordinali, risposte_ordinali)["completo"]
+matrice_ordinali = p.calcola_matrice_gower(dati_ordinali, risposte_ordinali)["matrice"]
+quasi_uguali(matrice_ordinali[0][1], .25)
+quasi_uguali(matrice_ordinali[0][2], 1)
+
 print("Tutti i test Python di preprocessing sono stati superati.")
