@@ -622,9 +622,9 @@
       ? "Il piano è stato preparato, ma alcune informazioni devono ancora essere completate."
       : piano.conteggioPercorsi === 1
         ? "È stato individuato un unico percorso di confronto."
-        : `${piano.conteggioPercorsi} percorsi verranno calcolati separatamente, senza combinarli automaticamente.`;
+        : `Sono stati individuati ${piano.conteggioPercorsi} percorsi. Il risultato previsto è una sola matrice complessiva: il calcolo sarà abilitato quando sarà definita l’aggregazione dei blocchi.`;
     const percorsiCalcolabili = piano.percorsi.filter(percorso => percorso.calcolo.disponibile);
-    $("gower-actions").hidden = !(piano.completo && percorsiCalcolabili.length === 1);
+    $("gower-actions").hidden = !(piano.completo && piano.conteggioPercorsi === 1 && percorsiCalcolabili.length === 1);
     if (percorsiCalcolabili.length === 1) {
       $("calculate-gower").textContent = "Calcola la matrice finale";
     }
