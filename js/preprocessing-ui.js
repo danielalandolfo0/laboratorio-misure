@@ -269,9 +269,11 @@
       elementi.push(["Relazioni tra colonne", indicatori.correlazioniForti
         ? `Correlazione massima |r| = ${formatoNumero(indicatori.correlazioneMassimaAssoluta)}${indicatori.coppiaCorrelata?.length ? ` (${indicatori.coppiaCorrelata.join(" e ")})` : ""}`
         : `Nessuna correlazione forte · massimo |r| = ${formatoNumero(indicatori.correlazioneMassimaAssoluta)}`]);
-      elementi.push(["Covarianza", indicatori.covarianzaUtilizzabile
-        ? `Utilizzabile${indicatori.condizionamentoCovarianza ? ` · condizionamento ≈ ${formatoNumero(indicatori.condizionamentoCovarianza)}` : ""}`
-        : `Non utilizzabile per Mahalanobis · ${indicatori.motivoCovarianza || "verifica non superata"}`]);
+      elementi.push(["Relazione tra le colonne", indicatori.covarianzaSingolare
+        ? `Alcune colonne ripetono informazioni già presenti: ${indicatori.motivoCovarianza}`
+        : indicatori.covarianzaUtilizzabile
+          ? `La covarianza è invertibile. ${indicatori.motivoCovarianza}`
+          : `Mahalanobis classica non è utilizzabile in modo affidabile. ${indicatori.motivoCovarianza || "Verifica non superata."}`]);
     } else if (diagnosi.famigliaId === "misto") {
       elementi.push(["Valori utilizzati", "Originali: nessun riscalamento preliminare"]);
       elementi.push(["Valori estremi quantitativi", indicatori.outlier
@@ -377,6 +379,12 @@
       motivo = "Alcune colonne variano insieme e la covarianza ha superato i controlli numerici.";
     }
     const cautele = [guida[1]];
+    if (diagnosi.covarianzaSingolare) {
+      cautele.push("Alcune colonne contengono informazioni linearmente dipendenti: una distanza come l'Euclidea può contare più volte la stessa informazione. Valuta se mantenere tutte le colonne sia una scelta intenzionale.");
+    }
+    if (diagnosi.campioneLimitato && !diagnosi.covarianzaSingolare) {
+      cautele.push("Il numero di righe è limitato rispetto alle colonne: le stime delle relazioni statistiche potrebbero essere poco stabili.");
+    }
     if ((diagnosi.colonneCostanti || []).length) {
       cautele.push("Le colonne costanti non distinguono le righe: " + diagnosi.colonneCostanti.join(", ") + ".");
     }
