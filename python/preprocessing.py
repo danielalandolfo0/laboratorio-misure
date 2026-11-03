@@ -1655,7 +1655,27 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
         and all(b["stato"] != "da_completare" for b in blocchi)
         and all(p["stato"] != "da_completare" for p in percorsi)
     )
+    # Anteprima esattamente della rappresentazione che il piano numerico usa.
+    anteprima_numerica = None
+    if completo and len(percorsi) == 1 and percorsi[0]["tipo"] == "numerico":
+        percorso = percorsi[0]
+        if percorso["preelaborazione"]["usaTabellaTrasformata"]:
+            nomi = percorso["colonne"]
+            indici = [risultato["originale"]["intestazioni"].index(nome) for nome in nomi]
+            metodi = {passo["colonna"]: passo["metodo"]
+                      for passo in percorso["preelaborazione"]["passi"]}
+            anteprima_numerica = {
+                "colonne": nomi,
+                "metodi": metodi,
+                "righe": [
+                    [_trasforma_per_percorso(riga[indice], analisi_per_nome[nome],
+                                            metodi.get(nome, "nessuno"))
+                     for nome, indice in zip(nomi, indici)]
+                    for riga in risultato["originale"]["righe"][:12]
+                ],
+            }
     return {
+        "anteprimaNumerica": anteprima_numerica,
         "diagnosi": diagnosi, "blocchi": blocchi, "percorsi": percorsi, "avvisi": avvisi,
         "completo": completo, "conteggioBlocchi": len(blocchi),
         "conteggioPercorsi": len(percorsi), "versioneContratto": 2,
