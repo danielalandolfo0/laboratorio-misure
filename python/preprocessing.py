@@ -490,26 +490,10 @@ def prepara_questionario(tabella: dict[str, Any], colonne: list[dict[str, Any]])
 
 
 def trasforma_valore(valore: Any, analisi: dict[str, Any]) -> Any:
+    """Unica trasformazione numerica, condivisa con il calcolo delle distanze."""
     if analisi["tipo"] == "non_numerica":
         return None if mancante(valore) else valore
-    numero = leggi_numero(valore, analisi["separatore"])
-    if numero is None:
-        return None
-    if numero is INVALIDO:
-        raise ValueError(f"La feature “{analisi['nome']}” contiene un valore non numerico.")
-    numero = float(numero)
-    if analisi["tipo"] == "binaria" or analisi["metodo"] == "nessuno":
-        return numero
-    if analisi["metodo"] == "costante":
-        return 0
-    stats = analisi["statistiche"]
-    if analisi["metodo"] == "robusto":
-        return (numero - stats["mediana"]) / stats["iqr"]
-    if analisi["metodo"] == "minmax":
-        return (numero - stats["minimo"]) / (stats["massimo"] - stats["minimo"])
-    if analisi["metodo"] == "maxabs":
-        return numero / stats["massimoAssoluto"]
-    return (numero - stats["media"]) / stats["deviazione"]
+    return _trasforma_per_percorso(valore, analisi, analisi["metodo"])
 
 
 def prepara_tabella(tabella: dict[str, Any], scelte: list[dict[str, str]] | None = None) -> dict[str, Any]:
@@ -522,7 +506,9 @@ def prepara_tabella(tabella: dict[str, Any], scelte: list[dict[str, str]] | None
         analisi["separatore"] = tabella["separatore"]
         colonne.append(analisi)
 
-    applica_confronto_globale(colonne)
+    # Le proposte preliminari sono per-colonna: feature escluse dal
+    # confronto non devono condizionare la trasformazione di quelle incluse.
+    # La diagnosi multivariata è costruita dopo la selezione delle feature.
     trasformate = [
         [trasforma_valore(valore, colonne[indice]) for indice, valore in enumerate(riga)]
         for riga in tabella["righe"]
