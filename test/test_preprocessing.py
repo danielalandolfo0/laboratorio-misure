@@ -763,6 +763,10 @@ assert piano_misto_robusto["percorsi"][0]["metodo"] == "Dissimilarità di Gower 
 assert piano_misto_robusto["percorsi"][0]["calcolo"]["disponibile"] is True
 
 
+# Sono riconosciute anche le colonne sì/no, senza imporre un codice 0/1.
+rilevata_testuale = p.prepara_tabella(p.leggi_csv("presente,classe\\nsì,A\\nno,B".replace("\\n", "\n")))
+assert rilevata_testuale["questionario"]["colonne"][0]["ruoloSuggerito"] == "presenza"
+
 # --- Gower: regressioni sulle scelte semantiche e sui pesi. ---
 def piano_gower_per(csv_testo, **config):
     preparato = p.prepara_tabella(p.leggi_csv(csv_testo))
