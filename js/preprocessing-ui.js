@@ -292,6 +292,126 @@
     ${diagnosi.conferma ? `<em>${escapeHtml(diagnosi.conferma)}</em>` : ""}`;
   }
 
+
+  const guidaMisureNumeriche = {
+  "euclidean": [
+    "Riassume quanto due righe differiscono nel complesso. Gli scarti grandi incidono più di quelli piccoli.",
+    "Uno scarto molto grande può influenzare sensibilmente il risultato.",
+    "Se preferisci sommare semplicemente gli scarti, valuta Manhattan.",
+    "d(x,y)=\\sqrt{\\sum_k(x_k-y_k)^2}"
+  ],
+  "standardized_euclidean": [
+    "Confronta le differenze rispetto alla variabilità osservata delle colonne.",
+    "La variabilità non coincide necessariamente con l'importanza della caratteristica.",
+    "Se preferisci la somma degli scarti, valuta Manhattan dopo un riscalamento appropriato.",
+    "d(x,y)=\\sqrt{\\sum_k(x_k-y_k)^2/s_k^2}"
+  ],
+  "manhattan": [
+    "Somma tutte le differenze tra le colonne, senza elevarle al quadrato.",
+    "Anche tante differenze moderate possono produrre un risultato elevato.",
+    "Se vuoi dare più rilievo agli scarti grandi, valuta Euclidea.",
+    "d(x,y)=\\sum_k|x_k-y_k|"
+  ],
+  "chebyshev": [
+    "Considera soltanto la differenza più grande tra le colonne.",
+    "Le altre differenze non modificano il risultato finché restano inferiori alla maggiore.",
+    "Se vuoi considerare anche gli altri scarti, valuta Manhattan o Euclidea.",
+    "d(x,y)=\\max_k|x_k-y_k|"
+  ],
+  "minkowski": [
+    "Permette di regolare quanto le differenze più grandi incidono sul confronto.",
+    "Il risultato dipende dall'esponente q; con q=1 coincide con Manhattan, con q=2 con Euclidea.",
+    "Puoi scegliere direttamente Manhattan o Euclidea se non vuoi regolare q.",
+    "d(x,y)=(\\sum_k|x_k-y_k|^q)^{1/q}"
+  ],
+  "weighted_minkowski": [
+    "Permette di dare importanze diverse alle colonne e regolare l'effetto degli scarti grandi.",
+    "I pesi esprimono una scelta sul significato delle caratteristiche, non una loro importanza oggettiva.",
+    "Se tutte le colonne devono contare allo stesso modo, valuta Minkowski senza pesi.",
+    "d(x,y)=(\\sum_k w_k|x_k-y_k|^q)^{1/q}"
+  ],
+  "weighted_chebyshev": [
+    "Considera la differenza più grande dopo aver applicato l'importanza scelta per ciascuna colonna.",
+    "Le altre differenze non influenzano il risultato finché non diventano la maggiore.",
+    "Se non vuoi usare pesi diversi, valuta Chebyshev.",
+    "d(x,y)=\\max_k w_k|x_k-y_k|"
+  ],
+  "mahalanobis": [
+    "Considera come le colonne variano insieme, anziché trattarle come completamente indipendenti.",
+    "Richiede una covarianza utilizzabile: la correlazione tra colonne non basta, da sola, a renderla preferibile.",
+    "Se non vuoi tenere conto di queste relazioni, valuta Euclidea o Manhattan.",
+    "d(x,y)=\\sqrt{(x-y)^\\top S^{-1}(x-y)}"
+  ],
+  "canberra": [
+    "Confronta gli scarti in proporzione alla grandezza dei valori di ciascuna colonna.",
+    "Valori vicini a zero possono fare incidere molto anche differenze assolute piccole.",
+    "Se ti interessano quantità complessive non negative, valuta Bray–Curtis.",
+    "d(x,y)=\\sum_k\\frac{|x_k-y_k|}{|x_k|+|y_k|}"
+  ],
+  "bray_curtis": [
+    "Confronta le quantità complessive, rapportando la somma delle differenze al totale.",
+    "Richiede valori non negativi e non è definita per due righe entrambe nulle; in generale non è una metrica.",
+    "Se vuoi considerare gli scarti relativi per singola colonna, valuta Canberra.",
+    "d(x,y)=\\frac{\\sum_k|x_k-y_k|}{\\sum_k(x_k+y_k)}"
+  ],
+  "chi_square": [
+    "Dà più rilievo alle differenze nelle colonne che presentano valori complessivamente piccoli.",
+    "Richiede valori non negativi; è importante che tale enfasi sia coerente con il significato dei dati.",
+    "Se non vuoi questa enfasi, valuta Bray–Curtis.",
+    "d(x,y)=\\sqrt{\\sum_k\\frac{(x_k-y_k)^2}{x_k+y_k}}"
+  ]
+};
+
+  function spiegazioneMisuraNumerica(percorso) {
+    const guida = guidaMisureNumeriche[percorso.idMisura];
+    if (!guida) return "";
+    const diagnosi = percorso.diagnosiAutomatica || {};
+    const manuale = !["", "automatico"].includes(interpretazione.misuraNumericaManuale || "automatico");
+    let motivo = manuale
+      ? "Hai selezionato questa misura al posto della proposta automatica."
+      : "La proposta deriva dalle tue risposte e dalle caratteristiche rilevate.";
+    if (!manuale && percorso.idMisura === "manhattan" && diagnosi.outlier) {
+      motivo = "Sono stati rilevati valori estremi: questo confronto non eleva al quadrato gli scarti.";
+    }
+    if (!manuale && percorso.idMisura === "mahalanobis" && diagnosi.correlazioniForti) {
+      motivo = "Alcune colonne variano insieme e la covarianza ha superato i controlli numerici.";
+    }
+    const cautele = [guida[1]];
+    if ((diagnosi.colonneCostanti || []).length) {
+      cautele.push("Le colonne costanti non distinguono le righe: " + diagnosi.colonneCostanti.join(", ") + ".");
+    }
+    if ((diagnosi.colonneMancanti || []).length) {
+      cautele.push("Sono presenti valori mancanti: occorre gestirli prima del calcolo.");
+    }
+    const contenitore = document.createElement("div");
+    contenitore.className = "numeric-measure-explanation";
+    const sezione = (titolo, testo) => {
+      const p = document.createElement("p");
+      const strong = document.createElement("strong");
+      strong.textContent = titolo + " ";
+      p.append(strong, document.createTextNode(testo));
+      contenitore.appendChild(p);
+    };
+    sezione("Perché questa scelta?", motivo + " " + guida[0]);
+    sezione("Quando fare attenzione?", cautele.join(" "));
+    sezione("Che cosa cambierebbe?", guida[2]);
+    const dettaglio = document.createElement("details");
+    const sommario = document.createElement("summary");
+    sommario.textContent = "Approfondimento matematico";
+    const formula = document.createElement("p");
+    formula.textContent = "Formula: " + guida[3];
+    const proprieta = document.createElement("p");
+    proprieta.textContent = "Proprietà: " + (percorso.proprieta || "");
+    dettaglio.append(sommario, formula, proprieta);
+    if (Object.keys(percorso.parametri || {}).length) {
+      const parametri = document.createElement("p");
+      parametri.textContent = "Parametri utilizzati: " + JSON.stringify(percorso.parametri);
+      dettaglio.appendChild(parametri);
+    }
+    contenitore.appendChild(dettaglio);
+    return contenitore.outerHTML;
+  }
+
   function editorMisuraNumerica(percorso) {
     const opzioni = [
       ["automatico", "Usa la misura proposta dal sito"],
@@ -354,7 +474,7 @@
           <div><dt>Stato</dt><dd>${escapeHtml(calcolo)}</dd></div>
         </dl>
         <span>${escapeHtml(pre.descrizione)}</span>
-        <p>${escapeHtml(percorso.motivo)}</p>
+        ${percorso.tipo === "numerico" ? spiegazioneMisuraNumerica(percorso) : `<p>${escapeHtml(percorso.motivo)}</p>`}
         ${percorso.notaPreelaborazione ? `<p><strong>Quali valori vengono usati:</strong> ${escapeHtml(percorso.notaPreelaborazione)}</p>` : ""}
         ${editorNumerico}
         ${alternative}
