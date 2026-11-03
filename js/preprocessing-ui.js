@@ -218,14 +218,19 @@
     const contenitore = $("numeric-preliminary-diagnosis");
     const corpo = $("numeric-preliminary-content");
     const versione = ++versioneDiagnosi;
-    if (!tabellaInteramenteNumerica()) {
+    const nomi = colonneNumericheSelezionate().map(c => c.nome);
+    if (nomi.length < 2) {
       contenitore.hidden = true;
       corpo.innerHTML = "";
       return;
     }
     contenitore.hidden = false;
-    corpo.textContent = "Analisi preliminare delle colonne selezionate…";
-    const nomi = colonneNumericheSelezionate().map(c => c.nome);
+    $("numeric-preliminary-scope").textContent =
+      `Analisi delle ${nomi.length} caratteristiche quantitative indipendenti: ${nomi.join(", ")}. ` +
+      (tabellaInteramenteNumerica()
+        ? "Questa diagnosi orienta la scelta della misura e del riscalamento; non modifica i dati."
+        : "Le altre colonne e i gruppi non entrano in questa diagnosi. Nei percorsi misti Gower normalizza internamente i contributi quantitativi.");
+    corpo.textContent = "Analisi preliminare delle colonne quantitative indipendenti…";
     try {
       const risposta = await P.analizzaDiagnosi(testoOriginale, scelte, nomi);
       if (versione !== versioneDiagnosi) return;
@@ -248,7 +253,7 @@
           "Rapporto tra la dispersione maggiore e la minore: " + formatoNumero(d.rapportoDispersioni) + ". " +
           (d.dispersioniSimili
             ? "Secondo il criterio esplorativo adottato, le dispersioni non differiscono molto."
-            : "Secondo il criterio esplorativo adottato, le dispersioni differiscono. Un riscalamento impedisce che una colonna domini soltanto perché varia di più.");
+            : "Secondo il criterio esplorativo adottato, le dispersioni differiscono. La scelta della misura e delle scale richiede attenzione: il solo rapporto statistico non determina il riscalamento corretto.");
       let andamento = "Non sono state rilevate relazioni lineari forti tra le coppie di colonne controllabili.";
       if (perfette.length) {
         andamento = "Alcune coppie seguono un andamento lineare perfetto: " +
@@ -308,7 +313,8 @@
   function aggiornaFaseNumerica() {
     const numerico = tabellaInteramenteNumerica();
     const pronto = !numerico || riscalamentoConfermato;
-    $("adaptive-questions").hidden = !pronto;
+    // Le domande devono essere visibili prima della conferma del riscalamento.
+    $("adaptive-questions").hidden = false;
     $("prepare-comparison-plan").hidden = !pronto;
     aggiornaVisibilitaTrasformazione();
   }
@@ -800,6 +806,7 @@
     const indipendentiStandard = profiliInclusi.filter(profilo =>
       !interpretazione.assegnazioni[profilo.nome] && ruoliStandard.has(interpretazione.colonne[profilo.nome].ruolo)
     );
+    const quantitativeIndipendenti = colonneNumericheSelezionate();
     const percorsoNumerico = indipendentiStandard.length > 0 && indipendentiStandard.every(profilo => {
       const colonna = risultato.colonne.find(elemento => elemento.nome === profilo.nome);
       return interpretazione.colonne[profilo.nome].ruolo === "quantita"
@@ -818,21 +825,27 @@
         "Il sito riequilibrerà le colonne per prudenza, assegnerà loro la stessa importanza e sceglierà una misura poco sensibile ai valori estremi quando necessario."
       ));
       if (confronto === "assoluto") {
+        if (quantitativeIndipendenti.length >= 2) domande.push(domandaAdattiva(
+          "dipendenzaCoordinate", "Vuoi considerare anche il modo in cui queste caratteristiche variano insieme?",
+          "Il sito ha già analizzato le correlazioni. Rispondere sì significa valutare Mahalanobis, se la covarianza è utilizzabile; rispondere no significa confrontare gli scarti senza correggere le dipendenze.",
+          [["ignoto", "Non lo so: usa la scelta guidata"], ["no", "No, confronta le differenze tra le caratteristiche"], ["si", "Sì, considera le relazioni statistiche"]],
+          "ignoto"
+        ));
         domande.push(notaAutomatica(
           "Scelta automatica della misura",
           "Il sito confronterà outlier, dispersioni e correlazioni. Proporrà Manhattan, Euclidea o Mahalanobis e applicherà il riscalamento coerente con la diagnosi."
         ));
-        domande.push(domandaAdattiva(
+        if (valoreRisposta("dipendenzaCoordinate") !== "si") domande.push(domandaAdattiva(
           "aggregazioneScarti", "Quali differenze tra due righe ti interessano di più?",
           "Se non hai una preferenza, lascia che il sito scelga. Potrai cambiare la misura alla fine.",
           [["automatico", "Non ho preferenze: scegli il sito"], ["lineare", "Conta la somma delle differenze"], ["quadratica", "Dai più rilievo alle differenze grandi"], ["massimo", "Conta soprattutto la differenza più grande"], ["minkowski", "Voglio regolare io la sensibilità (avanzato)"]],
           "automatico"
         ));
-        if (valoreRisposta("aggregazioneScarti") === "minkowski") domande.push(domandaInput(
+        if (valoreRisposta("dipendenzaCoordinate") !== "si" && valoreRisposta("aggregazioneScarti") === "minkowski") domande.push(domandaInput(
           "ordineMinkowski", "Quanto devono pesare le differenze grandi? (avanzato)",
           "Questa è un'impostazione avanzata. Inserisci un numero almeno pari a 1; valori maggiori danno più peso alle differenze grandi.", "Per esempio 3", "number"
         ));
-        if (indipendentiStandard.length >= 2 && !["", "automatico"].includes(valoreRisposta("aggregazioneScarti"))) {
+        if (quantitativeIndipendenti.length >= 2 && valoreRisposta("dipendenzaCoordinate") !== "si") {
           domande.push(domandaAdattiva(
             "importanzaCoordinate", "Alcune colonne sono più importanti di altre per il tuo confronto?",
             "Se non hai una preferenza, il sito assegna a tutte la stessa importanza.",
@@ -849,6 +862,18 @@
         "valoriVicinoZero", "Ci sono spesso valori uguali o molto vicini a zero?",
         "Quando si confrontano differenze in proporzione, valori molto piccoli possono avere un peso elevato.",
         [["no", "No, accade raramente"], ["si", "Sì, e questi valori sono significativi"], ["ignoto", "Non lo so — mostrami un avviso nel risultato"]]
+      ));
+    } else if (quantitativeIndipendenti.length >= 2 && indipendentiStandard.some(profilo =>
+      interpretazione.colonne[profilo.nome]?.ruolo !== "quantita")) {
+      domande.push(notaAutomatica(
+        "Caratteristiche quantitative nel percorso misto",
+        "Le colonne numeriche indipendenti sono analizzate insieme, ma la misura finale per le caratteristiche indipendenti di tipo diverso resta Gower: ogni quantità contribuisce con uno scarto normalizzato. Non viene applicata una distanza euclidea separata."
+      ));
+      domande.push(domandaAdattiva(
+        "tipoGowerNumeriche", "Come vuoi normalizzare le differenze tra le quantità all'interno di Gower?",
+        "La scelta riguarda solo i contributi quantitativi. Gower classica usa l'intervallo osservato; la variante robusta usa 7 volte l'IQR (se positivo) e limita ogni contributo a 1.",
+        [["automatico", "Usa il criterio consigliato"], ["classica", "Usa l'intervallo osservato (Gower classica)"], ["robusta", "Limita l'influenza dei valori estremi sulla scala (Gower robusta)"]],
+        "automatico"
       ));
     }
     interpretazione.gruppi.forEach(gruppo => {
