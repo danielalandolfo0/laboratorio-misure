@@ -913,7 +913,18 @@ def _diagnosi_numerica(
         analisi_per_nome[nome].get("statistiche", {}).get("iqr", 0) > 0
         for nome in non_costanti
     )
-    colonne_outlier = colonne_estreme if robusto_applicabile else []
+    # La presenza di outlier e l'applicabilità di una scala robusta sono
+    # informazioni distinte. Un IQR nullo in una colonna non deve cancellare
+    # gli outlier rilevati nelle altre colonne; nella stessa colonna, però,
+    # la regola di Tukey con IQR nullo non basta a distinguere un valore raro
+    # da un segnale legittimo di una matrice sparsa.
+    colonne_outlier = [
+        nome for nome in colonne_estreme
+        if analisi_per_nome[nome].get("statistiche", {}).get("iqr", 0) > 0
+    ]
+    colonne_estreme_non_robuste = [
+        nome for nome in colonne_estreme if nome not in colonne_outlier
+    ]
     colonne_costanti = [
         nome for nome in nomi
         if analisi_per_nome[nome].get("statistiche", {}).get("deviazione") == 0
@@ -1092,7 +1103,7 @@ def _diagnosi_numerica(
         "outlier": bool(colonne_outlier),
         "robustoApplicabile": robusto_applicabile,
         "colonneOutlier": colonne_outlier,
-        "colonneEstremeNonRobuste": [] if robusto_applicabile else colonne_estreme,
+        "colonneEstremeNonRobuste": colonne_estreme_non_robuste,
         "colonneCostanti": colonne_costanti,
         "colonneMancanti": colonne_mancanti,
         "matriceSparsa": matrice_sparsa,
@@ -1486,6 +1497,7 @@ def _politica_mancanti(
     nomi: list[str],
     analisi_per_nome: dict[str, dict[str, Any]],
     tipo_percorso: str,
+    interpretazione: dict[str, Any],
 ) -> dict[str, Any]:
     """Dichiara, senza impliciti, come il percorso tratta i valori mancanti."""
     colonne = [nome for nome in nomi if analisi_per_nome[nome]["mancanti"] > 0]
@@ -1507,6 +1519,79 @@ def _politica_mancanti(
             ),
             "pronta": True,
             "colonne": colonne,
+        }
+    if tipo_percorso == "numerico":
+        configurate = interpretazione.get("mancantiNumericiPerColonna") or {}
+        if not isinstance(configurate, dict):
+            raise ValueError("Le strategie per i mancanti numerici non sono valide.")
+        ammesse = {"escludi_riga", "imputa_mediana", "imputa_media", "zero"}
+        strategie = {
+            nome: configurate.get(nome, "")
+            for nome in colonne
+        }
+        non_definite = [
+            nome for nome, strategia in strategie.items()
+            if strategia not in ammesse
+        ]
+        if non_definite:
+            return {
+                "presenza": True,
+                "strategia": "da_definire",
+                "descrizione": (
+                    "Scegli come trattare le caselle vuote nelle colonne: "
+                    + ", ".join(non_definite) + "."
+                ),
+                "pronta": False,
+                "colonne": colonne,
+                "perColonna": strategie,
+            }
+
+        etichette = {
+            "escludi_riga": "esclude le righe in cui il valore manca",
+            "imputa_mediana": "sostituisce il vuoto con la mediana osservata",
+            "imputa_media": "sostituisce il vuoto con la media osservata",
+            "zero": "sostituisce esplicitamente il vuoto con zero",
+        }
+        colonne_esclusione = [
+            nome for nome, strategia in strategie.items()
+            if strategia == "escludi_riga"
+        ]
+        righe_totali = max(
+            (len(analisi_per_nome[nome].get("valoriNumerici", [])) for nome in nomi),
+            default=0,
+        )
+        righe_utilizzabili = sum(
+            all(
+                isinstance(analisi_per_nome[nome]["valoriNumerici"][indice], (int, float))
+                for nome in colonne_esclusione
+            )
+            for indice in range(righe_totali)
+        )
+        if righe_utilizzabili < 2:
+            return {
+                "presenza": True,
+                "strategia": "configurazione_per_colonna",
+                "descrizione": (
+                    "Le esclusioni richieste lasciano meno di due righe confrontabili. "
+                    "Modifica la strategia oppure completa i dati."
+                ),
+                "pronta": False,
+                "colonne": colonne,
+                "perColonna": strategie,
+                "righeUtilizzabili": righe_utilizzabili,
+            }
+        return {
+            "presenza": True,
+            "strategia": "configurazione_per_colonna",
+            "descrizione": (
+                "Per i mancanti numerici: "
+                + "; ".join(f"{nome}: {etichette[strategia]}" for nome, strategia in strategie.items())
+                + ". I parametri di centro e scala sono stimati sui valori osservati."
+            ),
+            "pronta": True,
+            "colonne": colonne,
+            "perColonna": strategie,
+            "righeUtilizzabili": righe_utilizzabili,
         }
     return {
         "presenza": True,
@@ -1565,6 +1650,7 @@ def _preelaborazione_originale(descrizione: str) -> dict[str, Any]:
 def _completa_specifica_percorso(
     percorso: dict[str, Any],
     analisi_per_nome: dict[str, dict[str, Any]],
+    interpretazione: dict[str, Any],
 ) -> dict[str, Any]:
     """Aggiunge origine, trasformazioni, mancanti e disponibilità del calcolo."""
     tipo = percorso["tipo"]
@@ -1631,9 +1717,24 @@ def _completa_specifica_percorso(
             "della singola caratteristica."
         )
 
-    mancanti = _politica_mancanti(nomi, analisi_per_nome, tipo)
+    mancanti = _politica_mancanti(nomi, analisi_per_nome, tipo, interpretazione)
     if not mancanti["pronta"]:
         percorso["stato"] = "da_completare"
+    if (
+        tipo == "numerico"
+        and percorso.get("idMisura") == "mahalanobis"
+        and mancanti["presenza"]
+        and any(
+            strategia != "escludi_riga"
+            for strategia in mancanti.get("perColonna", {}).values()
+        )
+    ):
+        percorso["stato"] = "da_completare"
+        percorso.setdefault("avvisi", []).append(
+            "Mahalanobis con imputazione richiederebbe una nuova stima e una nuova "
+            "verifica della covarianza. Usa l'esclusione delle righe complete oppure "
+            "scegli una misura basata sulle coordinate."
+        )
     percorso["preelaborazione"] = preelaborazione
     percorso["origine"] = preelaborazione["etichettaOrigine"]
     percorso["mancanti"] = mancanti
@@ -1736,7 +1837,10 @@ def _crea_percorsi(
             "metodo": blocco["misura"],
             "motivo": blocco["motivo"], "stato": blocco["stato"],
         })
-    return [_completa_specifica_percorso(percorso, analisi_per_nome) for percorso in percorsi]
+    return [
+        _completa_specifica_percorso(percorso, analisi_per_nome, interpretazione)
+        for percorso in percorsi
+    ]
 
 
 def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, Any]) -> dict[str, Any]:
@@ -1860,19 +1964,13 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
     if completo and len(percorsi) == 1 and percorsi[0]["tipo"] == "numerico":
         percorso = percorsi[0]
         if percorso["preelaborazione"]["usaTabellaTrasformata"]:
-            nomi = percorso["colonne"]
-            indici = [risultato["originale"]["intestazioni"].index(nome) for nome in nomi]
             metodi = {passo["colonna"]: passo["metodo"]
                       for passo in percorso["preelaborazione"]["passi"]}
+            righe_preparate, _ = _righe_numeriche_per_percorso(risultato, percorso)
             anteprima_numerica = {
-                "colonne": nomi,
+                "colonne": percorso["colonne"],
                 "metodi": metodi,
-                "righe": [
-                    [_trasforma_per_percorso(riga[indice], analisi_per_nome[nome],
-                                            metodi.get(nome, "nessuno"))
-                     for nome, indice in zip(nomi, indici)]
-                    for riga in risultato["originale"]["righe"][:12]
-                ],
+                "righe": righe_preparate[:12],
             }
     return {
         "anteprimaNumerica": anteprima_numerica,
@@ -2238,6 +2336,63 @@ def _trasforma_per_percorso(
     raise ValueError(f"Trasformazione numerica non riconosciuta: {metodo}.")
 
 
+def _righe_numeriche_per_percorso(
+    risultato: dict[str, Any],
+    percorso: dict[str, Any],
+) -> tuple[list[list[float]], list[int]]:
+    """Applica esclusioni, imputazioni e trasformazioni dichiarate nel piano."""
+    nomi = percorso["colonne"]
+    tabella = risultato["originale"]
+    analisi_per_nome = {colonna["nome"]: colonna for colonna in risultato["colonne"]}
+    indici = [tabella["intestazioni"].index(nome) for nome in nomi]
+    metodi = {
+        passo["colonna"]: passo["metodo"]
+        for passo in percorso["preelaborazione"]["passi"]
+    }
+    strategie = percorso.get("mancanti", {}).get("perColonna", {})
+    righe_numeriche: list[list[float]] = []
+    indici_usati: list[int] = []
+
+    for indice_riga, riga in enumerate(tabella["righe"]):
+        if any(
+            mancante(riga[indice]) and strategie.get(nome) == "escludi_riga"
+            for nome, indice in zip(nomi, indici)
+        ):
+            continue
+        vettore: list[float] = []
+        for nome, indice in zip(nomi, indici):
+            grezzo: Any = riga[indice]
+            if mancante(grezzo):
+                strategia = strategie.get(nome, "")
+                stats = analisi_per_nome[nome].get("statistiche", {})
+                if strategia == "imputa_mediana":
+                    grezzo = stats.get("mediana")
+                elif strategia == "imputa_media":
+                    grezzo = stats.get("media")
+                elif strategia == "zero":
+                    grezzo = 0.0
+                else:
+                    raise ValueError(
+                        f"Scegli come trattare il valore mancante nella colonna “{nome}”."
+                    )
+            valore = _trasforma_per_percorso(
+                grezzo, analisi_per_nome[nome], metodi.get(nome, "nessuno")
+            )
+            if valore is None:
+                raise ValueError(
+                    f"Il valore mancante nella colonna “{nome}” non è stato risolto."
+                )
+            vettore.append(valore)
+        righe_numeriche.append(vettore)
+        indici_usati.append(indice_riga)
+
+    if len(righe_numeriche) < 2:
+        raise ValueError(
+            "Dopo la gestione dei mancanti restano meno di due righe confrontabili."
+        )
+    return righe_numeriche, indici_usati
+
+
 def _cholesky(matrice: list[list[float]]) -> list[list[float]]:
     p = len(matrice)
     scala = max((abs(v) for riga in matrice for v in riga), default=1.0)
@@ -2335,19 +2490,7 @@ def calcola_matrice_numerica(
     if len(tabella["righe"]) > 1000:
         raise ValueError("La matrice completa è limitata a 1000 righe per evitare di bloccare il browser.")
     analisi_per_nome = {colonna["nome"]: colonna for colonna in risultato["colonne"]}
-    indici = [tabella["intestazioni"].index(nome) for nome in nomi]
-    metodi = {passo["colonna"]: passo["metodo"] for passo in percorso["preelaborazione"]["passi"]}
-
-    righe_numeriche: list[list[float]] = []
-    for riga in tabella["righe"]:
-        vettore: list[float] = []
-        for nome, indice in zip(nomi, indici):
-            metodo = metodi.get(nome, "nessuno")
-            valore = _trasforma_per_percorso(riga[indice], analisi_per_nome[nome], metodo)
-            if valore is None:
-                raise ValueError("Il percorso numerico non può essere calcolato finché contiene valori mancanti.")
-            vettore.append(valore)
-        righe_numeriche.append(vettore)
+    righe_numeriche, indici_usati = _righe_numeriche_per_percorso(risultato, percorso)
 
     id_misura = percorso["idMisura"]
     parametri = dict(percorso.get("parametri", {}))
@@ -2367,10 +2510,16 @@ def calcola_matrice_numerica(
             matrice[i][k] = distanza
             matrice[k][i] = distanza
 
-    etichette = _etichette_righe(risultato, interpretazione)
+    tutte_le_etichette = _etichette_righe(risultato, interpretazione)
+    etichette = [tutte_le_etichette[indice] for indice in indici_usati]
     righe_csv = [[etichetta, *riga] for etichetta, riga in zip(etichette, matrice)]
     origine = percorso["preelaborazione"]["etichettaOrigine"].lower()
     nota = f"Calcolata sulle colonne {', '.join(nomi)} usando {origine}."
+    if percorso["mancanti"]["presenza"]:
+        nota += " " + percorso["mancanti"]["descrizione"]
+        escluse = len(tabella["righe"]) - len(righe_numeriche)
+        if escluse:
+            nota += f" Righe escluse: {escluse}."
     if id_misura == "mahalanobis":
         nota += " La covarianza empirica considera il pattern con cui le colonne variano insieme; nessuna colonna è stata eliminata."
     return {

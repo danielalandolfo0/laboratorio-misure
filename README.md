@@ -12,6 +12,7 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 - riscalamento automatico dei percorsi quantitativi tramite z-score, scala robusta o max-abs; le colonne costanti ricevono contributo nullo;
 - uso diretto dei valori originali nei percorsi misti di Gower, senza riscalamento preliminare; contributi pesabili e configurazione semantica di ciascuna variabile;
 - conservazione dei mancanti, segnalazione delle feature costanti e anteprima originale/trasformata;
+- gestione operativa dei mancanti nei percorsi numerici, separata per colonna: esclusione delle righe, imputazione con mediana o media, oppure zero esplicitamente confermato;
 - anteprima ed esportazione della tabella trasformata, con uso esplicito nel percorso che la richiede;
 - piano di confronto che dichiara, per ogni percorso, origine dei dati, trasformazioni, politica sui mancanti e disponibilità del calcolo;
 - proposta automatica di Euclidea, Manhattan o Mahalanobis per le quantità, modificabile dall’utente senza domande tecniche obbligatorie;
@@ -88,6 +89,13 @@ per dati misti. Gli stessi casi sono inclusi nei test automatici.
 La tabella trasformata compare soltanto dopo la conferma di un piano interamente
 numerico. Nei percorsi misti rimane visibile soltanto la tabella originale:
 Gower applica internamente il proprio riscalamento ai valori originali.
+
+Nei percorsi numerici, centro e scala sono stimati sui valori osservati. Le
+eventuali sostituzioni dei mancanti vengono poi sottoposte alla trasformazione
+dichiarata nel piano; se si escludono righe, anche le etichette e la matrice
+finale contengono soltanto le righe effettivamente utilizzate. Mahalanobis con
+imputazione non viene abilitata automaticamente, perché richiede una nuova
+verifica della covarianza dopo il completamento dei dati.
 
 
 ## Convenzioni esplicite di Gower per dati misti

@@ -845,6 +845,33 @@
     return campi.join("");
   }
 
+  function domandeMancantiNumerici(colonne) {
+    if (!colonne.length) return "";
+    if (!interpretazione.mancantiNumericiPerColonna) {
+      interpretazione.mancantiNumericiPerColonna = {};
+    }
+    const opzioni = [
+      ["", "Scegli una strategia"],
+      ["escludi_riga", "Non usare le righe in cui questo valore manca"],
+      ["imputa_mediana", "Sostituisci con il valore centrale (mediana)"],
+      ["imputa_media", "Sostituisci con il valore medio"],
+      ["zero", "Confermo che la casella vuota significa davvero zero"]
+    ];
+    return '<div class="question-item"><strong>Come trattare le caselle vuote nelle quantità?</strong>' +
+      '<p>La scelta è separata per colonna. Escludere una riga riduce i dati disponibili; ' +
+      'sostituire un valore introduce un’ipotesi esplicita. Il sito userà la stessa scelta ' +
+      'nell’anteprima e nella matrice finale.</p></div>' +
+      colonne.map(colonna => {
+        const valore = interpretazione.mancantiNumericiPerColonna[colonna.nome] || "";
+        return '<div class="question-item"><label><strong>' + escapeHtml(colonna.nome) +
+          ': che cosa facciamo quando il valore manca?</strong><select class="numeric-missing-setting" ' +
+          'data-numeric-missing-column="' + escapeHtml(colonna.nome) + '">' +
+          opzioni.map(([id, etichetta]) => '<option value="' + id + '"' +
+            (valore === id ? ' selected' : '') + '>' + escapeHtml(etichetta) + '</option>')
+            .join("") + '</select></label></div>';
+      }).join("");
+  }
+
   function disegnaQuestionario() {
     nascondiPiano();
     const profili = risultato.questionario.colonne;
@@ -911,6 +938,12 @@
         && ["numerica", "numerica_costante"].includes(colonna?.tipo);
     });
     if (percorsoNumerico) {
+      const quantitativeConMancanti = quantitativeIndipendenti.filter(
+        colonna => colonna.mancanti > 0
+      );
+      if (quantitativeConMancanti.length) {
+        domande.push(domandeMancantiNumerici(quantitativeConMancanti));
+      }
       domande.push(domandaAdattiva(
         "confrontoQuantitativo", "Che cosa rappresentano i numeri che vuoi confrontare?",
         "Scegli la risposta più vicina ai tuoi dati. Non occorre conoscere alcuna formula.",
@@ -1139,6 +1172,16 @@
     disegnaQuestionario();
   });
   $("adaptive-questions").addEventListener("change", evento => {
+    if (evento.target.matches(".numeric-missing-setting")) {
+      if (!interpretazione.mancantiNumericiPerColonna) {
+        interpretazione.mancantiNumericiPerColonna = {};
+      }
+      interpretazione.mancantiNumericiPerColonna[
+        evento.target.dataset.numericMissingColumn
+      ] = evento.target.value;
+      disegnaQuestionario();
+      return;
+    }
     if (evento.target.matches(".gower-setting")) {
       const chiave = evento.target.dataset.gowerKey;
       const colonna = evento.target.dataset.gowerColumn;

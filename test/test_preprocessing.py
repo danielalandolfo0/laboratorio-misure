@@ -285,6 +285,20 @@ assert [
     passo["metodo"] for passo in piano_auto_robusto["percorsi"][0]["preelaborazione"]["passi"]
 ] == ["robusto", "robusto"]
 
+# Un IQR nullo in una colonna non deve cancellare gli outlier rilevati in
+# un'altra colonna; impedisce soltanto di forzare la scala robusta su tutte.
+dati_iqr_misto = p.prepara_tabella(p.leggi_csv(
+    "a,b\n1,0\n2,0\n3,0\n4,0\n5,0\n6,0\n7,0\n8,2\n100,0"
+))
+analisi_iqr_misto = {c["nome"]: c for c in dati_iqr_misto["colonne"]}
+diagnosi_iqr_misto = p._diagnosi_numerica(["a", "b"], analisi_iqr_misto)
+assert diagnosi_iqr_misto["outlier"] is True
+assert diagnosi_iqr_misto["colonneOutlier"] == ["a"]
+assert diagnosi_iqr_misto["colonneEstremeNonRobuste"] == ["b"]
+assert diagnosi_iqr_misto["robustoApplicabile"] is False
+assert diagnosi_iqr_misto["proposta"]["idMisura"] == "manhattan"
+assert diagnosi_iqr_misto["proposta"]["politicaPreelaborazione"] == "zscore_automatico"
+
 dati_misti_auto = p.prepara_tabella(p.leggi_csv("a,categoria\n1,x\n2,y\n3,x\n4,z"))
 piano_misto_auto = p.crea_piano_confronto(
     dati_misti_auto, {"riga": "oggetto", "colonne": {}}
@@ -568,6 +582,85 @@ assert piano_numerico_con_mancanti["completo"] is False
 assert piano_numerico_con_mancanti["percorsi"][0]["mancanti"]["strategia"] == "da_definire"
 assert piano_numerico_con_mancanti["percorsi"][0]["stato"] == "da_completare"
 assert any("strategia operativa" in avviso for avviso in piano_numerico_con_mancanti["avvisi"])
+
+# I mancanti numerici diventano operativi per colonna e la stessa politica
+# governa piano, anteprima, matrice ed etichette delle righe.
+dati_numerici_mancanti = p.prepara_tabella(p.leggi_csv(
+    "x,y,id\n1,10,A\n2,NA,B\nNA,30,C\n4,40,D"
+))
+risposte_mancanti_numerici = {
+    "riga": "oggetto",
+    "significatoMancanti": "sconosciuto",
+    "confrontoQuantitativo": "assoluto",
+    "aggregazioneScarti": "quadratica",
+    "importanzaCoordinate": "uguale",
+    "gestioneDipendenzaLineare": "mantieni",
+    "riscalamentoConfermato": True,
+    "mancantiNumericiPerColonna": {
+        "x": "imputa_mediana",
+        "y": "imputa_media",
+    },
+    "colonne": {
+        "x": {"ruolo": "quantita", "usa": True},
+        "y": {"ruolo": "quantita", "usa": True},
+        "id": {"ruolo": "identificativo", "usa": False},
+    },
+}
+piano_imputazione = p.crea_piano_confronto(
+    dati_numerici_mancanti, risposte_mancanti_numerici
+)
+assert piano_imputazione["completo"] is True, piano_imputazione
+assert piano_imputazione["percorsi"][0]["mancanti"]["pronta"] is True
+assert "mediana osservata" in piano_imputazione["percorsi"][0]["mancanti"]["descrizione"]
+assert "media osservata" in piano_imputazione["percorsi"][0]["mancanti"]["descrizione"]
+matrice_imputata = p.calcola_matrice_numerica(
+    dati_numerici_mancanti, risposte_mancanti_numerici
+)
+verifica_matrice_finale(matrice_imputata, 4)
+assert matrice_imputata["etichette"] == ["A", "B", "C", "D"]
+
+risposte_esclusione = {
+    **risposte_mancanti_numerici,
+    "mancantiNumericiPerColonna": {
+        "x": "escludi_riga",
+        "y": "escludi_riga",
+    },
+}
+matrice_esclusione = p.calcola_matrice_numerica(
+    dati_numerici_mancanti, risposte_esclusione
+)
+verifica_matrice_finale(matrice_esclusione, 2)
+assert matrice_esclusione["etichette"] == ["A", "D"]
+assert "Righe escluse: 2" in matrice_esclusione["nota"]
+
+risposte_zero = {
+    **risposte_mancanti_numerici,
+    "significatoMancanti": "assenza",
+    "mancantiNumericiPerColonna": {"x": "zero", "y": "zero"},
+}
+assert p.crea_piano_confronto(
+    dati_numerici_mancanti, risposte_zero
+)["completo"] is True
+
+dati_senza_righe_complete = p.prepara_tabella(p.leggi_csv(
+    "x,y\n1,NA\nNA,2\nNA,3"
+))
+risposte_senza_righe = {
+    "riga": "oggetto",
+    "significatoMancanti": "sconosciuto",
+    "confrontoQuantitativo": "assoluto",
+    "aggregazioneScarti": "quadratica",
+    "importanzaCoordinate": "uguale",
+    "gestioneDipendenzaLineare": "mantieni",
+    "mancantiNumericiPerColonna": {"x": "escludi_riga", "y": "escludi_riga"},
+    "colonne": {
+        "x": {"ruolo": "quantita", "usa": True},
+        "y": {"ruolo": "quantita", "usa": True},
+    },
+}
+assert p.crea_piano_confronto(
+    dati_senza_righe_complete, risposte_senza_righe
+)["completo"] is False
 
 misti_con_mancanti = p.prepara_tabella(p.leggi_csv("x,categoria\n1,a\nNA,b\n3,a"))
 piano_gower_con_mancanti = p.crea_piano_confronto(
