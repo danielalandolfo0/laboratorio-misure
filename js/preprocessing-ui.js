@@ -833,8 +833,10 @@
             '<input class="gower-setting" data-gower-key="ordiniLivelliGower" data-gower-column="' +
             escapeHtml(nome) + '" type="text" value="' +
             escapeHtml(interpretazione.ordiniLivelliGower?.[nome] || "") +
-            '" placeholder="' + escapeHtml(distinti.join("; ")) + '"></label>';
-          elementi += '<p>Inserisci tutti i livelli osservati una sola volta. Non verrà inventato alcun ordine alfabetico.</p>';
+            '" placeholder="es. basso; medio; alto"></label>';
+          elementi += '<p>Livelli osservati (senza un ordine implicito): ' +
+            escapeHtml(distinti.join(", ")) +
+            '. Inseriscili tutti una sola volta nell’ordine corretto.</p>';
         }
       }
       elementi += '</div>';
