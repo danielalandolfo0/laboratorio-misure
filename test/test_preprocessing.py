@@ -671,4 +671,59 @@ piano_bray_non_valido = p.crea_piano_confronto(
 assert piano_bray_non_valido["completo"] is False
 assert any("non negativi" in avviso for avviso in piano_bray_non_valido["percorsi"][0]["avvisi"])
 
+
+# Un CSV può contenere una serie temporale e colonne indipendenti.
+dati_con_gruppo = p.prepara_tabella(p.leggi_csv("a,b,c\\n1,2,10\\n2,3,12\\n4,5,15\\n8,9,20".replace("\\n", "\n")))
+risposte_con_gruppo = {
+    "riga": "oggetto",
+    "colonne": {
+        "a": {"ruolo": "quantita", "usa": True},
+        "b": {"ruolo": "quantita", "usa": True},
+        "c": {"ruolo": "quantita", "usa": True},
+    },
+    "gruppi": [{"id": "gruppo-1", "nome": "Serie", "tipo": "tempo"}],
+    "assegnazioni": {"a": "gruppo-1", "b": "gruppo-1"},
+    "ritardo-gruppo-1": "si",
+}
+piano_con_gruppo = p.crea_piano_confronto(dati_con_gruppo, risposte_con_gruppo)
+assert piano_con_gruppo["conteggioPercorsi"] == 2
+assert {tuple(percorso["colonne"]) for percorso in piano_con_gruppo["percorsi"]} == {
+    ("c",), ("a", "b")
+}
+assert next(percorso for percorso in piano_con_gruppo["percorsi"] if percorso["tipo"] == "gruppo")["metodo"] == "Dynamic Time Warping"
+
+# Un codice numerico o un livello ordinale non diventa una serie solo perché contiene numeri.
+risposte_gruppo_incoerente = {
+    **risposte_con_gruppo,
+    "colonne": {
+        **risposte_con_gruppo["colonne"],
+        "a": {"ruolo": "livello", "usa": True},
+    },
+}
+piano_gruppo_incoerente = p.crea_piano_confronto(dati_con_gruppo, risposte_gruppo_incoerente)
+blocco_gruppo_incoerente = next(
+    blocco for blocco in piano_gruppo_incoerente["blocchi"] if blocco["nome"] == "Serie"
+)
+assert blocco_gruppo_incoerente["stato"] == "da_completare"
+assert "non codici o livelli" in blocco_gruppo_incoerente["motivo"]
+
+# Aitchison non può essere proposta come pronta con componenti negative.
+composizione_negativa = p.prepara_tabella(p.leggi_csv("a,b\\n1,2\\n-1,3\\n2,4".replace("\\n", "\n")))
+piano_composizione_negativa = p.crea_piano_confronto(
+    composizione_negativa,
+    {
+        "riga": "oggetto",
+        "colonne": {
+            "a": {"ruolo": "quantita", "usa": True},
+            "b": {"ruolo": "quantita", "usa": True},
+        },
+        "gruppi": [{"id": "gruppo-1", "nome": "Composizione", "tipo": "parti"}],
+        "assegnazioni": {"a": "gruppo-1", "b": "gruppo-1"},
+        "totale-gruppo-1": "si",
+    },
+)
+blocco_composizione_negativa = piano_composizione_negativa["blocchi"][0]
+assert blocco_composizione_negativa["stato"] == "da_completare"
+assert any("valori negativi" in avviso for avviso in blocco_composizione_negativa["avvisi"])
+
 print("Tutti i test Python di preprocessing sono stati superati.")
