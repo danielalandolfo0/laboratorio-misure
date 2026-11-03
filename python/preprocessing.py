@@ -1323,6 +1323,9 @@ def _specifica_misura_numerica(
     # coordinate per coordinata. Le misure relative e Mahalanobis restano
     # sui valori originali per non alterarne il significato.
     if interpretazione.get("riscalamentoConfermato"):
+        if id_misura == "standardized_euclidean":
+            id_misura = "euclidean"
+            parametri.pop("scale", None)
         geometriche = {
             "euclidean", "manhattan", "chebyshev", "minkowski",
             "weighted_minkowski", "weighted_chebyshev",
