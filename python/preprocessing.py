@@ -906,6 +906,7 @@ def _diagnosi_numerica(
 
     correlazione_massima = 0.0
     coppia_correlata: list[str] = []
+    relazioni_coppie: list[dict[str, Any]] = []
     for i, nome_x in enumerate(non_costanti):
         valori_x = analisi_per_nome[nome_x].get("valoriNumerici", [])
         for nome_y in non_costanti[i + 1:]:
@@ -924,7 +925,18 @@ def _diagnosi_numerica(
             norma_y = math.sqrt(sum((y - media_y) ** 2 for _, y in coppie))
             if norma_x == 0 or norma_y == 0:
                 continue
-            correlazione = abs(numeratore / (norma_x * norma_y))
+            correlazione_firmata = max(-1.0, min(1.0, numeratore / (norma_x * norma_y)))
+            correlazione = abs(correlazione_firmata)
+            relazioni_coppie.append({
+                "colonne": [nome_x, nome_y],
+                "correlazione": correlazione_firmata,
+                "coppieComplete": len(coppie),
+                "intensita": (
+                    "perfetta" if 1 - correlazione <= 1e-10 else
+                    "forte" if correlazione >= 0.8 else
+                    "moderata" if correlazione >= 0.5 else "debole"
+                ),
+            })
             if correlazione > correlazione_massima:
                 correlazione_massima = correlazione
                 coppia_correlata = [nome_x, nome_y]
@@ -1052,6 +1064,7 @@ def _diagnosi_numerica(
         "dispersioniSimili": rapporto_scale <= 2,
         "correlazioneMassimaAssoluta": correlazione_massima,
         "coppiaCorrelata": coppia_correlata,
+        "relazioniCoppie": relazioni_coppie,
         "correlazioniForti": correlazioni_forti,
         "righeComplete": len(righe_complete),
         "righeMinimeCovarianza": righe_minime_covarianza,
@@ -1068,6 +1081,44 @@ def _diagnosi_numerica(
             "motivo": motivo,
         },
     }
+
+
+def analizza_diagnosi_numerica_json(
+    testo: str, scelte_json: str = "[]", colonne_json: str = "[]"
+) -> str:
+    """Diagnosi esplorativa prima del riscalamento, solo su colonne selezionate."""
+    try:
+        scelte = json.loads(scelte_json or "[]")
+        nomi = json.loads(colonne_json or "[]")
+        risultato = prepara_tabella(leggi_csv(testo), scelte)
+        per_nome = {colonna["nome"]: colonna for colonna in risultato["colonne"]}
+        if (
+            not isinstance(nomi, list) or not nomi
+            or len(nomi) != len(set(nomi))
+            or any(
+                not isinstance(nome, str) or nome not in per_nome
+                or per_nome[nome]["tipo"] not in {"numerica", "numerica_costante"}
+                for nome in nomi
+            )
+        ):
+            raise ValueError("Seleziona soltanto colonne numeriche valide.")
+        diagnosi = _diagnosi_numerica(nomi, per_nome)
+        statistiche_colonne = [
+            {
+                "nome": nome, "mancanti": per_nome[nome]["mancanti"],
+                "statistiche": per_nome[nome].get("statistiche", {}),
+            }
+            for nome in nomi
+        ]
+        return json.dumps(
+            {"ok": True, "diagnosi": diagnosi, "colonne": statistiche_colonne},
+            ensure_ascii=False, separators=(",", ":")
+        )
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError) as errore:
+        return json.dumps(
+            {"ok": False, "errore": str(errore)},
+            ensure_ascii=False, separators=(",", ":")
+        )
 
 
 def crea_diagnosi_decisionale(
