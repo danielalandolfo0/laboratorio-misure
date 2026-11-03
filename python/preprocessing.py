@@ -1335,7 +1335,9 @@ def _specifica_misura_numerica(
                 )
                 stato = "da_completare"
 
-        if scelta_automatica and id_misura == "mahalanobis" and not diagnosi["covarianzaUtilizzabile"]:
+        if scelta_automatica and id_misura == "mahalanobis" and (
+            dipendenza == "no" or not diagnosi["covarianzaUtilizzabile"]
+        ):
             id_misura = "euclidean"
             politica_preelaborazione = "zscore_automatico"
 
@@ -1676,13 +1678,20 @@ def _crea_percorsi(
         else:
             risposta_estremi = interpretazione.get("significatoEstremi", "")
             stato = stato_blocchi
-            if ha_estremi and risposta_estremi == "reali":
-                metodo = "Dissimilarità di Gower robusta"
-                motivo = "Le caratteristiche sono di tipo diverso e gli outlier reali non devono comprimere tutte le altre differenze."
-            elif ha_estremi and risposta_estremi in {"errori", "controllare"}:
+            scelta_gower = interpretazione.get("tipoGowerNumeriche", "automatico")
+            if ha_estremi and risposta_estremi in {"errori", "controllare"}:
                 metodo = "Gower dopo il controllo dei dati"
                 motivo = "Prima del calcolo occorre correggere o verificare i valori estremi segnalati."
                 stato = "da_completare"
+            elif scelta_gower == "robusta" or (scelta_gower in {"", "automatico"} and ha_estremi and risposta_estremi == "reali"):
+                metodo = "Dissimilarità di Gower robusta"
+                motivo = "I contributi quantitativi sono calcolati con scala robusta quando definita e troncati a 1."
+            elif scelta_gower == "classica":
+                metodo = "Dissimilarità di Gower classica"
+                motivo = "I contributi quantitativi sono normalizzati tramite i rispettivi intervalli osservati."
+            elif ha_estremi and risposta_estremi == "reali":
+                metodo = "Dissimilarità di Gower robusta"
+                motivo = "Le caratteristiche sono di tipo diverso e gli outlier reali non devono comprimere tutte le altre differenze."
             else:
                 metodo = "Dissimilarità di Gower classica"
                 motivo = "Combina quantità, categorie, livelli e variabili binarie con contributi confrontabili."
