@@ -312,7 +312,7 @@
         ${opzioni.map(([id, nome]) => `<option value="${id}"${id === scelta ? " selected" : ""}>${escapeHtml(nome)}</option>`).join("")}
       </select>
       <p>Non serve conoscere il nome delle misure: scegli l’obiettivo che preferisci. Il sito verifica se è compatibile con i dati.</p>
-      ${esponente ? `<label for="numeric-measure-q">Quanto vuoi dare rilievo alle differenze grandi? (q ≥ 1)</label><input id="numeric-measure-q" type="number" min="1" step="0.5" value="${escapeHtml(interpretazione.ordineMisuraManuale || "2")}">` : ""}
+      ${esponente ? `<label for="numeric-measure-q">Quanto vuoi dare rilievo alle differenze grandi? (q ≥ 1)</label><p>Con 1 sommi tutte le differenze; con 2 quelle grandi hanno maggiore influenza. Per altre scelte serve un valore almeno pari a 1.</p><input id="numeric-measure-q" type="number" min="1" step="0.5" value="${escapeHtml(interpretazione.ordineMisuraManuale || "2")}">` : ""}
       ${pesata ? `<label for="numeric-measure-weights">Quanto conta ogni colonna? ${colonne.map(escapeHtml).join(", ")}</label><input id="numeric-measure-weights" type="text" value="${escapeHtml(interpretazione.pesiMisuraManuale || colonne.map(() => "1").join("; "))}"><small>Inserisci un numero positivo per colonna, separando con punto e virgola. Usa 1 per tutte se devono avere la stessa importanza.</small>` : ""}
       <button class="secondary-action" id="apply-numeric-measure" type="button">Applica misura</button>
     </div>`;
@@ -355,6 +355,7 @@
         </dl>
         <span>${escapeHtml(pre.descrizione)}</span>
         <p>${escapeHtml(percorso.motivo)}</p>
+        ${percorso.notaPreelaborazione ? `<p><strong>Quali valori vengono usati:</strong> ${escapeHtml(percorso.notaPreelaborazione)}</p>` : ""}
         ${editorNumerico}
         ${alternative}
       </article>`;
@@ -725,6 +726,10 @@
   $("comparison-plan-paths").addEventListener("change", evento => {
     if (evento.target.id !== "numeric-measure-choice") return;
     interpretazione.misuraNumericaManuale = evento.target.value;
+    const nomi = pianoCorrente?.percorsi.find(p => p.tipo === "numerico")?.colonne || [];
+    if (["weighted_minkowski", "weighted_chebyshev"].includes(evento.target.value) && !interpretazione.pesiMisuraManuale) {
+      interpretazione.pesiMisuraManuale = nomi.map(() => "1").join("; ");
+    }
     preparaPiano();
   });
   $("comparison-plan-paths").addEventListener("click", evento => {
