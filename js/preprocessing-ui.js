@@ -420,6 +420,21 @@
     return contenitore.outerHTML;
   }
 
+  function controlloDipendenzaLineare(percorso) {
+    if (!percorso.diagnosiAutomatica?.covarianzaSingolare) return "";
+    const scelta = interpretazione.gestioneDipendenzaLineare || "";
+    return `<div class="question-item">
+      <label for="numeric-dependency-choice"><strong>Alcune colonne riportano informazioni già contenute in altre. Come vuoi procedere?</strong></label>
+      <p>Non è un errore del file. Se mantieni tutte le colonne, questa informazione ripetuta può influenzare più volte il risultato. Mahalanobis classica non può essere calcolata su queste colonne perché la covarianza è singolare.</p>
+      <select id="numeric-dependency-choice">
+        <option value=""${scelta === "" ? " selected" : ""}>Devo ancora decidere</option>
+        <option value="mantieni"${scelta === "mantieni" ? " selected" : ""}>Voglio mantenere tutte le colonne e accetto questo effetto</option>
+        <option value="rivedi"${scelta === "rivedi" ? " selected" : ""}>Preferisco rivedere le colonne da utilizzare</option>
+      </select>
+      <p>Se vuoi togliere le colonne ripetute, torna alla sezione «Usarla per confrontare le righe?» e deselezionale.</p>
+    </div>`;
+  }
+
   function editorMisuraNumerica(percorso) {
     const opzioni = [
       ["automatico", "Usa la misura proposta dal sito"],
@@ -483,6 +498,7 @@
         </dl>
         <span>${escapeHtml(pre.descrizione)}</span>
         ${percorso.tipo === "numerico" ? spiegazioneMisuraNumerica(percorso) : `<p>${escapeHtml(percorso.motivo)}</p>`}
+        ${percorso.tipo === "numerico" ? controlloDipendenzaLineare(percorso) : ""}
         ${percorso.notaPreelaborazione ? `<p><strong>Quali valori vengono usati:</strong> ${escapeHtml(percorso.notaPreelaborazione)}</p>` : ""}
         ${editorNumerico}
         ${alternative}
@@ -851,6 +867,11 @@
   $("prepare-comparison-plan").addEventListener("click", preparaPiano);
   $("calculate-gower").addEventListener("click", calcolaMatrice);
   $("download-gower").addEventListener("click", scaricaMatrice);
+  $("comparison-plan-paths").addEventListener("change", evento => {
+    if (evento.target.id !== "numeric-dependency-choice") return;
+    interpretazione.gestioneDipendenzaLineare = evento.target.value;
+    preparaPiano();
+  });
   $("comparison-plan-paths").addEventListener("change", evento => {
     if (evento.target.id !== "numeric-measure-choice") return;
     interpretazione.misuraNumericaManuale = evento.target.value;
