@@ -57,37 +57,6 @@
         <button class="secondary-action" id="download-work" type="button" disabled hidden>Scarica la tabella trasformata</button>
       </div>
 
-      <div class="scaling-wrap" id="scaling-wrap" hidden>
-        <h3>Riscalamento delle variabili numeriche</h3>
-        <p>Controlla la trasformazione proposta per ciascuna variabile selezionata. Puoi modificarla prima della conferma; la matrice trasformata comparirà solo dopo.</p><p id="numeric-scaling-status" role="status"></p>
-        <div class="data-table-wrap">
-          <table class="data-table scaling-table">
-            <thead><tr><th>Feature</th><th>Tipo di dato</th><th>Trasformazione candidata</th><th>Parametri</th><th>Mancanti</th></tr></thead>
-            <tbody id="scaling-body"></tbody>
-          </table>
-        </div>
-        <button class="action" id="confirm-numeric-scaling" type="button">Conferma il riscalamento e mostra la matrice</button>
-      </div>
-
-      <div class="preview-block">
-        <div class="preview-toolbar">
-          <div>
-            <h3>Anteprima della tabella</h3>
-            <p id="preview-caption"></p>
-          </div>
-          <div class="view-switch" id="preview-view-switch" aria-label="Scegli la tabella da visualizzare" hidden>
-            <button id="view-original" type="button">Originale</button>
-            <button class="active" id="view-work" type="button">Trasformata</button>
-          </div>
-        </div>
-        <div class="data-table-wrap">
-          <table class="data-table preview-table">
-            <thead id="preview-head"></thead>
-            <tbody id="preview-body"></tbody>
-          </table>
-        </div>
-      </div>
-
       <section class="interpretation-wrap" aria-labelledby="interpretation-title">
         <p class="section-label">Passo successivo</p>
         <h3 id="interpretation-title">Che cosa rappresentano i dati?</h3>
@@ -133,6 +102,38 @@
           </div>
           <div class="group-config-list" id="group-config-list"></div>
         </div>
+
+      <div class="scaling-wrap" id="scaling-wrap" hidden>
+        <h3>Riscalamento delle variabili numeriche</h3>
+        <p>Controlla la trasformazione proposta per ciascuna variabile selezionata. Puoi modificarla prima della conferma; la matrice trasformata comparirà solo dopo.</p><p id="numeric-scaling-status" role="status"></p>
+        <div class="data-table-wrap">
+          <table class="data-table scaling-table">
+            <thead><tr><th>Feature</th><th>Tipo di dato</th><th>Trasformazione candidata</th><th>Parametri</th><th>Mancanti</th></tr></thead>
+            <tbody id="scaling-body"></tbody>
+          </table>
+        </div>
+        <button class="action" id="confirm-numeric-scaling" type="button">Conferma il riscalamento e mostra la matrice</button>
+      </div>
+
+      <div class="preview-block">
+        <div class="preview-toolbar">
+          <div>
+            <h3>Anteprima della tabella</h3>
+            <p id="preview-caption"></p>
+          </div>
+          <div class="view-switch" id="preview-view-switch" aria-label="Scegli la tabella da visualizzare" hidden>
+            <button id="view-original" type="button">Originale</button>
+            <button class="active" id="view-work" type="button">Trasformata</button>
+          </div>
+        </div>
+        <div class="data-table-wrap">
+          <table class="data-table preview-table">
+            <thead id="preview-head"></thead>
+            <tbody id="preview-body"></tbody>
+          </table>
+        </div>
+      </div>
+
 
         <div class="adaptive-questions" id="adaptive-questions"></div>
 
@@ -302,7 +303,7 @@
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
   <script defer src="js/preprocessing-python.js?v=20261103-3"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261103-3"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261103-4"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>
