@@ -630,7 +630,7 @@ def _blocco_indipendente(nome: str, ruolo: str, analisi: dict[str, Any], interpr
             "misura": misura, "motivo": motivo, "stato": stato, "avvisi": avvisi}
 
 
-def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: dict[str, dict[str, Any]], interpretazione: dict[str, Any]) -> dict[str, Any]:
+def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: dict[str, dict[str, Any]], interpretazione: dict[str, Any], ruoli: dict[str, str]) -> dict[str, Any]:
     """Traduce un gruppo di colonne in una sola regola di confronto."""
     nome = str(gruppo.get("nome") or "Gruppo senza nome")
     tipo_gruppo = gruppo.get("tipo", "altro")
@@ -646,9 +646,10 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
     else:
         tipi = {analisi_per_nome[m]["tipo"] for m in membri if m in analisi_per_nome}
         numerico = bool(tipi) and tipi <= {"numerica", "numerica_costante"}
-        if tipo_gruppo in {"ripetute", "tempo", "parti"} and not numerico:
-            misura, motivo = "Da decidere", "Questa interpretazione richiede colonne numeriche."
-            avvisi.append("Controlla il tipo di dato delle colonne del gruppo.")
+        quantitativo = numerico and all(ruoli.get(m) == "quantita" for m in membri)
+        if tipo_gruppo in {"ripetute", "tempo", "parti"} and not quantitativo:
+            misura, motivo = "Da decidere", "Questa struttura richiede quantità numeriche, non codici o livelli ordinali."
+            avvisi.append("Controlla il significato e il tipo delle colonne del gruppo.")
             stato = "da_completare"
         elif tipo_gruppo == "ripetute":
             risposta = interpretazione.get(f"somiglianza-{gruppo.get('id')}", "")
@@ -678,6 +679,9 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
             risposta = interpretazione.get(f"totale-{gruppo.get('id')}", "")
             if risposta == "si":
                 misura, motivo = "Distanza composizionale di Aitchison", "Confronta le proporzioni tra le parti, non la grandezza totale."
+                if any(analisi_per_nome[m].get("statistiche", {}).get("minimo", 0) < 0 for m in membri):
+                    avvisi.append("Aitchison richiede componenti strettamente positive: sono presenti valori negativi.")
+                    stato = "da_completare"
                 if any(analisi_per_nome[m].get("statistiche", {}).get("zeri", 0) > 0 for m in membri):
                     avvisi.append("Sono presenti zeri: prima del calcolo servirà stabilire come trattarli.")
                     stato = "da_completare"
@@ -1736,7 +1740,7 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
     for gruppo in gruppi:
         membri = [nome for nome in incluse if assegnazioni.get(nome) == gruppo.get("id")]
         if membri:
-            blocco = _blocco_gruppo(gruppo, membri, analisi_per_nome, interpretazione)
+            blocco = _blocco_gruppo(gruppo, membri, analisi_per_nome, interpretazione, ruoli)
             blocchi.append(blocco)
             gruppi_con_blocco.append((gruppo, blocco))
 
