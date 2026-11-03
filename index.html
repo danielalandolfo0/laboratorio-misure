@@ -103,6 +103,12 @@
           <div class="group-config-list" id="group-config-list"></div>
         </div>
 
+      <section class="numeric-preliminary-diagnosis" id="numeric-preliminary-diagnosis" aria-labelledby="numeric-preliminary-title" hidden>
+        <h3 id="numeric-preliminary-title">Prima di confrontare i dati: che cosa abbiamo trovato?</h3>
+        <p>Il sito controlla soltanto le colonne numeriche che hai scelto. Questi controlli aiutano a scegliere il riscalamento e a individuare informazioni ripetute; non modificano il file.</p>
+        <div id="numeric-preliminary-content" aria-live="polite"></div>
+      </section>
+
       <div class="scaling-wrap" id="scaling-wrap" hidden>
         <h3>Riscalamento delle variabili numeriche</h3>
         <p>Controlla la trasformazione proposta per ciascuna variabile selezionata. Puoi modificarla prima della conferma; la matrice trasformata comparirà solo dopo.</p>
@@ -310,8 +316,8 @@
 
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
-  <script defer src="js/preprocessing-python.js?v=20261103-singular1"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261103-singular1"></script>
+  <script defer src="js/preprocessing-python.js?v=20261103-diagnosis1"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261103-diagnosis1"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>
