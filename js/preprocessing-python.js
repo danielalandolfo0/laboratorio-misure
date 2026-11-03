@@ -6,6 +6,7 @@
   let creaCsvPython = null;
   let creaPianoPython = null;
   let calcolaMatricePython = null;
+  let analizzaDiagnosiPython = null;
 
   const ready = (async () => {
     if (typeof loadPyodide !== "function") {
@@ -21,6 +22,7 @@
     creaCsvPython = pyodide.globals.get("crea_csv_json");
     creaPianoPython = pyodide.globals.get("crea_piano_json");
     calcolaMatricePython = pyodide.globals.get("calcola_matrice_json");
+    analizzaDiagnosiPython = pyodide.globals.get("analizza_diagnosi_numerica_json");
   })();
 
   async function preparaTabella(testo, scelte = []) {
@@ -59,5 +61,14 @@
     return risposta.matrice;
   }
 
-  window.Preprocessing = { ready, preparaTabella, creaCsv, creaPiano, calcolaMatrice };
+  async function analizzaDiagnosi(testo, scelte, nomi) {
+    await ready;
+    const risposta = JSON.parse(analizzaDiagnosiPython(
+      testo, JSON.stringify(scelte), JSON.stringify(nomi)
+    ));
+    if (!risposta.ok) throw new Error(risposta.errore);
+    return risposta;
+  }
+
+  window.Preprocessing = { ready, preparaTabella, creaCsv, creaPiano, calcolaMatrice, analizzaDiagnosi };
 })();
