@@ -2027,7 +2027,7 @@ def _metadati_gower(
         # Se i soli valori osservati sono tutti uguali e i mancanti vengono
         # esclusi, l'eventuale polarità binaria è irrilevante.
         osservati_grezzi = {str(v).strip() for v in grezzi if not mancante(v)}
-        if politica == "escludi" and len(osservati_grezzi) <= 1:
+        if ruolo in {"presenza", "binaria"} and politica == "escludi" and len(osservati_grezzi) <= 1:
             continue
         asimmetrica = ruolo == "presenza" and (
             (interpretazione.get("zeriCondivisiPerColonna") or {}).get(
