@@ -684,7 +684,7 @@
 
   function creaGruppo() {
     const numero = interpretazione.prossimoGruppo++;
-    const gruppo = { id: `gruppo-${numero}`, nome: `Gruppo ${numero}`, tipo: "ripetute" };
+    const gruppo = { id: `gruppo-${numero}`, nome: `Gruppo ${numero}`, tipo: "altro" };
     interpretazione.gruppi.push(gruppo);
     return gruppo;
   }
@@ -702,6 +702,16 @@
     profili.filter(profilo => !interpretazione.colonne[profilo.nome]?.usa).forEach(profilo => {
       delete interpretazione.assegnazioni[profilo.nome];
     });
+    const indipendenti = incluse.filter(profilo => !interpretazione.assegnazioni[profilo.nome]);
+    const gruppiAttivi = interpretazione.gruppi.map(gruppo => ({
+      gruppo,
+      membri: incluse.filter(profilo => interpretazione.assegnazioni[profilo.nome] === gruppo.id)
+    })).filter(elemento => elemento.membri.length);
+    $("group-summary").innerHTML =
+      `<p><strong>Caratteristiche indipendenti (${indipendenti.length}):</strong> ${indipendenti.length ? indipendenti.map(p => escapeHtml(p.nome)).join(", ") : "nessuna"}.</p>` +
+      (gruppiAttivi.length
+        ? `<p><strong>Gruppi strutturati (${gruppiAttivi.length}):</strong> ${gruppiAttivi.map(({ gruppo, membri }) => escapeHtml(gruppo.nome) + " (" + membri.map(p => escapeHtml(p.nome)).join(", ") + ")").join("; ")}.</p>`
+        : "<p>Nessuna colonna assegnata a un gruppo. Puoi crearne più di uno, lasciando le altre colonne indipendenti.</p>");
     $("group-assignment-body").innerHTML = incluse.length ? incluse.map(profilo => `<tr>
       <th scope="row">${escapeHtml(profilo.nome)}</th>
       <td><select class="column-choice group-assignment" data-group-column="${escapeHtml(profilo.nome)}" aria-label="Gruppo della colonna ${escapeHtml(profilo.nome)}">${opzioniGruppo(interpretazione.assegnazioni[profilo.nome] || "")}</select></td>
@@ -711,18 +721,19 @@
       const membri = incluse.filter(profilo => interpretazione.assegnazioni[profilo.nome] === gruppo.id).map(profilo => profilo.nome);
       const tipi = membri.map(nome => risultato.colonne.find(colonna => colonna.nome === nome)?.tipo);
       const tutteNumeriche = tipi.length >= 2 && tipi.every(tipo => tipo === "numerica" || tipo === "numerica_costante");
+      const tutteQuantitative = tutteNumeriche && membri.every(nome => interpretazione.colonne[nome]?.ruolo === "quantita");
       const nota = membri.length < 2
         ? "Assegna almeno due colonne a questo gruppo."
-        : !tutteNumeriche && gruppo.tipo !== "altro"
-          ? "Per questa interpretazione servono almeno due colonne numeriche."
+        : !tutteQuantitative && gruppo.tipo !== "altro"
+          ? "Per questa interpretazione servono quantità numeriche: verifica che non siano codici o livelli."
           : `Colonne: ${membri.join(", ")}.`;
       return `<div class="group-config" data-group-id="${gruppo.id}">
         <label>Nome del gruppo<input class="group-name" value="${escapeHtml(gruppo.nome)}" aria-label="Nome di ${escapeHtml(gruppo.nome)}"></label>
         <label>Che cosa formano insieme?<select class="group-type" aria-label="Tipo di ${escapeHtml(gruppo.nome)}">
+          <option value="altro"${gruppo.tipo === "altro" ? " selected" : ""}>Da specificare</option>
           <option value="ripetute"${gruppo.tipo === "ripetute" ? " selected" : ""}>Misurazioni dello stesso profilo</option>
           <option value="tempo"${gruppo.tipo === "tempo" ? " selected" : ""}>Osservazioni successive nel tempo</option>
           <option value="parti"${gruppo.tipo === "parti" ? " selected" : ""}>Parti dello stesso totale</option>
-          <option value="altro"${gruppo.tipo === "altro" ? " selected" : ""}>Un altro insieme di caratteristiche</option>
         </select></label>
         <p>${escapeHtml(nota)}</p>
         <button class="remove-group" type="button">Rimuovi gruppo</button>
@@ -843,7 +854,8 @@
     interpretazione.gruppi.forEach(gruppo => {
       const membri = profili.filter(profilo => interpretazione.colonne[profilo.nome]?.usa && interpretazione.assegnazioni[profilo.nome] === gruppo.id);
       const tipi = membri.map(profilo => risultato.colonne.find(colonna => colonna.nome === profilo.nome)?.tipo);
-      const valido = membri.length >= 2 && tipi.every(tipo => tipo === "numerica" || tipo === "numerica_costante");
+      const valido = membri.length >= 2 && membri.every((profilo, indice) =>
+        ["numerica", "numerica_costante"].includes(tipi[indice]) && interpretazione.colonne[profilo.nome]?.ruolo === "quantita");
       if (!valido) return;
       if (gruppo.tipo === "ripetute") domande.push(domandaAdattiva(
         `somiglianza-${gruppo.id}`, `Nel gruppo “${escapeHtml(gruppo.nome)}”, quando due righe devono essere considerate simili?`,
