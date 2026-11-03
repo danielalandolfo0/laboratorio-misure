@@ -2133,7 +2133,9 @@ def calcola_matrice_numerica(
 def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) -> dict[str, Any]:
     piano = crea_piano_confronto(risultato, interpretazione)
     calcolabili = [percorso for percorso in piano["percorsi"] if percorso["calcolo"]["disponibile"]]
-    if len(calcolabili) != 1:
+    if len(piano["percorsi"]) != 1:
+        raise ValueError("Sono presenti più percorsi: prima di calcolare un’unica matrice finale occorre definire l’aggregazione dei blocchi.")
+    if len(calcolabili) != 1 or not piano["completo"]:
         raise ValueError("Il calcolo diretto richiede un unico percorso completo e calcolabile.")
     if calcolabili[0]["tipo"] == "gower":
         return calcola_matrice_gower(risultato, interpretazione)
