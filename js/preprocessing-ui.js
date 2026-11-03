@@ -11,6 +11,7 @@
   let vista = "lavoro";
   let pianoCorrente = null;
   let matriceCorrente = null;
+  let versioneDiagnosi = 0;
   let riscalamentoConfermato = false;
 
   function escapeHtml(valore) {
@@ -211,6 +212,80 @@
     if (!risultato) return false;
     const incluse = risultato.colonne.filter(c => interpretazione.colonne[c.nome]?.usa);
     return incluse.length > 0 && incluse.length === colonneNumericheSelezionate().length;
+  }
+
+  async function mostraDiagnosiPreliminare() {
+    const contenitore = $("numeric-preliminary-diagnosis");
+    const corpo = $("numeric-preliminary-content");
+    const versione = ++versioneDiagnosi;
+    if (!tabellaInteramenteNumerica()) {
+      contenitore.hidden = true;
+      corpo.innerHTML = "";
+      return;
+    }
+    contenitore.hidden = false;
+    corpo.textContent = "Analisi preliminare delle colonne selezionate…";
+    const nomi = colonneNumericheSelezionate().map(c => c.nome);
+    try {
+      const risposta = await P.analizzaDiagnosi(testoOriginale, scelte, nomi);
+      if (versione !== versioneDiagnosi) return;
+      const d = risposta.diagnosi;
+      const estreme = risposta.colonne.filter(c => c.statistiche.estremi > 0);
+      const range = risposta.colonne.map(c => ({
+        nome: c.nome,
+        ampiezza: c.statistiche.massimo - c.statistiche.minimo,
+        iqr: c.statistiche.iqr
+      }));
+      const coppie = d.relazioniCoppie || [];
+      const perfette = coppie.filter(c => c.intensita === "perfetta");
+      const forti = coppie.filter(c => c.intensita === "forte");
+      const outlier = estreme.length
+        ? "Possibili valori insoliti in " + estreme.map(c => c.nome + " (" + c.statistiche.estremi + ")").join(", ") + ". Controlla se sono osservazioni corrette."
+        : "Non risultano valori oltre i limiti della regola statistica utilizzata. Questo non garantisce che ogni valore sia corretto.";
+      const scale = range.length < 2
+        ? "È selezionata una sola colonna numerica."
+        : "Ampiezze osservate: " + range.map(c => c.nome + ": " + formatoNumero(c.ampiezza)).join("; ") + ". " +
+          (d.dispersioniSimili
+            ? "Le dispersioni considerate dal controllo non differiscono molto."
+            : "Le dispersioni considerate dal controllo differiscono. Un riscalamento può impedire che una colonna domini solo per la grandezza dei numeri.");
+      let andamento = "Non sono state rilevate relazioni lineari forti tra le coppie di colonne controllabili.";
+      if (perfette.length) {
+        andamento = "Alcune coppie seguono un andamento lineare perfetto: " +
+          perfette.map(c => c.colonne.join(" e ") + (c.correlazione > 0 ? " crescono insieme" : " si muovono in direzioni opposte")).join("; ") +
+          ". Potrebbero riportare informazioni ripetute.";
+      } else if (forti.length) {
+        andamento = "Alcune coppie seguono un andamento lineare simile: " +
+          forti.map(c => c.colonne.join(" e ")).join("; ") +
+          ". Questo non significa che le colonne siano identiche.";
+      }
+      const riga = (titolo, descrizione) =>
+        '<div class="question-item"><strong>' + escapeHtml(titolo) + '</strong><p>' + escapeHtml(descrizione) + '</p></div>';
+      const spiegazioni = [
+        riga("Ci sono valori molto diversi dagli altri?", outlier),
+        riga("Le colonne usano numeri di grandezza simile?", scale),
+        riga("Alcune colonne cambiano insieme?", andamento)
+      ];
+      if (d.covarianzaSingolare) {
+        spiegazioni.push(riga("Alcune informazioni si ripetono?",
+          "La matrice delle relazioni lineari non è invertibile: alcune colonne dipendono linearmente dalle altre. È opportuno verificare se mantenerle tutte."));
+      }
+      if (d.colonneMancanti.length) {
+        spiegazioni.push(riga("Ci sono celle vuote?",
+          "Sì, nelle colonne: " + d.colonneMancanti.join(", ") + ". Prima di calcolare una distanza bisogna decidere come gestirle."));
+      }
+      const dettaglio = '<details><summary>Dettagli statistici e criteri usati</summary>' +
+        '<p>Valori insoliti: regola di Tukey, fuori da [Q1 − 1,5·IQR; Q3 + 1,5·IQR]. Con pochi dati il controllo è indicativo. ' +
+        'Dispersioni: confronto degli IQR, oppure delle deviazioni standard se IQR è nullo; rapporto oltre 2 come soglia esplorativa, non universale. ' +
+        'Andamenti: correlazione di Pearson calcolata sulle coppie di valori disponibili; relazione forte se |r| ≥ 0,8, perfetta entro una tolleranza di 10⁻¹⁰.</p>' +
+        '<p>Correlazioni: ' + (coppie.length
+          ? coppie.map(c => escapeHtml(c.colonne.join(" / ") + ": r = " + formatoNumero(c.correlazione) + " (" + c.coppieComplete + " coppie)")).join("; ")
+          : "nessuna coppia confrontabile") + '.</p>' +
+        '<p>' + escapeHtml(d.motivoCovarianza || "") + '</p></details>';
+      corpo.innerHTML = spiegazioni.join("") + dettaglio;
+    } catch (errore) {
+      if (versione !== versioneDiagnosi) return;
+      corpo.textContent = "Non è stato possibile completare la diagnosi: " + errore.message;
+    }
   }
 
   function aggiornaVisibilitaTrasformazione() {
@@ -674,6 +749,7 @@
       </tr>`;
     }).join("");
     disegnaGruppi();
+    mostraDiagnosiPreliminare();
     disegnaMetodi();
     aggiornaFaseNumerica();
 
