@@ -747,6 +747,11 @@ REGISTRO_MISURE_NUMERICHE = {
         "famiglia": "Minkowski",
         "proprieta": "Metrica con pesi strettamente positivi e q ≥ 1.",
     },
+    "weighted_chebyshev": {
+        "nome": "Distanza di Chebyshev pesata",
+        "famiglia": "Geometriche pesate",
+        "proprieta": "Metrica con pesi strettamente positivi; massimo degli scarti ponderati.",
+    },
     "standardized_euclidean": {
         "nome": "Distanza euclidea standardizzata",
         "famiglia": "Distanze standardizzate",
@@ -1262,6 +1267,57 @@ def _specifica_misura_numerica(
                     "nome": REGISTRO_MISURE_NUMERICHE[alternativa]["nome"],
                     "motivo": "Alternativa con una diversa sensibilità alla distribuzione degli scarti.",
                 })
+
+    # La scelta esplicita nel piano prevale sulla raccomandazione, ma non sui
+    # vincoli matematici della misura. Nessun fallback silenzioso.
+    manuale = interpretazione.get("misuraNumericaManuale", "automatico")
+    opzioni_manuali = {
+        "euclidean", "manhattan", "chebyshev", "minkowski",
+        "weighted_minkowski", "weighted_chebyshev", "mahalanobis",
+        "canberra", "bray_curtis", "chi_square",
+    }
+    if manuale not in ("", "automatico"):
+        if manuale not in opzioni_manuali:
+            raise ValueError("La misura numerica selezionata non è riconosciuta.")
+        id_misura = manuale
+        parametri = {}
+        if manuale in {"minkowski", "weighted_minkowski"}:
+            try:
+                q = float(interpretazione.get("ordineMisuraManuale", "2"))
+            except (ValueError, TypeError):
+                q = math.nan
+            if not math.isfinite(q) or q < 1:
+                avvisi.append("L'esponente q deve essere un numero finito maggiore o uguale a 1.")
+                stato = "da_completare"
+            else:
+                parametri["q"] = q
+        if manuale in {"weighted_minkowski", "weighted_chebyshev"}:
+            pesi = _lista_numeri_positivi(interpretazione.get("pesiMisuraManuale", ""))
+            if pesi is None or len(pesi) != len(nomi):
+                avvisi.append(f"Per la misura pesata servono {len(nomi)} pesi strettamente positivi, nell'ordine delle colonne selezionate.")
+                stato = "da_completare"
+            else:
+                # Normalizzazione solo facoltativa: conserviamo i pesi scelti.
+                parametri["pesi"] = pesi
+        if manuale == "mahalanobis":
+            politica_preelaborazione = "originale"
+            if not diagnosi["covarianzaUtilizzabile"] or numero_istanze <= len(nomi):
+                avvisi.append("Mahalanobis richiede una covarianza empirica utilizzabile e ben condizionata.")
+                stato = "da_completare"
+        elif manuale in {"canberra", "bray_curtis", "chi_square"}:
+            # Le trasformazioni centrate possono rendere negative le abbondanze.
+            politica_preelaborazione = "originale"
+            if manuale in {"bray_curtis", "chi_square"} and not non_negative:
+                avvisi.append("Questa misura richiede valori non negativi.")
+                stato = "da_completare"
+        elif politica_preelaborazione in {"originale", "standardizzazione_interna"}:
+            politica_preelaborazione = diagnosi["proposta"]["politicaPreelaborazione"]
+        alternative = [
+            {"id": candidato, "nome": specifica["nome"],
+             "motivo": "Disponibile come scelta esplicita, subordinata ai requisiti matematici."}
+            for candidato, specifica in REGISTRO_MISURE_NUMERICHE.items()
+            if candidato != id_misura
+        ]
 
     misura = REGISTRO_MISURE_NUMERICHE[id_misura]
     return {
@@ -1828,6 +1884,9 @@ def _distanza_numerica(
         q = float(parametri["q"])
         pesi = [float(peso) for peso in parametri["pesi"]]
         return sum(peso * scarto**q for peso, scarto in zip(pesi, scarti)) ** (1 / q)
+    if id_misura == "weighted_chebyshev":
+        pesi = [float(peso) for peso in parametri["pesi"]]
+        return max((peso * scarto for peso, scarto in zip(pesi, scarti)), default=0.0)
     if id_misura == "standardized_euclidean":
         scale = [float(scala) for scala in parametri["scale"]]
         return math.sqrt(sum((scarto / scala) ** 2 for scarto, scala in zip(scarti, scale)))
