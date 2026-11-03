@@ -830,12 +830,6 @@
     disegnaQuestionario();
   });
 
-  // Le scelte di riscalamento seguono la selezione semantica delle colonne.
-  // La tabella di anteprima segue la conferma, prima del questionario.
-  const tabellaRuoli = $("meaning-body").closest(".data-table-wrap");
-  tabellaRuoli.after($("scaling-wrap"));
-  $("scaling-wrap").after(document.querySelector(".preview-block"));
-
   const zona = $("csv-drop-zone");
   ["dragenter", "dragover"].forEach(tipo => zona.addEventListener(tipo, evento => { evento.preventDefault(); zona.classList.add("dragging"); }));
   ["dragleave", "drop"].forEach(tipo => zona.addEventListener(tipo, evento => { evento.preventDefault(); zona.classList.remove("dragging"); }));
