@@ -11,6 +11,7 @@
   let vista = "lavoro";
   let pianoCorrente = null;
   let matriceCorrente = null;
+  let riscalamentoConfermato = false;
 
   function escapeHtml(valore) {
     return String(valore).replace(/[&<>"']/g, carattere => ({
@@ -92,6 +93,8 @@
         risultato = await P.preparaTabella(testoOriginale, scelte);
       }
       nascondiErrore();
+      riscalamentoConfermato = false;
+      interpretazione.riscalamentoConfermato = false;
       disegnaMetodi();
       disegnaTabella();
       disegnaQuestionario();
@@ -188,7 +191,7 @@
     $("gower-result").hidden = true;
     pianoCorrente = null;
     matriceCorrente = null;
-    aggiornaVisibilitaTrasformazione(null);
+    aggiornaVisibilitaTrasformazione();
   }
 
   function colonneNumericheSelezionate() {
@@ -206,24 +209,40 @@
     return incluse.length > 0 && incluse.length === colonneNumericheSelezionate().length;
   }
 
-  function aggiornaVisibilitaTrasformazione(piano) {
-    const confermata = Boolean(
-      piano
-      && piano.completo
-      && piano.diagnosi?.famigliaId === "quantitativo"
-      && tabellaInteramenteNumerica()
-      && piano.percorsi.length === 1
-      && piano.percorsi[0].tipo === "numerico"
-      && piano.percorsi[0].preelaborazione.usaTabellaTrasformata
-    );
-    $("scaling-wrap").hidden = !confermata;
-
+  function aggiornaVisibilitaTrasformazione() {
+    const numerico = tabellaInteramenteNumerica();
+    $("scaling-wrap").hidden = !numerico;
+    $("confirm-numeric-scaling").hidden = !numerico || riscalamentoConfermato;
+    $("numeric-scaling-status").textContent = !numerico ? ""
+      : riscalamentoConfermato
+        ? "Riscalamento confermato: puoi consultare la matrice e scegliere la misura."
+        : "Verifica i metodi proposti e conferma prima di visualizzare la matrice trasformata.";
+    const confermata = numerico && riscalamentoConfermato;
     $("preview-view-switch").hidden = !confermata;
     $("download-work").hidden = !confermata;
     $("download-work").disabled = !confermata;
     if (!confermata) vista = "originale";
-    else vista = "lavoro";
     if (risultato) disegnaTabella();
+  }
+
+  function aggiornaFaseNumerica() {
+    const numerico = tabellaInteramenteNumerica();
+    const pronto = !numerico || riscalamentoConfermato;
+    $("adaptive-questions").hidden = !pronto;
+    $("prepare-comparison-plan").hidden = !pronto;
+    aggiornaVisibilitaTrasformazione();
+  }
+
+  function confermaRiscalamentoNumerico() {
+    if (!tabellaInteramenteNumerica()) return;
+    const colonne = colonneNumericheSelezionate();
+    if (!colonne.length) return;
+    riscalamentoConfermato = true;
+    interpretazione.riscalamentoConfermato = true;
+    vista = "lavoro";
+    nascondiPiano();
+    aggiornaFaseNumerica();
+    nascondiErrore();
   }
 
   function disegnaDiagnosi(diagnosi, completo) {
@@ -374,7 +393,7 @@
       $("calculate-gower").textContent = "Calcola la matrice finale";
     }
     $("comparison-plan").hidden = false;
-    aggiornaVisibilitaTrasformazione(piano);
+    aggiornaVisibilitaTrasformazione();
   }
 
   function disegnaMatrice(risposta) {
@@ -506,6 +525,7 @@
       </tr>`;
     }).join("");
     disegnaGruppi();
+    aggiornaFaseNumerica();
 
     const profiliInclusi = profili.filter(profilo => interpretazione.colonne[profilo.nome]?.usa);
     const nomiInclusi = new Set(profiliInclusi.map(profilo => profilo.nome));
@@ -615,6 +635,7 @@
       ));
     });
     $("adaptive-questions").innerHTML = domande.join("");
+    aggiornaFaseNumerica();
   }
 
   function mostraRisultato(nomeFile) {
@@ -632,6 +653,7 @@
     nascondiErrore();
     try {
       interpretazione = { colonne: {}, gruppi: [], assegnazioni: {}, prossimoGruppo: 1 };
+      riscalamentoConfermato = false;
       $("row-meaning").value = "";
       testoOriginale = testo;
       risultato = await P.preparaTabella(testo, []);
@@ -658,7 +680,11 @@
   async function scaricaTabella() {
     if (!risultato) return;
     try {
-      const csv = "\uFEFF" + await P.creaCsv(risultato.originale.intestazioni, risultato.trasformate);
+      if (!riscalamentoConfermato || !tabellaInteramenteNumerica()) return;
+      const colonne = colonneNumericheSelezionate().map(c => c.nome);
+      const indici = colonne.map(nome => risultato.originale.intestazioni.indexOf(nome));
+      const righe = risultato.trasformate.map(riga => indici.map(i => riga[i]));
+      const csv = "\uFEFF" + await P.creaCsv(colonne, righe);
       const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
       const link = document.createElement("a");
       link.href = url;
@@ -687,6 +713,7 @@
   $("view-original").addEventListener("click", () => { vista = "originale"; disegnaTabella(); });
   $("view-work").addEventListener("click", () => { vista = "lavoro"; disegnaTabella(); });
   $("download-work").addEventListener("click", scaricaTabella);
+  $("confirm-numeric-scaling").addEventListener("click", confermaRiscalamentoNumerico);
   $("prepare-comparison-plan").addEventListener("click", preparaPiano);
   $("calculate-gower").addEventListener("click", calcolaMatrice);
   $("download-gower").addEventListener("click", scaricaMatrice);
@@ -733,6 +760,8 @@
       interpretazione.colonne[profilo.nome].usa = evento.target.checked;
       evento.target.nextElementSibling.textContent = evento.target.checked ? "Sì" : "No";
     }
+    riscalamentoConfermato = false;
+    interpretazione.riscalamentoConfermato = false;
     disegnaQuestionario();
   });
   $("adaptive-questions").addEventListener("change", evento => {
@@ -757,6 +786,8 @@
     if (gruppoId === "__nuovo__") gruppoId = creaGruppo().id;
     if (gruppoId) interpretazione.assegnazioni[nome] = gruppoId;
     else delete interpretazione.assegnazioni[nome];
+    riscalamentoConfermato = false;
+    interpretazione.riscalamentoConfermato = false;
     disegnaQuestionario();
   });
   $("group-config-list").addEventListener("change", evento => {
@@ -766,6 +797,8 @@
     if (!gruppo) return;
     if (evento.target.matches(".group-name")) gruppo.nome = evento.target.value.trim() || gruppo.nome;
     if (evento.target.matches(".group-type")) gruppo.tipo = evento.target.value;
+    riscalamentoConfermato = false;
+    interpretazione.riscalamentoConfermato = false;
     disegnaQuestionario();
   });
   $("group-config-list").addEventListener("input", evento => {
@@ -785,6 +818,8 @@
     Object.keys(interpretazione.assegnazioni).forEach(nome => {
       if (interpretazione.assegnazioni[nome] === gruppoId) delete interpretazione.assegnazioni[nome];
     });
+    riscalamentoConfermato = false;
+    interpretazione.riscalamentoConfermato = false;
     disegnaQuestionario();
   });
 
