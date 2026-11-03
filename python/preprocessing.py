@@ -1319,6 +1319,23 @@ def _specifica_misura_numerica(
             if candidato != id_misura
         ]
 
+    # Le scelte confermate del riscalamento governano le distanze
+    # coordinate per coordinata. Le misure relative e Mahalanobis restano
+    # sui valori originali per non alterarne il significato.
+    if interpretazione.get("riscalamentoConfermato"):
+        geometriche = {
+            "euclidean", "manhattan", "chebyshev", "minkowski",
+            "weighted_minkowski", "weighted_chebyshev",
+        }
+        if id_misura in geometriche:
+            politica_preelaborazione = "trasformazioni_candidate"
+        elif id_misura in {"mahalanobis", "canberra", "bray_curtis", "chi_square"}:
+            politica_preelaborazione = "originale"
+            avvisi.append(
+                "La misura selezionata opera sui valori originali: la matrice "
+                "riscalata mostrata è consultabile ma non viene usata per questo calcolo."
+            )
+
     misura = REGISTRO_MISURE_NUMERICHE[id_misura]
     return {
         "idMisura": id_misura,
