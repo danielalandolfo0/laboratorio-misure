@@ -726,4 +726,34 @@ blocco_composizione_negativa = piano_composizione_negativa["blocchi"][0]
 assert blocco_composizione_negativa["stato"] == "da_completare"
 assert any("valori negativi" in avviso for avviso in blocco_composizione_negativa["avvisi"])
 
+
+# Una scelta esplicita di non compensare le dipendenze non deve suggerire Mahalanobis.
+risposte_no_mahalanobis = risposte_automatiche(["a", "b"])
+risposte_no_mahalanobis.update({"dipendenzaCoordinate": "no", "aggregazioneScarti": "automatico"})
+piano_senza_correzione = p.crea_piano_confronto(fixture_correlata, risposte_no_mahalanobis)
+assert piano_senza_correzione["percorsi"][0]["idMisura"] == "euclidean"
+
+# Nei misti con due quantitative indipendenti il percorso resta Gower,
+# ma la scelta sulla normalizzazione quantitativa deve essere rispettata.
+misti_con_due_quantita = p.prepara_tabella(p.leggi_csv(
+    "a,b,categoria\\n1,2,rosso\\n2,5,blu\\n4,3,rosso\\n7,9,verde".replace("\\n", "\n")
+))
+base_misto_due = {
+    "riga": "oggetto",
+    "colonne": {
+        "a": {"ruolo": "quantita", "usa": True},
+        "b": {"ruolo": "quantita", "usa": True},
+        "categoria": {"ruolo": "categoria", "usa": True},
+    },
+}
+piano_misto_classico = p.crea_piano_confronto(
+    misti_con_due_quantita, {**base_misto_due, "tipoGowerNumeriche": "classica"}
+)
+piano_misto_robusto = p.crea_piano_confronto(
+    misti_con_due_quantita, {**base_misto_due, "tipoGowerNumeriche": "robusta"}
+)
+assert piano_misto_classico["percorsi"][0]["metodo"] == "Dissimilarità di Gower classica"
+assert piano_misto_robusto["percorsi"][0]["metodo"] == "Dissimilarità di Gower robusta"
+assert piano_misto_robusto["percorsi"][0]["calcolo"]["disponibile"] is True
+
 print("Tutti i test Python di preprocessing sono stati superati.")
