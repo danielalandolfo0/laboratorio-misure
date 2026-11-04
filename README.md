@@ -13,6 +13,7 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 - uso diretto dei valori originali nei percorsi misti di Gower, senza riscalamento preliminare; contributi pesabili e configurazione semantica di ciascuna variabile;
 - conservazione dei mancanti, segnalazione delle feature costanti e anteprima originale/trasformata;
 - gestione operativa dei mancanti nei percorsi numerici, separata per colonna: esclusione delle righe, imputazione con mediana o media, oppure zero esplicitamente confermato;
+- gestione esplicita dei mancanti nei percorsi specializzati: esclusione dal solo percorso, interpolazione interna delle serie, imputazione dei profili o testo vuoto confermato;
 - anteprima ed esportazione della tabella trasformata, con uso esplicito nel percorso che la richiede;
 - piano di confronto che dichiara, per ogni percorso, origine dei dati, trasformazioni, politica sui mancanti e disponibilità del calcolo;
 - calcolo dei percorsi specializzati per profili, serie temporali, composizioni e testo, con aggregazione finale pesata quando sono presenti più percorsi;
@@ -118,6 +119,21 @@ I pesi dei percorsi sono strettamente positivi e valgono 1 per impostazione
 predefinita. Se un percorso non può confrontare una coppia, non partecipa né al
 numeratore né al denominatore di quella coppia. Se nessun percorso è
 disponibile, la dissimilarità resta non definita.
+
+Nei gruppi temporali, l’interpolazione lineare è applicata soltanto ai vuoti
+interni compresi tra due osservazioni; una serie priva del primo o dell’ultimo
+valore non viene estrapolata. Nei profili numerici, media e mediana sono stimate
+separatamente per colonna. Nei percorsi testuali una casella vuota può essere
+esclusa dal solo percorso oppure interpretata come stringa vuota, ma soltanto
+dopo una conferma esplicita.
+
+La distanza composizionale di Aitchison non accetta zeri. Se l’utente conferma
+che rappresentano valori sotto soglia, il sito chiude ogni riga a somma 1,
+usa una piccola proporzione positiva non superiore a metà della minima osservata
+e limitata per conservare almeno metà della massa alle componenti positive.
+Queste ultime vengono ridimensionate proporzionalmente. Il valore usato compare nella nota
+della matrice. Se gli zeri sono assenze strutturali, Aitchison viene
+dichiarata non adatta e il calcolo resta bloccato.
 
 
 ## Convenzioni esplicite di Gower per dati misti

@@ -1022,6 +1022,29 @@
     if (!percorsoNumerico && indipendentiStandard.length) {
       domande.push(domandeConfigurazioneGower(indipendentiStandard));
     }
+    profiliInclusi.filter(profilo => {
+      const ruolo = interpretazione.colonne[profilo.nome]?.ruolo;
+      const colonna = risultato.colonne.find(elemento => elemento.nome === profilo.nome);
+      return !interpretazione.assegnazioni[profilo.nome]
+        && !ruoliStandard.has(ruolo)
+        && ["testo", "identificativo"].includes(ruolo)
+        && colonna?.mancanti > 0;
+    }).forEach(profilo => {
+      if (!interpretazione.mancantiSpecializzatiPerColonna) {
+        interpretazione.mancantiSpecializzatiPerColonna = {};
+      }
+      const valore = interpretazione.mancantiSpecializzatiPerColonna[profilo.nome] || "";
+      domande.push(`<div class="question-item">
+        <label><strong>Nella colonna “${escapeHtml(profilo.nome)}”, che cosa facciamo quando il testo manca?</strong>
+          <select class="specialized-missing-setting" data-specialized-missing-column="${escapeHtml(profilo.nome)}">
+            <option value="">Scegli una risposta</option>
+            <option value="escludi_percorso"${valore === "escludi_percorso" ? " selected" : ""}>Non usare questa colonna per le coppie coinvolte</option>
+            <option value="stringa_vuota"${valore === "stringa_vuota" ? " selected" : ""}>Confermo che significa un testo di lunghezza zero</option>
+          </select>
+        </label>
+        <p>Il sito non trasforma automaticamente una casella vuota in una parola o in uno zero.</p>
+      </div>`);
+    });
     interpretazione.gruppi.forEach(gruppo => {
       const membri = profili.filter(profilo => interpretazione.colonne[profilo.nome]?.usa && interpretazione.assegnazioni[profilo.nome] === gruppo.id);
       const tipi = membri.map(profilo => risultato.colonne.find(colonna => colonna.nome === profilo.nome)?.tipo);
@@ -1043,6 +1066,46 @@
         "Per esempio, percentuali, quote o quantità la cui somma ha un significato preciso.",
         [["si", "Sì, conta la composizione del totale"], ["no", "No, sono quantità indipendenti"], ["ignoto", "Non lo so"]]
       ));
+      const colonneGruppo = membri.map(profilo =>
+        risultato.colonne.find(colonna => colonna.nome === profilo.nome)
+      );
+      if (colonneGruppo.some(colonna => colonna?.mancanti > 0)) {
+        const opzioni = gruppo.tipo === "tempo"
+          ? [
+              ["escludi_percorso", "Non usare questo gruppo per le righe con vuoti"],
+              ["interpola_lineare", "Ricostruisci soltanto i vuoti interni con una linea retta"],
+              ["zero", "Confermo che i vuoti significano davvero zero"]
+            ]
+          : [
+              ["escludi_percorso", "Non usare questo gruppo per le righe con vuoti"],
+              ["imputa_mediana", "Sostituisci con il valore centrale della colonna"],
+              ["imputa_media", "Sostituisci con il valore medio della colonna"],
+              ["zero", "Confermo che i vuoti significano davvero zero"]
+            ];
+        domande.push(domandaAdattiva(
+          `mancanti-gruppo-${gruppo.id}`,
+          `Nel gruppo “${escapeHtml(gruppo.nome)}”, come trattiamo le caselle vuote?`,
+          gruppo.tipo === "tempo"
+            ? "L’interpolazione usa soltanto valori osservati prima e dopo il vuoto; non inventa gli estremi della serie."
+            : "La scelta vale soltanto per questo gruppo e viene dichiarata nel risultato.",
+          opzioni
+        ));
+      }
+      const contieneZeri = colonneGruppo.some(
+        colonna => (colonna?.statistiche?.zeri || 0) > 0
+      ) || valoreRisposta(`mancanti-gruppo-${gruppo.id}`) === "zero";
+      if (gruppo.tipo === "parti" && contieneZeri && valoreRisposta(`totale-${gruppo.id}`) === "si") {
+        domande.push(domandaAdattiva(
+          `zeri-aitchison-${gruppo.id}`,
+          `Nel gruppo “${escapeHtml(gruppo.nome)}”, che cosa significano gli zeri osservati?`,
+          "Aitchison usa logaritmi e non è definita in presenza di zeri. Dopo aver riportato ogni riga a somma 1, il sito usa una piccola proporzione positiva, limitata per lasciare almeno metà della massa alle componenti osservate, e le ridimensiona proporzionalmente.",
+          [
+            ["sostituisci", "Sono valori sotto soglia: applica la sostituzione dichiarata"],
+            ["strutturali", "Sono assenze reali: Aitchison non è adatta"],
+            ["ignoto", "Non lo so: non calcolare ancora"]
+          ]
+        ));
+      }
     });
     $("adaptive-questions").innerHTML = domande.join("");
     aggiornaFaseNumerica();
@@ -1190,6 +1253,16 @@
     disegnaQuestionario();
   });
   $("adaptive-questions").addEventListener("change", evento => {
+    if (evento.target.matches(".specialized-missing-setting")) {
+      if (!interpretazione.mancantiSpecializzatiPerColonna) {
+        interpretazione.mancantiSpecializzatiPerColonna = {};
+      }
+      interpretazione.mancantiSpecializzatiPerColonna[
+        evento.target.dataset.specializedMissingColumn
+      ] = evento.target.value;
+      disegnaQuestionario();
+      return;
+    }
     if (evento.target.matches(".numeric-missing-setting")) {
       if (!interpretazione.mancantiNumericiPerColonna) {
         interpretazione.mancantiNumericiPerColonna = {};

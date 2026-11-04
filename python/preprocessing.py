@@ -703,9 +703,30 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
                 if any(analisi_per_nome[m].get("statistiche", {}).get("minimo", 0) < 0 for m in membri):
                     avvisi.append("Aitchison richiede componenti strettamente positive: sono presenti valori negativi.")
                     stato = "da_completare"
-                if any(analisi_per_nome[m].get("statistiche", {}).get("zeri", 0) > 0 for m in membri):
-                    avvisi.append("Sono presenti zeri: prima del calcolo servirà stabilire come trattarli.")
-                    stato = "da_completare"
+                ha_zeri = (
+                    any(analisi_per_nome[m].get("statistiche", {}).get("zeri", 0) > 0 for m in membri)
+                    or interpretazione.get(f"mancanti-gruppo-{gruppo.get('id')}") == "zero"
+                )
+                if ha_zeri:
+                    scelta_zeri = interpretazione.get(f"zeri-aitchison-{gruppo.get('id')}", "")
+                    if scelta_zeri == "sostituisci":
+                        motivo += (
+                            " Gli zeri verranno sostituiti, dopo la chiusura a somma 1, "
+                            "con una piccola proporzione positiva che conserva massa per "
+                            "le componenti osservate."
+                        )
+                    elif scelta_zeri == "strutturali":
+                        avvisi.append(
+                            "Gli zeri indicano assenze reali: la distanza di Aitchison non è adatta. "
+                            "Indica che le colonne non devono essere trattate come una composizione."
+                        )
+                        stato = "da_completare"
+                    else:
+                        avvisi.append(
+                            "Sono presenti zeri: indica se sono valori sotto soglia sostituibili "
+                            "oppure assenze reali incompatibili con Aitchison."
+                        )
+                        stato = "da_completare"
             elif risposta == "no":
                 misura, motivo = "Distanza tra coordinate", "Le quantità vengono confrontate insieme, senza trattarle come parti di una composizione."
             else:
@@ -1508,10 +1529,12 @@ def _specifica_misura_numerica(
 def _politica_mancanti(
     nomi: list[str],
     analisi_per_nome: dict[str, dict[str, Any]],
-    tipo_percorso: str,
+    percorso: dict[str, Any],
     interpretazione: dict[str, Any],
+    numero_istanze: int,
 ) -> dict[str, Any]:
     """Dichiara, senza impliciti, come il percorso tratta i valori mancanti."""
+    tipo_percorso = percorso["tipo"]
     colonne = [nome for nome in nomi if analisi_per_nome[nome]["mancanti"] > 0]
     if not colonne:
         return {
@@ -1605,6 +1628,105 @@ def _politica_mancanti(
             "perColonna": strategie,
             "righeUtilizzabili": righe_utilizzabili,
         }
+    if tipo_percorso == "gruppo":
+        id_gruppo = percorso.get("idGruppo", "")
+        tipo_gruppo = percorso.get("tipoGruppo", "altro")
+        strategia = interpretazione.get(f"mancanti-gruppo-{id_gruppo}", "")
+        ammesse = {"escludi_percorso", "zero"}
+        if tipo_gruppo == "tempo":
+            ammesse.add("interpola_lineare")
+        elif tipo_gruppo in {"ripetute", "parti"}:
+            ammesse.update({"imputa_mediana", "imputa_media"})
+        if strategia not in ammesse:
+            return {
+                "presenza": True,
+                "strategia": "da_definire",
+                "descrizione": (
+                    f"Scegli come trattare le caselle vuote nel gruppo “{percorso['titolo']}”."
+                ),
+                "pronta": False,
+                "colonne": colonne,
+            }
+
+        valori = [analisi_per_nome[nome].get("valoriNumerici", []) for nome in nomi]
+        if strategia == "escludi_percorso":
+            righe_utilizzabili = sum(
+                all(isinstance(colonna[indice], (int, float)) for colonna in valori)
+                for indice in range(numero_istanze)
+            )
+            descrizione = (
+                "Le righe con almeno una casella vuota non contribuiscono a questo "
+                "percorso, ma possono ancora essere confrontate dagli altri percorsi."
+            )
+        elif strategia == "interpola_lineare":
+            righe_utilizzabili = sum(
+                bool(valori)
+                and all(len(colonna) == numero_istanze for colonna in valori)
+                and isinstance(valori[0][indice], (int, float))
+                and isinstance(valori[-1][indice], (int, float))
+                for indice in range(numero_istanze)
+            )
+            descrizione = (
+                "I vuoti interni alla serie sono interpolati linearmente. Una riga con "
+                "un vuoto iniziale o finale non contribuisce a questo percorso."
+            )
+        elif strategia == "imputa_mediana":
+            righe_utilizzabili = numero_istanze
+            descrizione = "Ogni vuoto è sostituito con la mediana osservata della stessa colonna."
+        elif strategia == "imputa_media":
+            righe_utilizzabili = numero_istanze
+            descrizione = "Ogni vuoto è sostituito con la media osservata della stessa colonna."
+        else:
+            righe_utilizzabili = numero_istanze
+            descrizione = "Ogni vuoto è sostituito esplicitamente con zero."
+        if righe_utilizzabili < 2:
+            return {
+                "presenza": True,
+                "strategia": strategia,
+                "descrizione": descrizione + " Restano meno di due righe utilizzabili.",
+                "pronta": False,
+                "colonne": colonne,
+                "righeUtilizzabili": righe_utilizzabili,
+            }
+        return {
+            "presenza": True,
+            "strategia": strategia,
+            "descrizione": descrizione,
+            "pronta": True,
+            "colonne": colonne,
+            "righeUtilizzabili": righe_utilizzabili,
+        }
+    if tipo_percorso == "separato":
+        nome = nomi[0]
+        configurate = interpretazione.get("mancantiSpecializzatiPerColonna") or {}
+        if not isinstance(configurate, dict):
+            raise ValueError("Le strategie per i mancanti testuali non sono valide.")
+        strategia = configurate.get(nome, "")
+        if strategia not in {"escludi_percorso", "stringa_vuota"}:
+            return {
+                "presenza": True,
+                "strategia": "da_definire",
+                "descrizione": f"Scegli come trattare le caselle vuote nella colonna “{nome}”.",
+                "pronta": False,
+                "colonne": colonne,
+            }
+        osservate = numero_istanze - analisi_per_nome[nome]["mancanti"]
+        pronta = strategia == "stringa_vuota" or osservate >= 2
+        descrizione = (
+            "Le coppie che coinvolgono una casella vuota non ricevono un contributo da questo percorso."
+            if strategia == "escludi_percorso"
+            else "La casella vuota è trattata esplicitamente come testo di lunghezza zero."
+        )
+        if not pronta:
+            descrizione += " Restano meno di due valori osservati."
+        return {
+            "presenza": True,
+            "strategia": strategia,
+            "descrizione": descrizione,
+            "pronta": pronta,
+            "colonne": colonne,
+            "righeUtilizzabili": numero_istanze if strategia == "stringa_vuota" else osservate,
+        }
     return {
         "presenza": True,
         "strategia": "da_definire",
@@ -1663,6 +1785,7 @@ def _completa_specifica_percorso(
     percorso: dict[str, Any],
     analisi_per_nome: dict[str, dict[str, Any]],
     interpretazione: dict[str, Any],
+    numero_istanze: int,
 ) -> dict[str, Any]:
     """Aggiunge origine, trasformazioni, mancanti e disponibilità del calcolo."""
     tipo = percorso["tipo"]
@@ -1729,7 +1852,9 @@ def _completa_specifica_percorso(
             "della singola caratteristica."
         )
 
-    mancanti = _politica_mancanti(nomi, analisi_per_nome, tipo, interpretazione)
+    mancanti = _politica_mancanti(
+        nomi, analisi_per_nome, percorso, interpretazione, numero_istanze
+    )
     if not mancanti["pronta"]:
         percorso["stato"] = "da_completare"
     if (
@@ -1849,11 +1974,14 @@ def _crea_percorsi(
     for gruppo, blocco in gruppi_con_blocco:
         percorsi.append({
             "tipo": "gruppo", "titolo": blocco["nome"], "colonne": blocco["colonne"],
+            "idGruppo": gruppo.get("id"), "tipoGruppo": gruppo.get("tipo", "altro"),
             "metodo": blocco["misura"],
             "motivo": blocco["motivo"], "stato": blocco["stato"],
         })
     return [
-        _completa_specifica_percorso(percorso, analisi_per_nome, interpretazione)
+        _completa_specifica_percorso(
+            percorso, analisi_per_nome, interpretazione, numero_istanze
+        )
         for percorso in percorsi
     ]
 
@@ -2012,7 +2140,7 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
         "anteprimaNumerica": anteprima_numerica,
         "diagnosi": diagnosi, "blocchi": blocchi, "percorsi": percorsi, "avvisi": avvisi,
         "completo": completo, "conteggioBlocchi": len(blocchi),
-        "conteggioPercorsi": len(percorsi), "versioneContratto": 3,
+        "conteggioPercorsi": len(percorsi), "versioneContratto": 4,
     }
 
 
@@ -2624,6 +2752,31 @@ def _distanza_dtw(x: list[float], y: list[float]) -> float:
     return precedente[-1]
 
 
+def _interpola_vuoti_interni(valori: list[float | None]) -> list[float] | None:
+    if not valori or valori[0] is None or valori[-1] is None:
+        return None
+    risultato = list(valori)
+    indice = 1
+    while indice < len(risultato) - 1:
+        if risultato[indice] is not None:
+            indice += 1
+            continue
+        inizio = indice - 1
+        fine = indice
+        while fine < len(risultato) and risultato[fine] is None:
+            fine += 1
+        if fine == len(risultato):
+            return None
+        sinistra = float(risultato[inizio])
+        destra = float(risultato[fine])
+        ampiezza = fine - inizio
+        for posizione in range(indice, fine):
+            quota = (posizione - inizio) / ampiezza
+            risultato[posizione] = sinistra + quota * (destra - sinistra)
+        indice = fine + 1
+    return [float(valore) for valore in risultato]
+
+
 def _distanza_specializzata(
     x: list[float], y: list[float], metodo: str
 ) -> float | None:
@@ -2669,14 +2822,21 @@ def _calcola_matrice_specializzata(
     metodo = percorso["metodo"]
     n = len(tabella["righe"])
     matrice: list[list[float | None]] = [[0.0 for _ in range(n)] for _ in range(n)]
+    epsilon_aitchison: float | None = None
 
     if percorso["tipo"] == "separato":
-        valori = [riga[indici[0]] for riga in tabella["righe"]]
-        if any(mancante(valore) for valore in valori):
-            raise ValueError(f"Definisci come trattare i mancanti nella colonna “{nomi[0]}”.")
+        strategia = percorso["mancanti"].get("strategia")
+        valori = [
+            None if mancante(riga[indici[0]]) and strategia == "escludi_percorso"
+            else "" if mancante(riga[indici[0]]) and strategia == "stringa_vuota"
+            else riga[indici[0]]
+            for riga in tabella["righe"]
+        ]
         for i in range(n):
             for k in range(i + 1, n):
-                if metodo == "Uguale o diverso":
+                if valori[i] is None or valori[k] is None:
+                    distanza = None
+                elif metodo == "Uguale o diverso":
                     distanza = 0.0 if str(valori[i]).strip() == str(valori[k]).strip() else 1.0
                 elif metodo == "Distanza di Levenshtein normalizzata":
                     distanza = _levenshtein_normalizzata(
@@ -2688,20 +2848,94 @@ def _calcola_matrice_specializzata(
                 matrice[k][i] = distanza
         limite: float | None = 1.0
     else:
-        vettori: list[list[float]] = []
+        analisi_per_nome = {colonna["nome"]: colonna for colonna in risultato["colonne"]}
+        strategia = percorso["mancanti"].get("strategia")
+        vettori_grezzi: list[list[float | None]] = []
         for riga in tabella["righe"]:
-            vettore: list[float] = []
+            vettore: list[float | None] = []
             for nome, indice in zip(nomi, indici):
                 valore = leggi_numero(riga[indice], tabella["separatore"])
-                if valore is None:
-                    raise ValueError(f"Definisci come trattare i mancanti nel gruppo “{percorso['titolo']}”.")
                 if valore is INVALIDO:
                     raise ValueError(f"La colonna “{nome}” contiene valori non numerici.")
-                vettore.append(float(valore))
-            vettori.append(vettore)
+                vettore.append(None if valore is None else float(valore))
+            vettori_grezzi.append(vettore)
+
+        vettori: list[list[float] | None] = []
+        for vettore in vettori_grezzi:
+            if all(valore is not None for valore in vettore):
+                vettori.append([float(valore) for valore in vettore])
+            elif strategia == "escludi_percorso":
+                vettori.append(None)
+            elif strategia == "interpola_lineare":
+                vettori.append(_interpola_vuoti_interni(vettore))
+            elif strategia in {"imputa_mediana", "imputa_media", "zero"}:
+                completato: list[float] = []
+                for nome, valore in zip(nomi, vettore):
+                    if valore is not None:
+                        completato.append(float(valore))
+                    elif strategia == "zero":
+                        completato.append(0.0)
+                    else:
+                        chiave = "mediana" if strategia == "imputa_mediana" else "media"
+                        sostituto = analisi_per_nome[nome].get("statistiche", {}).get(chiave)
+                        if sostituto is None:
+                            raise ValueError(
+                                f"Non è possibile stimare {chiave} per la colonna “{nome}”."
+                            )
+                        completato.append(float(sostituto))
+                vettori.append(completato)
+            else:
+                raise ValueError(
+                    f"Definisci come trattare i mancanti nel gruppo “{percorso['titolo']}”."
+                )
+
+        if metodo == "Distanza composizionale di Aitchison" and any(
+            vettore is not None and any(valore == 0 for valore in vettore)
+            for vettore in vettori
+        ):
+            if interpretazione.get(f"zeri-aitchison-{percorso.get('idGruppo')}") != "sostituisci":
+                raise ValueError("Specifica come trattare gli zeri prima di usare Aitchison.")
+            chiusi: list[list[float] | None] = []
+            for vettore in vettori:
+                if vettore is None:
+                    chiusi.append(None)
+                    continue
+                if any(valore < 0 for valore in vettore):
+                    raise ValueError("Aitchison non è definita per componenti negative.")
+                totale = sum(vettore)
+                if totale <= 0:
+                    raise ValueError("Aitchison richiede una somma positiva in ogni riga.")
+                chiusi.append([valore / totale for valore in vettore])
+            positivi = [
+                valore for vettore in chiusi if vettore is not None
+                for valore in vettore if valore > 0
+            ]
+            if not positivi:
+                raise ValueError("Aitchison richiede almeno un valore positivo osservato.")
+            massimo_zeri = max(
+                sum(valore == 0 for valore in vettore)
+                for vettore in chiusi if vettore is not None
+            )
+            epsilon_aitchison = min(min(positivi) / 2, 1 / (2 * massimo_zeri))
+            vettori = [
+                None if vettore is None else (
+                    vettore if not any(valore == 0 for valore in vettore) else [
+                        epsilon_aitchison if valore == 0
+                        else valore * (
+                            (1 - sum(elemento == 0 for elemento in vettore) * epsilon_aitchison)
+                            / sum(elemento for elemento in vettore if elemento > 0)
+                        )
+                        for valore in vettore
+                    ]
+                )
+                for vettore in chiusi
+            ]
         for i in range(n):
             for k in range(i + 1, n):
-                distanza = _distanza_specializzata(vettori[i], vettori[k], metodo)
+                distanza = (
+                    None if vettori[i] is None or vettori[k] is None
+                    else _distanza_specializzata(vettori[i], vettori[k], metodo)
+                )
                 matrice[i][k] = distanza
                 matrice[k][i] = distanza
         limite = 2.0 if metodo in {
@@ -2710,6 +2944,16 @@ def _calcola_matrice_specializzata(
 
     etichette = _etichette_righe(risultato, interpretazione)
     righe_csv = [[etichetta, *riga] for etichetta, riga in zip(etichette, matrice)]
+    nota = f"Calcolata sul percorso “{percorso['titolo']}” usando i valori originali."
+    if percorso["mancanti"]["presenza"]:
+        nota += " " + percorso["mancanti"]["descrizione"]
+    if percorso["tipo"] == "gruppo" and metodo == "Distanza composizionale di Aitchison":
+        if epsilon_aitchison is not None:
+            nota += (
+                " Dopo la chiusura a somma 1, gli zeri sono stati sostituiti con "
+                f"{format(epsilon_aitchison, '.6g')} e le componenti positive sono "
+                "state ridimensionate proporzionalmente."
+            )
     return {
         "metodo": metodo,
         "colonne": nomi,
@@ -2718,7 +2962,7 @@ def _calcola_matrice_specializzata(
         "indiciRighe": list(range(n)),
         "limiteAggregazione": limite,
         "csv": crea_csv(["Riga", *etichette], righe_csv),
-        "nota": f"Calcolata sul percorso “{percorso['titolo']}” usando i valori originali.",
+        "nota": nota,
     }
 
 

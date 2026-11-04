@@ -452,7 +452,7 @@ assert misure_piano["flag"] == "Confronto asimmetrico di Jaccard"
 assert misure_piano["gruppo"] == "Uguale o diverso"
 assert piano_semplice["conteggioPercorsi"] == 1
 assert piano_semplice["percorsi"][0]["metodo"] == "Dissimilarità di Gower classica"
-assert piano_semplice["versioneContratto"] == 3
+assert piano_semplice["versioneContratto"] == 4
 assert piano_semplice["percorsi"][0]["preelaborazione"]["origine"] == "valori_originali"
 assert piano_semplice["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"] is False
 assert piano_semplice["percorsi"][0]["mancanti"]["strategia"] == "non_necessaria"
@@ -882,6 +882,142 @@ matrice_multipercorso_mancanti = p.calcola_matrice(
 verifica_matrice_finale(matrice_multipercorso_mancanti, 3)
 assert matrice_multipercorso_mancanti["etichette"] == ["A", "B", "C"]
 assert matrice_multipercorso_mancanti["matrice"][0][1] is not None
+
+# I mancanti nei percorsi specializzati hanno una politica operativa esplicita.
+dati_tempo_mancanti = p.prepara_tabella(p.leggi_csv(
+    "t0,t1,t2,id\n1,NA,3,A\n2,3,4,B\n1,2,3,C\nNA,2,3,D"
+))
+risposte_tempo_mancanti = {
+    "riga": "oggetto",
+    "significatoMancanti": "sconosciuto",
+    "significatoEstremi": "reali",
+    "colonne": {
+        "t0": {"ruolo": "quantita", "usa": True},
+        "t1": {"ruolo": "quantita", "usa": True},
+        "t2": {"ruolo": "quantita", "usa": True},
+        "id": {"ruolo": "identificativo", "usa": False},
+    },
+    "gruppi": [{"id": "tempo", "nome": "Serie", "tipo": "tempo"}],
+    "assegnazioni": {nome: "tempo" for nome in ("t0", "t1", "t2")},
+    "ritardo-tempo": "si",
+}
+assert p.crea_piano_confronto(
+    dati_tempo_mancanti, risposte_tempo_mancanti
+)["completo"] is False
+risposte_tempo_interpolate = {
+    **risposte_tempo_mancanti,
+    "mancanti-gruppo-tempo": "interpola_lineare",
+}
+piano_tempo_interpolato = p.crea_piano_confronto(
+    dati_tempo_mancanti, risposte_tempo_interpolate
+)
+assert piano_tempo_interpolato["completo"] is True, piano_tempo_interpolato
+matrice_tempo_interpolata = p.calcola_matrice(
+    dati_tempo_mancanti, risposte_tempo_interpolate
+)
+assert matrice_tempo_interpolata["matrice"][0][1] is not None
+assert matrice_tempo_interpolata["matrice"][0][3] is None
+assert "interpolati linearmente" in matrice_tempo_interpolata["nota"]
+
+risposte_tempo_esclusione = {
+    **risposte_tempo_mancanti,
+    "mancanti-gruppo-tempo": "escludi_percorso",
+}
+matrice_tempo_esclusione = p.calcola_matrice(
+    dati_tempo_mancanti, risposte_tempo_esclusione
+)
+assert matrice_tempo_esclusione["matrice"][1][2] is not None
+assert matrice_tempo_esclusione["matrice"][0][1] is None
+
+risposte_profilo_mancanti = {
+    **risposte_tempo_mancanti,
+    "gruppi": [{"id": "profilo", "nome": "Profilo", "tipo": "ripetute"}],
+    "assegnazioni": {nome: "profilo" for nome in ("t0", "t1", "t2")},
+    "somiglianza-profilo": "valori_vicini",
+    "mancanti-gruppo-profilo": "imputa_mediana",
+}
+matrice_profilo_imputata = p.calcola_matrice(
+    dati_tempo_mancanti, risposte_profilo_mancanti
+)
+verifica_matrice_finale(matrice_profilo_imputata, 4)
+assert "mediana osservata" in matrice_profilo_imputata["nota"]
+
+dati_testo_mancante = p.prepara_tabella(p.leggi_csv(
+    "testo,id\ncasa,A\nNA,B\ncane,C"
+))
+risposte_testo_mancante = {
+    "riga": "oggetto",
+    "significatoMancanti": "sconosciuto",
+    "colonne": {
+        "testo": {"ruolo": "testo", "usa": True},
+        "id": {"ruolo": "identificativo", "usa": False},
+    },
+}
+assert p.crea_piano_confronto(
+    dati_testo_mancante, risposte_testo_mancante
+)["completo"] is False
+matrice_testo_esclusione = p.calcola_matrice(
+    dati_testo_mancante,
+    {**risposte_testo_mancante, "mancantiSpecializzatiPerColonna": {"testo": "escludi_percorso"}},
+)
+assert matrice_testo_esclusione["matrice"][0][1] is None
+matrice_testo_vuoto = p.calcola_matrice(
+    dati_testo_mancante,
+    {**risposte_testo_mancante, "mancantiSpecializzatiPerColonna": {"testo": "stringa_vuota"}},
+)
+assert matrice_testo_vuoto["matrice"][0][1] == 1.0
+
+# Gli zeri di una composizione non vengono mai corretti implicitamente.
+dati_aitchison_zero = p.prepara_tabella(p.leggi_csv(
+    "a,b,c\n1,0,9\n2,2,6\n4,3,3"
+))
+risposte_aitchison_zero = {
+    "riga": "oggetto",
+    "colonne": {
+        nome: {"ruolo": "quantita", "usa": True} for nome in ("a", "b", "c")
+    },
+    "gruppi": [{"id": "parti-zero", "nome": "Composizione", "tipo": "parti"}],
+    "assegnazioni": {nome: "parti-zero" for nome in ("a", "b", "c")},
+    "totale-parti-zero": "si",
+}
+assert p.crea_piano_confronto(
+    dati_aitchison_zero, risposte_aitchison_zero
+)["completo"] is False
+risposte_aitchison_sostituzione = {
+    **risposte_aitchison_zero,
+    "zeri-aitchison-parti-zero": "sostituisci",
+}
+matrice_aitchison_zero = p.calcola_matrice(
+    dati_aitchison_zero, risposte_aitchison_sostituzione
+)
+verifica_matrice_finale(matrice_aitchison_zero, 3)
+assert "sostituiti con 0.05" in matrice_aitchison_zero["nota"]
+assert p.crea_piano_confronto(
+    dati_aitchison_zero,
+    {**risposte_aitchison_zero, "zeri-aitchison-parti-zero": "strutturali"},
+)["completo"] is False
+
+# Anche una composizione con molti zeri conserva una massa positiva residua.
+dati_aitchison_molti_zeri = p.prepara_tabella(p.leggi_csv(
+    "a,b,c,d,e\n10,0,0,0,0\n2,2,2,2,2\n3,3,3,3,3"
+))
+risposte_aitchison_molti_zeri = {
+    "riga": "oggetto",
+    "colonne": {
+        nome: {"ruolo": "quantita", "usa": True} for nome in ("a", "b", "c", "d", "e")
+    },
+    "gruppi": [{"id": "parti-estreme", "nome": "Composizione", "tipo": "parti"}],
+    "assegnazioni": {
+        nome: "parti-estreme" for nome in ("a", "b", "c", "d", "e")
+    },
+    "totale-parti-estreme": "si",
+    "zeri-aitchison-parti-estreme": "sostituisci",
+}
+matrice_aitchison_molti_zeri = p.calcola_matrice(
+    dati_aitchison_molti_zeri, risposte_aitchison_molti_zeri
+)
+verifica_matrice_finale(matrice_aitchison_molti_zeri, 3)
+assert "sostituiti con 0.1" in matrice_aitchison_molti_zeri["nota"]
 
 # Un codice numerico o un livello ordinale non diventa una serie solo perché contiene numeri.
 risposte_gruppo_incoerente = {
