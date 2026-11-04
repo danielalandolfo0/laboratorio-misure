@@ -15,6 +15,7 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 - gestione operativa dei mancanti nei percorsi numerici, separata per colonna: esclusione delle righe, imputazione con mediana o media, oppure zero esplicitamente confermato;
 - anteprima ed esportazione della tabella trasformata, con uso esplicito nel percorso che la richiede;
 - piano di confronto che dichiara, per ogni percorso, origine dei dati, trasformazioni, politica sui mancanti e disponibilità del calcolo;
+- calcolo dei percorsi specializzati per profili, serie temporali, composizioni e testo, con aggregazione finale pesata quando sono presenti più percorsi;
 - proposta automatica di Euclidea, Manhattan o Mahalanobis per le quantità, modificabile dall’utente senza domande tecniche obbligatorie;
 - scelta consigliata disponibile quando l’utente non conosce la risposta, senza bloccare il piano;
 - registro decisionale verificato per Manhattan, Euclidea, Chebyshev, Minkowski, Minkowski pesata, euclidea standardizzata, Mahalanobis, Canberra, Bray–Curtis e χ² simmetrica;
@@ -96,6 +97,27 @@ dichiarata nel piano; se si escludono righe, anche le etichette e la matrice
 finale contengono soltanto le righe effettivamente utilizzate. Mahalanobis con
 imputazione non viene abilitata automaticamente, perché richiede una nuova
 verifica della covarianza dopo il completamento dei dati.
+
+## Matrice complessiva con più percorsi
+
+Ogni percorso produce prima la propria matrice. Gower, i confronti 0/1 e le
+dissimilarità già limitate conservano la loro scala teorica; le distanze non
+limitate vengono divise per il 95º percentile delle distanze positive del
+percorso e troncate a 1. In questo modo un percorso non prevale soltanto perché
+la sua misura usa valori numericamente più grandi.
+
+La matrice complessiva usa, per ogni coppia di righe, la media pesata dei soli
+contributi disponibili:
+
+\[
+D(i,j)=\frac{\sum_b w_b\,\delta_{ij}^{(b)}\,\widetilde D^{(b)}(i,j)}
+{\sum_b w_b\,\delta_{ij}^{(b)}}.
+\]
+
+I pesi dei percorsi sono strettamente positivi e valgono 1 per impostazione
+predefinita. Se un percorso non può confrontare una coppia, non partecipa né al
+numeratore né al denominatore di quella coppia. Se nessun percorso è
+disponibile, la dissimilarità resta non definita.
 
 
 ## Convenzioni esplicite di Gower per dati misti

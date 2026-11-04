@@ -571,6 +571,14 @@
         `${escapeHtml(chiave)} = ${escapeHtml(Array.isArray(valore) ? valore.join(", ") : valore)}`
       ).join(" · ");
       const editorNumerico = percorso.tipo === "numerico" ? editorMisuraNumerica(percorso) : "";
+      const pesoAggregazione = piano.conteggioPercorsi > 1
+        ? `<label class="path-weight-label">Quanto conta questo percorso nella matrice finale?
+            <input class="path-weight" type="number" min="0.01" step="0.1"
+              data-path-id="${escapeHtml(percorso.idPercorso)}"
+              value="${escapeHtml(percorso.pesoAggregazione)}">
+            <small>Il valore proposto è 1: tutti i percorsi hanno la stessa importanza.</small>
+          </label>`
+        : "";
       const alternative = (percorso.alternative || []).length
         ? `<div class="path-alternatives"><b>Alternative da valutare</b><ul>${percorso.alternative.map(alternativa =>
           `<li><strong>${escapeHtml(alternativa.nome)}</strong>: ${escapeHtml(alternativa.motivo)}</li>`
@@ -595,6 +603,7 @@
         ${percorso.tipo === "numerico" ? spiegazioneMisuraNumerica(percorso) : `<p>${escapeHtml(percorso.motivo)}</p>`}
         ${percorso.tipo === "numerico" ? controlloDipendenzaLineare(percorso) : ""}
         ${percorso.notaPreelaborazione ? `<p><strong>Quali valori vengono usati:</strong> ${escapeHtml(percorso.notaPreelaborazione)}</p>` : ""}
+        ${pesoAggregazione}
         ${editorNumerico}
         ${alternative}
       </article>`;
@@ -630,10 +639,13 @@
       ? "Il piano è stato preparato, ma alcune informazioni devono ancora essere completate."
       : piano.conteggioPercorsi === 1
         ? "È stato individuato un unico percorso di confronto."
-        : `Sono stati individuati ${piano.conteggioPercorsi} percorsi. Il risultato previsto è una sola matrice complessiva: il calcolo sarà abilitato quando sarà definita l’aggregazione dei blocchi.`;
+        : `Sono stati individuati ${piano.conteggioPercorsi} percorsi. Il sito li renderà confrontabili e produrrà una sola matrice complessiva usando le importanze indicate.`;
     const percorsiCalcolabili = piano.percorsi.filter(percorso => percorso.calcolo.disponibile);
-    $("gower-actions").hidden = !(piano.completo && piano.conteggioPercorsi === 1 && percorsiCalcolabili.length === 1);
-    if (percorsiCalcolabili.length === 1) {
+    $("gower-actions").hidden = !(
+      piano.completo && piano.conteggioPercorsi > 0
+      && percorsiCalcolabili.length === piano.conteggioPercorsi
+    );
+    if (percorsiCalcolabili.length) {
       $("calculate-gower").textContent = "Calcola la matrice finale";
     }
     $("comparison-plan").hidden = false;
@@ -1116,6 +1128,12 @@
   $("calculate-gower").addEventListener("click", calcolaMatrice);
   $("download-gower").addEventListener("click", scaricaMatrice);
   $("comparison-plan-paths").addEventListener("change", evento => {
+    if (evento.target.matches(".path-weight")) {
+      if (!interpretazione.pesiPercorsi) interpretazione.pesiPercorsi = {};
+      interpretazione.pesiPercorsi[evento.target.dataset.pathId] = evento.target.value;
+      preparaPiano();
+      return;
+    }
     if (evento.target.id !== "numeric-dependency-choice") return;
     interpretazione.gestioneDipendenzaLineare = evento.target.value;
     preparaPiano();

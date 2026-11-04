@@ -723,6 +723,18 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
 
 RUOLI_GOWER = {"quantita", "livello", "presenza", "binaria", "categoria", "data"}
 
+MISURE_SPECIALIZZATE_CALCOLABILI = {
+    "Uguale o diverso",
+    "Distanza di Levenshtein normalizzata",
+    "Distanza tra coordinate",
+    "Dissimilarità coseno",
+    "Dissimilarità di Pearson",
+    "Dissimilarità di Spearman",
+    "Dynamic Time Warping",
+    "Distanza punto per punto",
+    "Distanza composizionale di Aitchison",
+}
+
 ETICHETTE_TRASFORMAZIONE = {
     "zscore": "Z-score",
     "robusto": "Scala robusta (mediana e IQR)",
@@ -1738,13 +1750,16 @@ def _completa_specifica_percorso(
     percorso["preelaborazione"] = preelaborazione
     percorso["origine"] = preelaborazione["etichettaOrigine"]
     percorso["mancanti"] = mancanti
-    calcolabile = tipo in {"gower", "numerico"} and percorso["stato"] != "da_completare"
+    calcolabile = (
+        tipo in {"gower", "numerico"}
+        or percorso.get("metodo") in MISURE_SPECIALIZZATE_CALCOLABILI
+    ) and percorso["stato"] != "da_completare"
     percorso["calcolo"] = {
         "disponibile": calcolabile,
         "descrizione": (
             "La matrice è calcolabile nel sito."
             if calcolabile
-            else "Il piano è esplicito; il calcolo di questa famiglia sarà collegato nel modulo successivo."
+            else "Completa le informazioni richieste prima di calcolare questo percorso."
         ),
     }
     return percorso
@@ -1886,6 +1901,8 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
         indipendenti, gruppi_con_blocco, ruoli, analisi_per_nome,
         interpretazione, blocchi_per_nome, len(risultato["originale"]["righe"]),
     )
+    for indice, percorso in enumerate(percorsi, start=1):
+        percorso["idPercorso"] = f"percorso-{indice}"
     # La configurazione completa di Gower viene verificata prima di
     # dichiarare il piano pronto, non soltanto quando si avvia il calcolo.
     for percorso in percorsi:
@@ -1939,6 +1956,25 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
             for n in incluse
         ):
             avvisi.append("Indica che cosa significano le caselle vuote nelle colonne incluse.")
+
+    pesi_percorsi = interpretazione.get("pesiPercorsi") or {}
+    if not isinstance(pesi_percorsi, dict):
+        pesi_percorsi = {}
+        avvisi.append("La configurazione dell’importanza dei percorsi non è valida.")
+    for percorso in percorsi:
+        grezzo = pesi_percorsi.get(percorso["idPercorso"], 1)
+        try:
+            peso = float(str(grezzo).strip().replace(",", "."))
+        except (TypeError, ValueError):
+            peso = math.nan
+        if not math.isfinite(peso) or peso <= 0:
+            percorso["stato"] = "da_completare"
+            percorso["calcolo"]["disponibile"] = False
+            percorso.setdefault("avvisi", []).append(
+                "L’importanza del percorso deve essere un numero strettamente positivo."
+            )
+            peso = 1.0
+        percorso["pesoAggregazione"] = peso
     incluse_con_estremi = any(analisi_per_nome[n].get("statistiche", {}).get("estremi", 0) > 0 for n in incluse)
     if incluse_con_estremi and interpretazione.get("significatoEstremi") in {None, "", "ignoto"}:
         avvisi.append("Indica se i valori molto lontani dagli altri sono plausibili.")
@@ -1976,7 +2012,7 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
         "anteprimaNumerica": anteprima_numerica,
         "diagnosi": diagnosi, "blocchi": blocchi, "percorsi": percorsi, "avvisi": avvisi,
         "completo": completo, "conteggioBlocchi": len(blocchi),
-        "conteggioPercorsi": len(percorsi), "versioneContratto": 2,
+        "conteggioPercorsi": len(percorsi), "versioneContratto": 3,
     }
 
 
@@ -2301,6 +2337,7 @@ def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, 
     return {
         "metodo": percorso["metodo"], "colonne": percorso["colonne"],
         "etichette": etichette, "matrice": matrice,
+        "indiciRighe": list(range(n)), "limiteAggregazione": 1.0,
         "csv": crea_csv(["Riga", *etichette], righe_csv), "nota": nota,
     }
 
@@ -2525,22 +2562,284 @@ def calcola_matrice_numerica(
     return {
         "metodo": percorso["metodo"], "colonne": nomi,
         "etichette": etichette, "matrice": matrice,
+        "indiciRighe": indici_usati, "limiteAggregazione": None,
         "csv": crea_csv(["Riga", *etichette], righe_csv), "nota": nota,
     }
 
 
+def _ranghi_medi(valori: list[float]) -> list[float]:
+    ordinati = sorted(range(len(valori)), key=lambda indice: valori[indice])
+    ranghi = [0.0] * len(valori)
+    posizione = 0
+    while posizione < len(ordinati):
+        fine = posizione + 1
+        while fine < len(ordinati) and valori[ordinati[fine]] == valori[ordinati[posizione]]:
+            fine += 1
+        rango = (posizione + 1 + fine) / 2
+        for indice in ordinati[posizione:fine]:
+            ranghi[indice] = rango
+        posizione = fine
+    return ranghi
+
+
+def _correlazione_pearson(x: list[float], y: list[float]) -> float | None:
+    media_x = sum(x) / len(x)
+    media_y = sum(y) / len(y)
+    centrati_x = [valore - media_x for valore in x]
+    centrati_y = [valore - media_y for valore in y]
+    norma_x = math.sqrt(sum(valore**2 for valore in centrati_x))
+    norma_y = math.sqrt(sum(valore**2 for valore in centrati_y))
+    if norma_x == 0 or norma_y == 0:
+        return None
+    correlazione = sum(a * b for a, b in zip(centrati_x, centrati_y)) / (norma_x * norma_y)
+    return max(-1.0, min(1.0, correlazione))
+
+
+def _levenshtein_normalizzata(a: str, b: str) -> float:
+    if not a and not b:
+        return 0.0
+    precedente = list(range(len(b) + 1))
+    for indice_a, carattere_a in enumerate(a, start=1):
+        corrente = [indice_a]
+        for indice_b, carattere_b in enumerate(b, start=1):
+            corrente.append(min(
+                corrente[-1] + 1,
+                precedente[indice_b] + 1,
+                precedente[indice_b - 1] + (carattere_a != carattere_b),
+            ))
+        precedente = corrente
+    return precedente[-1] / max(len(a), len(b))
+
+
+def _distanza_dtw(x: list[float], y: list[float]) -> float:
+    precedente = [math.inf] * (len(y) + 1)
+    precedente[0] = 0.0
+    for valore_x in x:
+        corrente = [math.inf] * (len(y) + 1)
+        for indice_y, valore_y in enumerate(y, start=1):
+            corrente[indice_y] = abs(valore_x - valore_y) + min(
+                corrente[indice_y - 1], precedente[indice_y], precedente[indice_y - 1]
+            )
+        precedente = corrente
+    return precedente[-1]
+
+
+def _distanza_specializzata(
+    x: list[float], y: list[float], metodo: str
+) -> float | None:
+    if metodo in {"Distanza tra coordinate", "Distanza punto per punto"}:
+        return math.sqrt(sum((a - b) ** 2 for a, b in zip(x, y)))
+    if metodo == "Dissimilarità coseno":
+        norma_x = math.sqrt(sum(valore**2 for valore in x))
+        norma_y = math.sqrt(sum(valore**2 for valore in y))
+        if norma_x == 0 or norma_y == 0:
+            return None
+        coseno = sum(a * b for a, b in zip(x, y)) / (norma_x * norma_y)
+        return 1.0 - max(-1.0, min(1.0, coseno))
+    if metodo == "Dissimilarità di Pearson":
+        correlazione = _correlazione_pearson(x, y)
+        return None if correlazione is None else 1.0 - correlazione
+    if metodo == "Dissimilarità di Spearman":
+        correlazione = _correlazione_pearson(_ranghi_medi(x), _ranghi_medi(y))
+        return None if correlazione is None else 1.0 - correlazione
+    if metodo == "Dynamic Time Warping":
+        return _distanza_dtw(x, y)
+    if metodo == "Distanza composizionale di Aitchison":
+        if any(valore <= 0 for valore in [*x, *y]):
+            raise ValueError("La distanza di Aitchison richiede componenti strettamente positive.")
+        log_x = [math.log(valore) for valore in x]
+        log_y = [math.log(valore) for valore in y]
+        media_x = sum(log_x) / len(log_x)
+        media_y = sum(log_y) / len(log_y)
+        return math.sqrt(sum(
+            ((a - media_x) - (b - media_y)) ** 2
+            for a, b in zip(log_x, log_y)
+        ))
+    raise ValueError(f"Misura specializzata non riconosciuta: {metodo}.")
+
+
+def _calcola_matrice_specializzata(
+    risultato: dict[str, Any],
+    interpretazione: dict[str, Any],
+    percorso: dict[str, Any],
+) -> dict[str, Any]:
+    tabella = risultato["originale"]
+    nomi = percorso["colonne"]
+    indici = [tabella["intestazioni"].index(nome) for nome in nomi]
+    metodo = percorso["metodo"]
+    n = len(tabella["righe"])
+    matrice: list[list[float | None]] = [[0.0 for _ in range(n)] for _ in range(n)]
+
+    if percorso["tipo"] == "separato":
+        valori = [riga[indici[0]] for riga in tabella["righe"]]
+        if any(mancante(valore) for valore in valori):
+            raise ValueError(f"Definisci come trattare i mancanti nella colonna “{nomi[0]}”.")
+        for i in range(n):
+            for k in range(i + 1, n):
+                if metodo == "Uguale o diverso":
+                    distanza = 0.0 if str(valori[i]).strip() == str(valori[k]).strip() else 1.0
+                elif metodo == "Distanza di Levenshtein normalizzata":
+                    distanza = _levenshtein_normalizzata(
+                        str(valori[i]).strip(), str(valori[k]).strip()
+                    )
+                else:
+                    raise ValueError(f"Il confronto separato “{metodo}” non è ancora calcolabile.")
+                matrice[i][k] = distanza
+                matrice[k][i] = distanza
+        limite: float | None = 1.0
+    else:
+        vettori: list[list[float]] = []
+        for riga in tabella["righe"]:
+            vettore: list[float] = []
+            for nome, indice in zip(nomi, indici):
+                valore = leggi_numero(riga[indice], tabella["separatore"])
+                if valore is None:
+                    raise ValueError(f"Definisci come trattare i mancanti nel gruppo “{percorso['titolo']}”.")
+                if valore is INVALIDO:
+                    raise ValueError(f"La colonna “{nome}” contiene valori non numerici.")
+                vettore.append(float(valore))
+            vettori.append(vettore)
+        for i in range(n):
+            for k in range(i + 1, n):
+                distanza = _distanza_specializzata(vettori[i], vettori[k], metodo)
+                matrice[i][k] = distanza
+                matrice[k][i] = distanza
+        limite = 2.0 if metodo in {
+            "Dissimilarità coseno", "Dissimilarità di Pearson", "Dissimilarità di Spearman"
+        } else None
+
+    etichette = _etichette_righe(risultato, interpretazione)
+    righe_csv = [[etichetta, *riga] for etichetta, riga in zip(etichette, matrice)]
+    return {
+        "metodo": metodo,
+        "colonne": nomi,
+        "etichette": etichette,
+        "matrice": matrice,
+        "indiciRighe": list(range(n)),
+        "limiteAggregazione": limite,
+        "csv": crea_csv(["Riga", *etichette], righe_csv),
+        "nota": f"Calcolata sul percorso “{percorso['titolo']}” usando i valori originali.",
+    }
+
+
+def _normalizza_per_aggregazione(
+    risultato_percorso: dict[str, Any],
+) -> tuple[list[list[float | None]], str]:
+    matrice = risultato_percorso["matrice"]
+    limite = risultato_percorso.get("limiteAggregazione")
+    if limite is not None:
+        scala = float(limite)
+        descrizione = f"scala teorica 0–{format(scala, '.12g')}"
+    else:
+        positivi = sorted(
+            float(matrice[i][k])
+            for i in range(len(matrice))
+            for k in range(i + 1, len(matrice))
+            if matrice[i][k] is not None and float(matrice[i][k]) > 0
+        )
+        scala = quantile(positivi, 0.95) if positivi else 1.0
+        if scala <= 0:
+            scala = 1.0
+        descrizione = f"95º percentile delle distanze positive = {format(scala, '.6g')}"
+    normalizzata = [
+        [
+            None if valore is None else min(max(float(valore) / scala, 0.0), 1.0)
+            for valore in riga
+        ]
+        for riga in matrice
+    ]
+    return normalizzata, descrizione
+
+
 def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) -> dict[str, Any]:
     piano = crea_piano_confronto(risultato, interpretazione)
-    calcolabili = [percorso for percorso in piano["percorsi"] if percorso["calcolo"]["disponibile"]]
-    if len(piano["percorsi"]) != 1:
-        raise ValueError("Sono presenti più percorsi: prima di calcolare un’unica matrice finale occorre definire l’aggregazione dei blocchi.")
-    if len(calcolabili) != 1 or not piano["completo"]:
-        raise ValueError("Il calcolo diretto richiede un unico percorso completo e calcolabile.")
-    if calcolabili[0]["tipo"] == "gower":
-        return calcola_matrice_gower(risultato, interpretazione)
-    if calcolabili[0]["tipo"] == "numerico":
-        return calcola_matrice_numerica(risultato, interpretazione)
-    raise ValueError("Questo tipo di matrice non è ancora calcolabile nel sito.")
+    percorsi = piano["percorsi"]
+    if not piano["completo"] or not percorsi:
+        raise ValueError("Completa le informazioni richieste prima di calcolare la matrice.")
+    if not all(percorso["calcolo"]["disponibile"] for percorso in percorsi):
+        raise ValueError("Almeno un percorso non è ancora calcolabile.")
+
+    def calcola(percorso: dict[str, Any]) -> dict[str, Any]:
+        if percorso["tipo"] == "gower":
+            return calcola_matrice_gower(risultato, interpretazione)
+        if percorso["tipo"] == "numerico":
+            return calcola_matrice_numerica(risultato, interpretazione)
+        return _calcola_matrice_specializzata(risultato, interpretazione, percorso)
+
+    if len(percorsi) == 1:
+        return calcola(percorsi[0])
+
+    n = len(risultato["originale"]["righe"])
+    if n > 1000:
+        raise ValueError("La matrice completa è limitata a 1000 righe per evitare di bloccare il browser.")
+    componenti: list[dict[str, Any]] = []
+    for percorso in percorsi:
+        risultato_percorso = calcola(percorso)
+        matrice_normalizzata, normalizzazione = _normalizza_per_aggregazione(risultato_percorso)
+        componenti.append({
+            "percorso": percorso,
+            "risultato": risultato_percorso,
+            "matrice": matrice_normalizzata,
+            "posizioni": {
+                indice_originale: posizione
+                for posizione, indice_originale in enumerate(risultato_percorso["indiciRighe"])
+            },
+            "normalizzazione": normalizzazione,
+        })
+
+    matrice_finale: list[list[float | None]] = [[0.0 for _ in range(n)] for _ in range(n)]
+    for i in range(n):
+        for k in range(i + 1, n):
+            numeratore = 0.0
+            denominatore = 0.0
+            for componente in componenti:
+                posizione_i = componente["posizioni"].get(i)
+                posizione_k = componente["posizioni"].get(k)
+                if posizione_i is None or posizione_k is None:
+                    continue
+                valore = componente["matrice"][posizione_i][posizione_k]
+                if valore is None:
+                    continue
+                peso = float(componente["percorso"]["pesoAggregazione"])
+                numeratore += peso * float(valore)
+                denominatore += peso
+            distanza = None if denominatore == 0 else numeratore / denominatore
+            matrice_finale[i][k] = distanza
+            matrice_finale[k][i] = distanza
+
+    etichette = _etichette_righe(risultato, interpretazione)
+    righe_csv = [[etichetta, *riga] for etichetta, riga in zip(etichette, matrice_finale)]
+    contributi = [
+        {
+            "idPercorso": componente["percorso"]["idPercorso"],
+            "titolo": componente["percorso"]["titolo"],
+            "metodo": componente["percorso"]["metodo"],
+            "peso": componente["percorso"]["pesoAggregazione"],
+            "normalizzazione": componente["normalizzazione"],
+        }
+        for componente in componenti
+    ]
+    dettagli = "; ".join(
+        f"{contributo['titolo']}: peso {format(float(contributo['peso']), '.6g')}, "
+        f"{contributo['normalizzazione']}"
+        for contributo in contributi
+    )
+    return {
+        "metodo": "Dissimilarità complessiva pesata",
+        "colonne": list(dict.fromkeys(
+            nome for percorso in percorsi for nome in percorso["colonne"]
+        )),
+        "etichette": etichette,
+        "matrice": matrice_finale,
+        "indiciRighe": list(range(n)),
+        "limiteAggregazione": 1.0,
+        "contributi": contributi,
+        "csv": crea_csv(["Riga", *etichette], righe_csv),
+        "nota": (
+            "Ogni percorso è riportato nell’intervallo [0,1] e la matrice finale è "
+            "la media pesata dei contributi disponibili per ciascuna coppia. " + dettagli + "."
+        ),
+    }
 
 
 def _valore_csv(valore: Any) -> Any:

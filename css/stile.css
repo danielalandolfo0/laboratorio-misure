@@ -247,6 +247,9 @@ header p {
 .path-alternatives ul { margin: 5px 0 0; padding-left: 17px; }
 .path-alternatives li + li { margin-top: 4px; }
 .path-alternatives strong { display: inline; color: var(--blue-dark); font-size: inherit; }
+.path-weight-label { display: block; margin-top: 11px; color: var(--ink); font-size: .72rem; font-weight: 700; }
+.path-weight-label input { width: 100%; margin-top: 6px; padding: 8px 10px; border: 1px solid rgba(8, 124, 255, .2); border-radius: 9px; background: rgba(255, 255, 255, .72); color: var(--ink); }
+.path-weight-label small { margin-top: 5px; color: var(--muted); font-size: .66rem; font-weight: 500; line-height: 1.35; }
 .plan-detail-title { margin: 0 0 8px; font-size: .82rem; }
 .comparison-plan-table { min-width: 850px; }
 .comparison-plan-table th small { display: block; max-width: 260px; margin-top: 4px; color: var(--muted); white-space: normal; font-weight: 500; }

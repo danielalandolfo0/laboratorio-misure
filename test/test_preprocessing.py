@@ -452,7 +452,7 @@ assert misure_piano["flag"] == "Confronto asimmetrico di Jaccard"
 assert misure_piano["gruppo"] == "Uguale o diverso"
 assert piano_semplice["conteggioPercorsi"] == 1
 assert piano_semplice["percorsi"][0]["metodo"] == "Dissimilarità di Gower classica"
-assert piano_semplice["versioneContratto"] == 2
+assert piano_semplice["versioneContratto"] == 3
 assert piano_semplice["percorsi"][0]["preelaborazione"]["origine"] == "valori_originali"
 assert piano_semplice["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"] is False
 assert piano_semplice["percorsi"][0]["mancanti"]["strategia"] == "non_necessaria"
@@ -769,6 +769,11 @@ assert any("non negativi" in avviso for avviso in piano_bray_non_valido["percors
 dati_con_gruppo = p.prepara_tabella(p.leggi_csv("a,b,c\\n1,2,10\\n2,3,12\\n4,5,15\\n8,9,20".replace("\\n", "\n")))
 risposte_con_gruppo = {
     "riga": "oggetto",
+    "confrontoQuantitativo": "assoluto",
+    "aggregazioneScarti": "quadratica",
+    "importanzaCoordinate": "uguale",
+    "gestioneDipendenzaLineare": "mantieni",
+    "riscalamentoConfermato": True,
     "colonne": {
         "a": {"ruolo": "quantita", "usa": True},
         "b": {"ruolo": "quantita", "usa": True},
@@ -780,16 +785,103 @@ risposte_con_gruppo = {
 }
 piano_con_gruppo = p.crea_piano_confronto(dati_con_gruppo, risposte_con_gruppo)
 assert piano_con_gruppo["conteggioPercorsi"] == 2
-try:
-    p.calcola_matrice(dati_con_gruppo, risposte_con_gruppo)
-except ValueError as errore:
-    assert "aggregazione dei blocchi" in str(errore)
-else:
-    raise AssertionError("Non si può presentare un blocco isolato come matrice finale.")
+assert piano_con_gruppo["completo"] is True
+assert all(percorso["calcolo"]["disponibile"] for percorso in piano_con_gruppo["percorsi"])
+matrice_con_gruppo = p.calcola_matrice(dati_con_gruppo, risposte_con_gruppo)
+verifica_matrice_finale(matrice_con_gruppo, 4)
+assert matrice_con_gruppo["metodo"] == "Dissimilarità complessiva pesata"
+assert len(matrice_con_gruppo["contributi"]) == 2
+assert all(0 <= valore <= 1 for riga in matrice_con_gruppo["matrice"] for valore in riga)
+risposte_gruppo_pesato = {
+    **risposte_con_gruppo,
+    "pesiPercorsi": {"percorso-1": "4", "percorso-2": "1"},
+}
+matrice_gruppo_pesato = p.calcola_matrice(dati_con_gruppo, risposte_gruppo_pesato)
+assert matrice_gruppo_pesato["matrice"] != matrice_con_gruppo["matrice"]
+assert [contributo["peso"] for contributo in matrice_gruppo_pesato["contributi"]] == [4.0, 1.0]
+assert p.crea_piano_confronto(
+    dati_con_gruppo,
+    {**risposte_con_gruppo, "pesiPercorsi": {"percorso-1": "0"}},
+)["completo"] is False
 assert {tuple(percorso["colonne"]) for percorso in piano_con_gruppo["percorsi"]} == {
     ("c",), ("a", "b")
 }
 assert next(percorso for percorso in piano_con_gruppo["percorsi"] if percorso["tipo"] == "gruppo")["metodo"] == "Dynamic Time Warping"
+
+# I percorsi specializzati pronti producono davvero una matrice, non soltanto
+# un'etichetta nel piano.
+for risposta_profilo in ("valori_vicini", "proporzioni", "andamento", "ordine"):
+    risposte_profilo = {
+        "riga": "oggetto",
+        "colonne": {
+            "a": {"ruolo": "quantita", "usa": True},
+            "b": {"ruolo": "quantita", "usa": True},
+            "c": {"ruolo": "quantita", "usa": True},
+        },
+        "gruppi": [{"id": "profilo", "nome": "Profilo", "tipo": "ripetute"}],
+        "assegnazioni": {"a": "profilo", "b": "profilo", "c": "profilo"},
+        "somiglianza-profilo": risposta_profilo,
+    }
+    verifica_matrice_finale(p.calcola_matrice(dati_con_gruppo, risposte_profilo), 4)
+
+risposte_tempo_puntuale = {
+    **risposte_con_gruppo,
+    "ritardo-gruppo-1": "no",
+}
+verifica_matrice_finale(p.calcola_matrice(dati_con_gruppo, risposte_tempo_puntuale), 4)
+
+dati_composizionali = p.prepara_tabella(p.leggi_csv("a,b,c\n1,2,7\n2,2,6\n4,3,3"))
+risposte_composizionali = {
+    "riga": "oggetto",
+    "colonne": {
+        nome: {"ruolo": "quantita", "usa": True} for nome in ("a", "b", "c")
+    },
+    "gruppi": [{"id": "parti", "nome": "Composizione", "tipo": "parti"}],
+    "assegnazioni": {nome: "parti" for nome in ("a", "b", "c")},
+    "totale-parti": "si",
+}
+matrice_aitchison = p.calcola_matrice(dati_composizionali, risposte_composizionali)
+verifica_matrice_finale(matrice_aitchison, 3)
+assert matrice_aitchison["metodo"] == "Distanza composizionale di Aitchison"
+
+dati_testo = p.prepara_tabella(p.leggi_csv("testo,id\ncasa,A\ncassa,B\ncane,C"))
+risposte_testo = {
+    "riga": "oggetto",
+    "colonne": {
+        "testo": {"ruolo": "testo", "usa": True},
+        "id": {"ruolo": "identificativo", "usa": False},
+    },
+}
+matrice_testo = p.calcola_matrice(dati_testo, risposte_testo)
+verifica_matrice_finale(matrice_testo, 3)
+assert matrice_testo["matrice"][0][1] == 0.2
+
+# Se un percorso numerico esclude una riga, gli altri percorsi possono ancora
+# contribuire alle coppie che la contengono; gli indici restano allineati.
+dati_multipercorso_mancanti = p.prepara_tabella(p.leggi_csv(
+    "x,testo,id\n1,casa,A\nNA,cassa,B\n3,cane,C"
+))
+risposte_multipercorso_mancanti = {
+    "riga": "oggetto",
+    "significatoMancanti": "sconosciuto",
+    "confrontoQuantitativo": "assoluto",
+    "aggregazioneScarti": "quadratica",
+    "importanzaCoordinate": "uguale",
+    "gestioneDipendenzaLineare": "mantieni",
+    "riscalamentoConfermato": True,
+    "mancantiNumericiPerColonna": {"x": "escludi_riga"},
+    "colonne": {
+        "x": {"ruolo": "quantita", "usa": True},
+        "testo": {"ruolo": "testo", "usa": True},
+        "id": {"ruolo": "identificativo", "usa": False},
+    },
+}
+matrice_multipercorso_mancanti = p.calcola_matrice(
+    dati_multipercorso_mancanti, risposte_multipercorso_mancanti
+)
+verifica_matrice_finale(matrice_multipercorso_mancanti, 3)
+assert matrice_multipercorso_mancanti["etichette"] == ["A", "B", "C"]
+assert matrice_multipercorso_mancanti["matrice"][0][1] is not None
 
 # Un codice numerico o un livello ordinale non diventa una serie solo perché contiene numeri.
 risposte_gruppo_incoerente = {
