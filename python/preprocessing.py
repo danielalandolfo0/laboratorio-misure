@@ -2740,16 +2740,45 @@ def _levenshtein_normalizzata(a: str, b: str) -> float:
 
 
 def _distanza_dtw(x: list[float], y: list[float]) -> float:
-    precedente = [math.inf] * (len(y) + 1)
-    precedente[0] = 0.0
-    for valore_x in x:
-        corrente = [math.inf] * (len(y) + 1)
-        for indice_y, valore_y in enumerate(y, start=1):
-            corrente[indice_y] = abs(valore_x - valore_y) + min(
-                corrente[indice_y - 1], precedente[indice_y], precedente[indice_y - 1]
-            )
-        precedente = corrente
-    return precedente[-1]
+    """Minimo ESATTO del costo medio per passo, non costo totale diviso per la lunghezza.
+
+    Per ogni cella e lunghezza di cammino conserva il costo totale minimo.
+    La minimizzazione finale viene fatta sui rapporti costo/lunghezza.
+    """
+    if not x or not y:
+        raise ValueError("La DTW richiede due serie temporali non vuote.")
+    if any(not math.isfinite(v) for v in [*x, *y]):
+        raise ValueError("La DTW richiede valori numerici finiti.")
+    n, m = len(x), len(y)
+    if n * m * (n + m) > 4_000_000:
+        raise ValueError(
+            "Le serie sono troppo lunghe per la DTW esatta a costo medio nel browser. "
+            "Riduci la risoluzione con un ricampionamento esplicito."
+        )
+    # Ogni cammino ammissibile parte da (0,0), termina in (n-1,m-1)
+    # e usa esclusivamente i passi (1,0), (0,1), (1,1).
+    tabella: list[list[dict[int, float]]] = [
+        [dict() for _ in range(m)] for _ in range(n)
+    ]
+    for i in range(n):
+        for j in range(m):
+            costo_locale = abs(x[i] - y[j])
+            if i == 0 and j == 0:
+                tabella[i][j][1] = costo_locale
+                continue
+            corrente = tabella[i][j]
+            for ii, jj in ((i - 1, j), (i, j - 1), (i - 1, j - 1)):
+                if ii < 0 or jj < 0:
+                    continue
+                for lunghezza, costo_precedente in tabella[ii][jj].items():
+                    nuova_lunghezza = lunghezza + 1
+                    nuovo_costo = costo_precedente + costo_locale
+                    if nuovo_costo < corrente.get(nuova_lunghezza, math.inf):
+                        corrente[nuova_lunghezza] = nuovo_costo
+    cammini = tabella[-1][-1]
+    if not cammini:
+        raise ValueError("Non esistono cammini di allineamento DTW ammissibili.")
+    return min(costo / lunghezza for lunghezza, costo in cammini.items())
 
 
 def _interpola_vuoti_interni(valori: list[float | None]) -> list[float] | None:
@@ -2969,22 +2998,33 @@ def _calcola_matrice_specializzata(
 def _normalizza_per_aggregazione(
     risultato_percorso: dict[str, Any],
 ) -> tuple[list[list[float | None]], str]:
+    """Applica il massimo teorico, se noto, oppure il massimo campionario.
+
+    I contributi non disponibili rimangono None e non diventano mai zero.
+    La normalizzazione robusta non e' scelta automaticamente.
+    """
     matrice = risultato_percorso["matrice"]
     limite = risultato_percorso.get("limiteAggregazione")
+    valori = [
+        float(v)
+        for riga in matrice for v in riga if v is not None
+    ]
+    if any(not math.isfinite(v) or v < -1e-10 for v in valori):
+        raise ValueError("Il percorso contiene dissimilarita' negative o non finite.")
     if limite is not None:
         scala = float(limite)
+        if not math.isfinite(scala) or scala <= 0:
+            raise ValueError("La scala teorica deve essere finita e positiva.")
+        if any(v > scala + 1e-9 * max(1.0, scala) for v in valori):
+            raise ValueError("La dissimilarita' supera il massimo teorico dichiarato.")
         descrizione = f"scala teorica 0–{format(scala, '.12g')}"
     else:
-        positivi = sorted(
-            float(matrice[i][k])
-            for i in range(len(matrice))
-            for k in range(i + 1, len(matrice))
-            if matrice[i][k] is not None and float(matrice[i][k]) > 0
-        )
-        scala = quantile(positivi, 0.95) if positivi else 1.0
-        if scala <= 0:
+        scala = max(valori, default=0.0)
+        if scala == 0:
             scala = 1.0
-        descrizione = f"95º percentile delle distanze positive = {format(scala, '.6g')}"
+            descrizione = "tutte le dissimilarita' definite sono nulle"
+        else:
+            descrizione = f"massimo campionario = {format(scala, '.6g')}"
     normalizzata = [
         [
             None if valore is None else min(max(float(valore) / scala, 0.0), 1.0)
@@ -3011,7 +3051,18 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
         return _calcola_matrice_specializzata(risultato, interpretazione, percorso)
 
     if len(percorsi) == 1:
-        return calcola(percorsi[0])
+        # Anche un unico percorso deve produrre valori finali in [0,1].
+        singolo = calcola(percorsi[0])
+        normalizzata, descrizione = _normalizza_per_aggregazione(singolo)
+        etichette = singolo["etichette"]
+        singolo["matrice"] = normalizzata
+        singolo["limiteAggregazione"] = 1.0
+        singolo["csv"] = crea_csv(
+            ["Riga", *etichette],
+            [[etichetta, *riga] for etichetta, riga in zip(etichette, normalizzata)],
+        )
+        singolo["nota"] += f" Normalizzazione finale: {descrizione}."
+        return singolo
 
     n = len(risultato["originale"]["righe"])
     if n > 1000:
