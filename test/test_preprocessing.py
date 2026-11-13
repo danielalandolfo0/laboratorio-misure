@@ -1200,4 +1200,31 @@ matrice_ordinali = p.calcola_matrice_gower(dati_ordinali, risposte_ordinali)["ma
 quasi_uguali(matrice_ordinali[0][1], .25)
 quasi_uguali(matrice_ordinali[0][2], 1)
 
+# Regressioni: decisione 42, DTW a costo medio esatto.
+# Il cammino a costo totale minimo non coincide con quello a costo medio minimo.
+quasi_uguali(p._distanza_dtw([0, 0, 0], [1, 1, 2]), 1.2)
+quasi_uguali(p._distanza_dtw([1, 2, 3], [1, 2, 3]), 0.0)
+try:
+    p._distanza_dtw([], [1])
+    assert False, "Una serie vuota deve essere rifiutata."
+except ValueError:
+    pass
+
+# Regressione: massimo campionario anziche' 95-esimo percentile.
+normalizzata, criterio = p._normalizza_per_aggregazione({
+    "matrice": [[0, 1, 4], [1, 0, 2], [4, 2, 0]],
+    "limiteAggregazione": None,
+})
+quasi_uguali(normalizzata[0][1], .25)
+quasi_uguali(normalizzata[0][2], 1.0)
+assert "massimo campionario" in criterio
+
+# Anche con un solo percorso, il risultato finale del sito appartiene a [0,1].
+matrice_singolo_finale = p.calcola_matrice(scale_diverse, risposte_accessibili)
+assert all(
+    valore is None or 0 <= valore <= 1
+    for riga in matrice_singolo_finale["matrice"] for valore in riga
+)
+assert "Normalizzazione finale" in matrice_singolo_finale["nota"]
+
 print("Tutti i test Python di preprocessing sono stati superati.")
