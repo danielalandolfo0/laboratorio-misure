@@ -5919,10 +5919,15 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
         })
 
     matrice_finale: list[list[float | None]] = [[0.0 for _ in range(n)] for _ in range(n)]
+    coppie_con_copertura_parziale = 0
+    coppie_con_solo_un_percorso = 0
+    contributi_minimi = len(componenti)
+    contributi_massimi = 0
     for i in range(n):
         for k in range(i + 1, n):
             numeratore = 0.0
             denominatore = 0.0
+            percorsi_disponibili = 0
             for componente in componenti:
                 posizione_i = componente["posizioni"].get(i)
                 posizione_k = componente["posizioni"].get(k)
@@ -5934,12 +5939,33 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
                 peso = float(componente["percorso"]["pesoAggregazione"])
                 numeratore += peso * float(valore)
                 denominatore += peso
+                percorsi_disponibili += 1
+            contributi_minimi = min(contributi_minimi, percorsi_disponibili)
+            contributi_massimi = max(contributi_massimi, percorsi_disponibili)
+            if 0 < percorsi_disponibili < len(componenti):
+                coppie_con_copertura_parziale += 1
+                if percorsi_disponibili == 1:
+                    coppie_con_solo_un_percorso += 1
             distanza = None if denominatore == 0 else numeratore / denominatore
             matrice_finale[i][k] = distanza
             matrice_finale[k][i] = distanza
 
     etichette = _etichette_righe(risultato, interpretazione)
     diagnostica_finale = _valida_matrice_finale(matrice_finale, etichette)
+    diagnostica_finale["coppieCoperturaParziale"] = coppie_con_copertura_parziale
+    diagnostica_finale["coppieConSoloUnPercorso"] = coppie_con_solo_un_percorso
+    diagnostica_finale["minContributiPerCoppia"] = contributi_minimi
+    diagnostica_finale["maxContributiPerCoppia"] = contributi_massimi
+    if coppie_con_copertura_parziale:
+        diagnostica_finale["avvisi"].append(
+            f"{coppie_con_copertura_parziale} coppie usano meno di "
+            f"{len(componenti)} blocchi; {coppie_con_solo_un_percorso} "
+            "coppie sono confrontate con un solo blocco. "
+            "La media pesata è rinormalizzata sui soli contributi "
+            "effettivamente disponibili: non si è sostituita alcuna "
+            "distanza mancante con zero. Le coppie possono utilizzare "
+            "informazioni differenti."
+        )
     for componente in componenti:
         numero_sature = componente["diagnosticaNormalizzazione"]["coppieSaturate"]
         if numero_sature:
