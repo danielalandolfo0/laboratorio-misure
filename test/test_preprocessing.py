@@ -201,6 +201,9 @@ assert piano_abbondanze_accessibile["percorsi"][0]["preelaborazione"]["usaTabell
 def risposte_automatiche(nomi):
     return {
         "riga": "oggetto",
+        # In questi test i dati CSV sono gia' stati verificati dall'utente
+        # fittizio: non si omette la conferma dei candidati multivariati.
+        "significatoEstremi": "reali",
         "confrontoQuantitativo": "assoluto",
         "colonne": {nome: {"ruolo": "quantita", "usa": True} for nome in nomi},
     }
