@@ -1821,4 +1821,79 @@ diagnosi_singolare = p._diagnosi_numerica(
 )
 assert diagnosi_singolare["diagnosiMultivariata"]["stato"] == "non_valutabile"
 
+
+# Le scelte manuali sul preprocessing precedono ogni politica automatica.
+# log(1+x) e' una trasformazione, non una standardizzazione.
+csv_log = (
+    "a,b\n"
+    "0,3\n1,8\n2,6\n3,4\n4,7\n5,9\n"
+    "6,1\n7,10\n8,2\n20,5\n"
+)
+orig_log = p.prepara_tabella(p.leggi_csv(csv_log))
+scelte_log = [
+    {"tipo": "auto", "metodo": "log1p"},
+    {"tipo": "auto", "metodo": "nessuno"},
+]
+scelte_robuste_manuali = [
+    {"tipo": "auto", "metodo": "robusto"},
+    {"tipo": "auto", "metodo": "nessuno"},
+]
+preparata_log = p.prepara_tabella(p.leggi_csv(csv_log), scelte_log)
+assert preparata_log["colonne"][0]["sceltaMetodo"] == "log1p"
+assert preparata_log["colonne"][1]["sceltaMetodo"] == "nessuno"
+quasi_uguali(preparata_log["trasformate"][0][0], 0)
+quasi_uguali(preparata_log["trasformate"][1][0], math.log(2))
+quasi_uguali(preparata_log["trasformate"][9][0], math.log(21))
+assert [riga[1] for riga in preparata_log["trasformate"]] == [
+    3, 8, 6, 4, 7, 9, 1, 10, 2, 5,
+]
+analisi_log = {c["nome"]: c for c in preparata_log["colonne"]}
+for forzato in ("zscore", "robusto", "minmax", "maxabs"):
+    preprocessamento = p._preelaborazione_numerica(
+        ["a", "b"], analisi_log, forzato
+    )
+    assert [t["metodo"] for t in preprocessamento["passi"]] == [
+        "log1p", "nessuno"
+    ], (forzato, preprocessamento)
+risposte_log = {
+    **risposte_automatiche(["a", "b"]),
+    "riscalamentoConfermato": True,
+    "gestioneDipendenzaLineare": "mantieni",
+    "misuraNumericaManuale": "euclidean",
+}
+piano_log = p.crea_piano_confronto(preparata_log, risposte_log)
+assert piano_log["completo"], piano_log
+assert [v["metodo"] for v in piano_log["percorsi"][0]["preelaborazione"]["passi"]] == [
+    "log1p", "nessuno"
+]
+matrice_log = p.calcola_matrice_numerica(preparata_log, risposte_log)
+# Prima coordinata logaritmica, seconda originale: Euclidea senza pesi.
+quasi_uguali(
+    matrice_log["matrice"][0][1],
+    math.hypot(math.log1p(1)-math.log1p(0), 8-3),
+)
+piano_orig = p.crea_piano_confronto(orig_log, risposte_log)
+assert piano_orig["completo"], piano_orig
+assert p.calcola_matrice_numerica(orig_log, risposte_log)["matrice"] != matrice_log["matrice"]
+
+# La trasformazione log(1+x) non puo' essere applicata a valori negativi,
+# nemmeno se la misura di distanza successiva sarebbe ben definita.
+try:
+    p.prepara_tabella(
+        p.leggi_csv("a,b\n-1,2\n0,3\n1,4"),
+        [{"tipo": "auto", "metodo": "log1p"}, {}],
+    )
+    assert False, "log(1+x) deve essere rifiutato sui dati negativi"
+except ValueError as errore:
+    assert "non negativi" in str(errore) or "maggiore" in str(errore)
+
+# Conferma che il metodo robusto esplicito non diventi z-score.
+preparata_robusta = p.prepara_tabella(
+    p.leggi_csv(csv_log), scelte_robuste_manuali
+)
+piano_robusta = p.crea_piano_confronto(preparata_robusta, risposte_log)
+assert piano_robusta["completo"], piano_robusta
+assert [v["metodo"] for v in piano_robusta["percorsi"][0]["preelaborazione"]["passi"]] == [
+    "robusto", "nessuno"
+]
 print("Tutti i test Python di preprocessing sono stati superati.")

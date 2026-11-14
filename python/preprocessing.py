@@ -331,11 +331,22 @@ def personalizza_colonna(
                 raise ValueError(
                     f"La feature “{nome}” contiene soltanto zeri: max-abs richiede un massimo assoluto positivo."
                 )
+            if metodo == "log1p" and stats["minimo"] < 0:
+                raise ValueError(
+                    f"La trasformazione log(1+x) per “{nome}” e' disponibile "
+                    "solo con valori osservati maggiori o uguali a zero. "
+                    "Scegli un'altra trasformazione o rivedi il significato dei dati."
+                )
             motivi = {
                 "zscore": "Non emergono outlier rilevanti." if metodo_scelto == "auto" else "Le differenze vengono riportate su una scala comune.",
                 "robusto": descrivi_outlier(stats) if metodo_scelto == "auto" else "Viene ridotto il peso degli outlier.",
                 "maxabs": "Molti valori sono uguali a zero." if metodo_scelto == "auto" else "Gli zeri restano invariati.",
                 "minmax": "I valori vengono riportati tra 0 e 1.",
+                "log1p": (
+                    "Trasformazione log(1+x) scelta esplicitamente: preserva zero "
+                    "e comprime gli scarti grandi. Richiede valori non negativi "
+                    "e modifica il significato delle differenze."
+                ),
                 "costante": "Tutti i valori sono uguali.",
                 "nessuno": "I valori restano invariati.",
             }
@@ -896,6 +907,7 @@ ETICHETTE_TRASFORMAZIONE = {
     "robusto": "Scala robusta (mediana e IQR)",
     "minmax": "Min–max",
     "maxabs": "Max-abs",
+    "log1p": "Logaritmo log(1+x), per dati non negativi",
     "costante": "Sostituzione con 0 (feature costante)",
     "nessuno": "Nessuna trasformazione",
 }
@@ -1811,6 +1823,23 @@ def _specifica_misura_numerica(
             if candidato != id_misura
         ]
 
+    # Una trasformazione richiesta manualmente non puo' essere ignorata
+    # dalla politica diagnostica predefinita. Le misure che dipendono dal
+    # significato dei valori originali sono escluse da questa regola.
+    geometriche = {
+        "euclidean", "manhattan", "chebyshev", "minkowski",
+        "weighted_minkowski", "weighted_chebyshev",
+    }
+    if (
+        id_misura in geometriche
+        and politica_preelaborazione == "originale"
+        and any(
+            analisi_per_nome[nome].get("sceltaMetodo", "auto") not in {"auto", "", None}
+            for nome in nomi
+        )
+    ):
+        politica_preelaborazione = "trasformazioni_candidate"
+
     # Le scelte confermate del riscalamento governano le distanze
     # coordinate per coordinata. Le misure relative e Mahalanobis restano
     # sui valori originali per non alterarne il significato.
@@ -2109,10 +2138,13 @@ def _preelaborazione_numerica(
 ) -> dict[str, Any]:
     passi = []
     for nome in nomi:
+        colonna = analisi_per_nome[nome]
+        scelta_esplicita = colonna.get("sceltaMetodo", "auto") not in {"auto", "", None}
         metodo = (
             "costante"
-            if analisi_per_nome[nome].get("tipo") == "numerica_costante"
-            else metodo_forzato or analisi_per_nome[nome].get("metodo", "nessuno")
+            if colonna.get("tipo") == "numerica_costante"
+            else colonna.get("metodo", "nessuno") if scelta_esplicita
+            else metodo_forzato or colonna.get("metodo", "nessuno")
         )
         passi.append({
             "colonna": nome,
@@ -2265,20 +2297,23 @@ def _completa_specifica_percorso(
         elif politica == "zscore_automatico":
             preelaborazione = _preelaborazione_numerica(nomi, analisi_per_nome, "zscore")
             preelaborazione["descrizione"] = (
-                "Le quantità sono standardizzate automaticamente con lo z-score; "
+                "Lo z-score e' la proposta predefinita per le colonne non "
+                "configurate manualmente. Le scelte esplicite per colonna prevalgono; "
                 "le colonne costanti ricevono contributo nullo."
             )
         elif politica == "maxabs_automatico":
             preelaborazione = _preelaborazione_numerica(nomi, analisi_per_nome, "maxabs")
             preelaborazione["descrizione"] = (
-                "La matrice contiene almeno l’80% di zeri: max-abs riequilibra le colonne "
-                "senza spostare lo zero; le colonne costanti ricevono contributo nullo."
+                "Max-abs e' la proposta predefinita per i dati sparsi; "
+                "le scelte esplicite di trasformazione per colonna prevalgono "
+                "e le colonne costanti ricevono contributo nullo."
             )
         elif politica == "robusto_forzato":
             preelaborazione = _preelaborazione_numerica(nomi, analisi_per_nome, "robusto")
             preelaborazione["descrizione"] = (
-                "Sono stati rilevati outlier: le quantità sono centrate sulla mediana e "
-                "divise per l’IQR; le colonne costanti ricevono contributo nullo."
+                "La centratura sulla mediana e divisione per IQR e' la proposta "
+                "predefinita in presenza di valori estremi. Le scelte manuali "
+                "prevalgono. Questa scala non elimina ne' tronca gli outlier."
             )
         else:
             preelaborazione = _preelaborazione_originale(
@@ -3027,6 +3062,13 @@ def _trasforma_per_percorso(
         return 0.0 if ampiezza == 0 else (numero - stats["minimo"]) / ampiezza
     if metodo == "maxabs":
         return 0.0 if stats.get("massimoAssoluto", 0) == 0 else numero / stats["massimoAssoluto"]
+    if metodo == "log1p":
+        if numero < 0:
+            raise ValueError(
+                f"La trasformazione log(1+x) richiede numeri non negativi "
+                f"nella colonna “{analisi['nome']}”."
+            )
+        return math.log1p(numero)
     raise ValueError(f"Trasformazione numerica non riconosciuta: {metodo}.")
 
 

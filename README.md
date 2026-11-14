@@ -228,6 +228,31 @@ osservazioni reali, oppure controllare il file. La conferma non elimina,
 non modifica e non trascura automaticamente alcuna riga; i percorsi
 di distanza restano quelli scelti separatamente.
 
+### Scelta esplicita tra valori originali, scala robusta e log(1+x)
+
+L'asimmetria e la presenza di valori estremi sono segnali diagnostici,
+non condizioni che impongono da sole una trasformazione. Nella tabella
+dei riscalamenti l'utente puo' confermare, per ogni colonna quantitativa:
+
+- **Nessuna trasformazione**: conserva le differenze nella misura originale.
+- **Scala robusta**: \(z=(x-\mathrm{mediana})/IQR\), se \(IQR>0\).
+  Cambia centro e unita' di misura, ma **non** taglia, elimina o attenua
+  necessariamente gli scarti dei valori estremi in una distanza.
+- **Trasformazione logaritmica \(\log(1+x)\)**: disponibile **solo per
+  dati osservati non negativi**. Preserva lo zero e comprime le
+  differenze assolute ai valori alti. Non coincide con una
+  standardizzazione: un incremento da 1 a 2 non ha lo stesso effetto
+  di un incremento da 100 a 101. L'interpretazione va confermata
+  dall'utente.
+
+Le opzioni gia' presenti (z-score, min-max, max-abs) restano disponibili.
+**Una trasformazione scelta manualmente prevale sulla politica automatica
+di riscalamento per quel percorso**, anche se la politica predefinita
+prevedeva z-score, scala robusta o min-max. Il piano elenca sempre la
+trasformazione effettivamente usata nei calcoli e nella sua anteprima.
+Le misure basate su valori originali, come Canberra, Bray-Curtis,
+Mahalanobis e Gower classica, non ricevono automaticamente log(1+x).
+
 ## Matrice complessiva con più percorsi
 
 Ogni percorso produce prima la propria matrice. Gower, i confronti 0/1 e le

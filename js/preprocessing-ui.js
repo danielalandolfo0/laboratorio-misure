@@ -33,7 +33,7 @@
   }
 
   function etichettaMetodo(metodo) {
-    return ({ zscore: "Z-score", robusto: "Scala robusta", minmax: "Min–max", maxabs: "Max-abs", costante: "Valore 0", nessuno: "Nessuno" })[metodo];
+    return ({ zscore: "Z-score", robusto: "Scala robusta", minmax: "Min–max", maxabs: "Max-abs", log1p: "Log(1+x)", costante: "Valore 0", nessuno: "Nessuno" })[metodo];
   }
 
   function mostraErrore(messaggio) {
@@ -61,6 +61,8 @@
             ? `min ${formatoNumero(s.minimo)} · max ${formatoNumero(s.massimo)}`
             : colonna.metodo === "maxabs"
               ? `max |x| ${formatoNumero(s.massimoAssoluto)}`
+          : colonna.metodo === "log1p"
+            ? "log(1+x) · non è una standardizzazione" 
           : colonna.metodo === "costante" ? "deviazione 0" : "—";
       const tipo = colonna.sceltaTipo || "auto";
       const metodo = colonna.sceltaMetodo || "auto";
@@ -75,9 +77,10 @@
         <td><div class="method-choice-wrap"><div class="method-choice-line"><select class="column-choice" data-choice="metodo" data-column="${indice}" aria-label="Metodo per la feature ${escapeHtml(colonna.nome)}"${colonna.tipo === "binaria" || colonna.tipo === "non_numerica" ? " disabled" : ""}>
           <option value="auto"${metodo === "auto" ? " selected" : ""}>${etichettaMetodo(colonna.metodoAutomatico)} (suggerito)</option>
           <option value="zscore"${metodo === "zscore" ? " selected" : ""}>Confronta gli scarti dalla media (z-score)</option>
-          <option value="robusto"${metodo === "robusto" ? " selected" : ""}>Riduci l’effetto dei valori estremi sul riscalamento (robusto)</option>
+          <option value="robusto"${metodo === "robusto" ? " selected" : ""}>Usa mediana e IQR (robusto: non elimina gli outlier)</option>
           <option value="minmax"${metodo === "minmax" ? " selected" : ""}>Porta i valori tra 0 e 1 (min–max)</option>
           <option value="maxabs"${metodo === "maxabs" ? " selected" : ""}>Dividi per il valore massimo assoluto (max-abs)</option>
+          <option value="log1p"${metodo === "log1p" ? " selected" : ""}${s.minimo < 0 ? " disabled" : ""}>Comprimi le differenze grandi: log(1+x), solo dati non negativi</option>
           <option value="nessuno"${metodo === "nessuno" ? " selected" : ""}>Mantieni i valori originali</option>
         </select><button class="method-info-button" data-info-column="${indice}" type="button" aria-label="Informazioni sulla scelta per ${escapeHtml(colonna.nome)}" aria-controls="method-reason-${indice}" aria-expanded="false">i</button></div><p class="method-reason" id="method-reason-${indice}" hidden>${escapeHtml(colonna.motivo)}</p></div></td>
         <td><span class="method-params">${parametri}</span></td>
@@ -310,9 +313,32 @@
             ". Controlla il significato delle righe: non sono state escluse."
           : "Non risultano candidati oltre la soglia multivariata esplorativa. " +
             "Non è una garanzia di assenza di anomalie.";
+      const sceltePreprocessing = risposta.colonne.map(colonna => {
+        const st = colonna.statistiche;
+        const indiceBowley = st.asimmetriaBowley;
+        const asimmetrica = st.numeroOsservati >= 8 && indiceBowley !== null &&
+          Math.abs(indiceBowley) >= 0.3;
+        const haEstremi = st.estremi > 0;
+        if (!asimmetrica && !haEstremi) return "";
+        return colonna.nome + ": " +
+          "puoi mantenere i valori originali oppure mantenere gli scarti ma " +
+          "riscalare con mediana e IQR" +
+          (st.iqr > 0 ? "" : " (non disponibile: IQR nullo)") +
+          (st.minimo >= 0
+            ? "; puoi anche valutare log(1+x), che comprime i valori grandi ma cambia la scala delle differenze"
+            : "; log(1+x) non è disponibile perché esistono valori negativi") +
+          ". Nessuna alternativa viene applicata sulla sola base di questi indicatori.";
+      }).filter(Boolean);
       const spiegazioni = [
         riga("Ci sono valori molto diversi dagli altri?", outlier),
         riga("Le distribuzioni sono asimmetriche?", asimmetria),
+        ...(sceltePreprocessing.length
+          ? [riga("Quale trattamento può essere appropriato?",
+              sceltePreprocessing.join(" ") +
+              " La scala robusta (x−mediana)/IQR non cancella i valori estremi: " +
+              "in distanze sensibili agli scarti grandi possono restare molto influenti. " +
+              "Puoi scegliere il metodo di ogni colonna nella tabella dei riscalamenti e confermarlo.")]
+          : []),
         riga("Ci sono osservazioni insolite considerando più colonne insieme?", multivariati),
         riga("Le colonne hanno dispersioni simili?", scale),
         riga("Alcune colonne cambiano insieme?", andamento)
