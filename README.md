@@ -456,6 +456,27 @@ Il file \`test/test-browser-e2e.cjs\` verifica:
 - lo scorrimento orizzontale globale e le etichette accessibili dei
   controlli visibili.
 
+Il file \`test/test-browser-e2e-integrated.cjs\` esegue inoltre un
+**collaudo Chromium integrato a quattro percorsi**, caricando
+\`examples/collaudo/test_integrato_gower_gruppi_mancanti.csv\` e
+utilizzando unicamente i controlli visibili del questionario.
+Verifica la decisione esplicita di includere la colonna di testo,
+la configurazione delle categorie e dei livelli ordinali in Gower,
+Hamming, Minkowski pesata con gestione *pairwise* dei mancanti,
+Hellinger su probabilità, i riscalamenti differenti, le
+conferme di compatibilità, i pesi globali e la normalizzazione robusta
+con righe anomale dichiarate.
+
+Il test controlla che un piano privo delle necessarie conferme
+non consenta il calcolo. Dopo il completamento, verifica una
+**matrice unica \(6\times6\)**, due valori campione ricavati
+indipendentemente dalle formule, simmetria, diagonale nulla,
+limiti in \([0,1]\) ed esportazione integrale con etichette stabili.
+I casi matematici indipendenti sono in
+\`test/test_integrazione.py\`. Le riproduzioni browser e matematiche
+rimangono distinte per individuare regressioni di interfaccia
+e regressioni delle formule.
+
 Le schermate, i CSV e le informazioni diagnostiche sono disponibili come
 **artifact del workflow** per 14 giorni. Il test usa Chromium headless
 e non implica automaticamente compatibilità con tutti i browser,
