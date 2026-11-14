@@ -99,6 +99,31 @@ finale contengono soltanto le righe effettivamente utilizzate. Mahalanobis con
 imputazione non viene abilitata automaticamente, perché richiede una nuova
 verifica della covarianza dopo il completamento dei dati.
 
+## Gruppi numerici con misure differenti
+
+Una tabella anche interamente numerica puo' essere organizzata in blocchi
+**disgiunti**: ogni colonna appartiene a un solo percorso di confronto.
+Nella sezione dei gruppi, scegli il significato delle colonne:
+
+- **Osservazioni successive nel tempo**: scelta guidata tra confronto
+  punto per punto e DTW (costo medio minimo sul cammino);
+- **Misurazioni dello stesso profilo**: scelta tra forma, direzione,
+  ordinamento e differenze tra coordinate;
+- **Coordinate quantitative da confrontare insieme**: per quel solo gruppo
+  scegli euclidea, Manhattan, Chebyshev, Minkowski o Minkowski pesata,
+  con esponente q >= 1 e pesi interni strettamente positivi.
+
+Le colonne quantitative non assegnate a gruppi mantengono il proprio percorso
+numerico e la propria scelta di misura. Le impostazioni del gruppo di coordinate
+non si trasferiscono agli altri blocchi. Il riscalamento numerico confermato
+e' utilizzato per i gruppi di coordinate (non per la forma Pearson e l'allineamento
+temporale DTW, che mantengono i valori originali).
+
+Il file \`examples/collaudo/test_blocchi_eterogenei.csv\` offre cinque osservazioni
+e otto colonne: le prime tre possono essere raggruppate come serie temporale,
+le successive tre come profilo e le ultime due come coordinate quantitative.
+La matrice finale combina tre dissimilarita' normalizzate nell'intervallo [0,1].
+
 ## Matrice complessiva con più percorsi
 
 Ogni percorso produce prima la propria matrice. Gower, i confronti 0/1 e le

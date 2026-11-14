@@ -1300,4 +1300,146 @@ for matrice_errata in (
         assert False, "Il validatore deve bloccare matrici non valide."
     except ValueError:
         pass
+
+# Integrazione a tre blocchi: una sola tabella numerica, tre confronti indipendenti.
+# Il gruppo temporale usa DTW, il profilo Pearson e le coordinate Minkowski
+# pesata. Nessuna colonna puo' contribuire due volte.
+csv_blocchi_eterogenei = (
+    "t1,t2,t3,p1,p2,p3,c1,c2\n"
+    "1,3,4,1,3,2,5,8\n"
+    "2,4,5,2,6,4,7,4\n"
+    "1,4,3,4,1,3,2,10\n"
+    "3,2,1,5,4,3,9,3\n"
+    "2,2,3,3,1,4,4,6\n"
+)
+dati_blocchi_eterogenei = p.prepara_tabella(p.leggi_csv(csv_blocchi_eterogenei))
+risposte_blocchi_eterogenei = {
+    "riga": "oggetto",
+    "significatoEstremi": "reali",
+    "riscalamentoConfermato": True,
+    "confrontoQuantitativo": "assoluto",
+    "gestioneDipendenzaLineare": "mantieni",
+    "colonne": {
+        nome: {"ruolo": "quantita", "usa": True}
+        for nome in ("t1", "t2", "t3", "p1", "p2", "p3", "c1", "c2")
+    },
+    "gruppi": [
+        {"id": "tempo", "nome": "Serie temporale", "tipo": "tempo"},
+        {"id": "profilo", "nome": "Profilo", "tipo": "ripetute"},
+        {"id": "coordinate", "nome": "Coordinate", "tipo": "coordinate"},
+    ],
+    "assegnazioni": {
+        **{nome: "tempo" for nome in ("t1", "t2", "t3")},
+        **{nome: "profilo" for nome in ("p1", "p2", "p3")},
+        **{nome: "coordinate" for nome in ("c1", "c2")},
+    },
+    "ritardo-tempo": "si",
+    "somiglianza-profilo": "andamento",
+    "misureGruppi": {"coordinate": "weighted_minkowski"},
+    "ordiniGruppi": {"coordinate": "3"},
+    "pesiGruppi": {"coordinate": "1; 2"},
+}
+piano_eterogeneo = p.crea_piano_confronto(
+    dati_blocchi_eterogenei, risposte_blocchi_eterogenei
+)
+assert piano_eterogeneo["completo"], piano_eterogeneo
+assert piano_eterogeneo["conteggioPercorsi"] == 3
+assert all(v["calcolo"]["disponibile"] for v in piano_eterogeneo["percorsi"])
+assert [v["metodo"] for v in piano_eterogeneo["percorsi"]] == [
+    "Dynamic Time Warping", "Dissimilarità di Pearson", "Distanza di Minkowski pesata"
+]
+assert [v["colonne"] for v in piano_eterogeneo["percorsi"]] == [
+    ["t1", "t2", "t3"], ["p1", "p2", "p3"], ["c1", "c2"]
+]
+assert piano_eterogeneo["percorsi"][2]["parametri"] == {"q": 3.0, "pesi": [1.0, 2.0]}
+assert piano_eterogeneo["percorsi"][2]["preelaborazione"]["usaTabellaTrasformata"]
+assert not piano_eterogeneo["percorsi"][1]["preelaborazione"]["usaTabellaTrasformata"]
+assert not piano_eterogeneo["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"]
+finale_eterogeneo = p.calcola_matrice(
+    dati_blocchi_eterogenei, risposte_blocchi_eterogenei
+)
+verifica_matrice_finale(finale_eterogeneo, 5)
+assert finale_eterogeneo["metodo"] == "Dissimilarità complessiva pesata"
+assert len(finale_eterogeneo["contributi"]) == 3
+assert all(
+    valore is not None and 0 <= valore <= 1
+    for riga in finale_eterogeneo["matrice"] for valore in riga
+)
+assert finale_eterogeneo["diagnosticaFinale"]["coppieTotali"] == 10
+
+# Un controllo quantitativo dell'aggregazione, non soltanto di dimensioni e nomi.
+locali_eterogenei = [
+    p._normalizza_per_aggregazione(
+        p._calcola_matrice_specializzata(
+            dati_blocchi_eterogenei, risposte_blocchi_eterogenei, percorso
+        )
+    )[0]
+    for percorso in piano_eterogeneo["percorsi"]
+]
+for i in range(5):
+    for j in range(i + 1, 5):
+        valore_atteso = sum(m[i][j] for m in locali_eterogenei) / 3
+        quasi_uguali(finale_eterogeneo["matrice"][i][j], valore_atteso)
+
+# Variare la misura o i pesi di un blocco non deve sovrascrivere gli altri.
+risposte_q_uno = {
+    **risposte_blocchi_eterogenei, "ordiniGruppi": {"coordinate": "1"}
+}
+piano_q_uno = p.crea_piano_confronto(dati_blocchi_eterogenei, risposte_q_uno)
+assert piano_q_uno["completo"]
+assert piano_q_uno["percorsi"][0]["metodo"] == "Dynamic Time Warping"
+assert piano_q_uno["percorsi"][1]["metodo"] == "Dissimilarità di Pearson"
+assert piano_q_uno["percorsi"][2]["parametri"]["q"] == 1
+assert p.calcola_matrice(
+    dati_blocchi_eterogenei, risposte_q_uno
+)["matrice"] != finale_eterogeneo["matrice"]
+
+risposte_peso_gruppo = {
+    **risposte_blocchi_eterogenei,
+    "pesiPercorsi": {"percorso-1": "4", "percorso-2": "1", "percorso-3": "1"},
+}
+finale_peso_gruppo = p.calcola_matrice(
+    dati_blocchi_eterogenei, risposte_peso_gruppo
+)
+assert finale_peso_gruppo["matrice"] != finale_eterogeneo["matrice"]
+assert [v["peso"] for v in finale_peso_gruppo["contributi"]] == [4, 1, 1]
+
+for configurazione in (
+    {"misureGruppi": {}},  # coordinate quantitative senza misura confermata
+    {"ordiniGruppi": {"coordinate": "0.5"}},
+    {"pesiGruppi": {"coordinate": "1; 0"}},
+    {"pesiGruppi": {"coordinate": "1"}},
+):
+    invalidi = {**risposte_blocchi_eterogenei, **configurazione}
+    assert not p.crea_piano_confronto(
+        dati_blocchi_eterogenei, invalidi
+    )["completo"], configurazione
+
+# La stessa tabella funziona anche con coordinate numeriche INDIPENDENTI.
+# La scelta globale di Minkowski non modifica DTW e Pearson.
+risposte_coordinate_indipendenti = {
+    **risposte_blocchi_eterogenei,
+    "gruppi": risposte_blocchi_eterogenei["gruppi"][:2],
+    "assegnazioni": {
+        k: v for k, v in risposte_blocchi_eterogenei["assegnazioni"].items()
+        if v != "coordinate"
+    },
+    "misuraNumericaManuale": "minkowski",
+    "ordineMisuraManuale": "3",
+    "dipendenzaCoordinate": "no",
+    "aggregazioneScarti": "quadratica",
+    "importanzaCoordinate": "uguale",
+}
+piano_indipendenti = p.crea_piano_confronto(
+    dati_blocchi_eterogenei, risposte_coordinate_indipendenti
+)
+assert piano_indipendenti["completo"], piano_indipendenti
+assert piano_indipendenti["conteggioPercorsi"] == 3
+assert [v["metodo"] for v in piano_indipendenti["percorsi"]] == [
+    "Distanza di Minkowski", "Dynamic Time Warping", "Dissimilarità di Pearson"
+]
+verifica_matrice_finale(
+    p.calcola_matrice(dati_blocchi_eterogenei, risposte_coordinate_indipendenti), 5
+)
+
 print("Tutti i test Python di preprocessing sono stati superati.")
