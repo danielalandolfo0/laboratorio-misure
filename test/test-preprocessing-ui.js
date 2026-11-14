@@ -1303,7 +1303,61 @@ async function testRapportoCumulativoProblemi() {
   assert.equal(h.element("gower-result").hidden, false);
 }
 
+async function testConfermaBrayDoppioZero() {
+  const h = createHarness();
+  h.fire("load-example-csv", "click");
+  await flush();
+  h.fire("row-meaning", "change", {value: "oggetto"});
+  const makeBrayPlan = () => {
+    const piano = h.makePlan();
+    piano.completo = false;
+    piano.percorsi[0] = {
+      ...piano.percorsi[0],
+      tipo: "numerico",
+      metodo: "Dissimilarità di Bray–Curtis",
+      idMisura: "bray_curtis",
+      parametri: {},
+      colonne: ["x", "y"],
+      coppieBrayDoppioZero: 1,
+      stato: "da_completare",
+      calcolo: {disponibile: false, descrizione: "Scegli la convenzione"}
+    };
+    return piano;
+  };
+  h.observations.planIntercept = () => Promise.resolve(makeBrayPlan());
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  let html = h.element("comparison-plan-paths").innerHTML;
+  assert.match(html, /bray-zero-convention/);
+  assert.match(html, /0\/0/);
+  assert.match(html, /Scegli esplicitamente/);
+  assert.match(html, /value="" selected/);
+  assert.equal(h.element("gower-actions").hidden, true);
+
+  h.fire("comparison-plan-paths", "change", {
+    target: {id: "bray-zero-convention", value: "zero"}
+  });
+  await flush();
+  assert.equal(
+    h.observations.planCalls.at(-1).interpretazione.convenzioneBrayCurtisZero,
+    "zero"
+  );
+  html = h.element("comparison-plan-paths").innerHTML;
+  assert.match(html, /value="zero" selected/);
+
+  h.fire("comparison-plan-paths", "change", {
+    target: {id: "bray-zero-convention", value: "indefinita"}
+  });
+  await flush();
+  assert.equal(
+    h.observations.planCalls.at(-1).interpretazione.convenzioneBrayCurtisZero,
+    "indefinita"
+  );
+  assert.match(h.element("comparison-plan-paths").innerHTML, /value="indefinita" selected/);
+}
+
 (async () => {
+  await testConfermaBrayDoppioZero();
   await testRapportoCumulativoProblemi();
   await testDiagnosticaSensibilitaPesi();
   await testRapportoCompletoEConcorrenza();
