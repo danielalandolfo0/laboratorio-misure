@@ -796,6 +796,7 @@ risposte_con_gruppo = {
     "ritardo-gruppo-1": "si",
     "ordiniTemporaliGruppi": {"gruppo-1": "a; b"},
     "campionamentiTemporaliGruppi": {"gruppo-1": "regolare"},
+    "confermeValoriOriginaliGruppi": {"gruppo-1": "si"},
 }
 piano_con_gruppo = p.crea_piano_confronto(dati_con_gruppo, risposte_con_gruppo)
 assert piano_con_gruppo["conteggioPercorsi"] == 2
@@ -1341,6 +1342,7 @@ risposte_blocchi_eterogenei = {
     "ordiniTemporaliGruppi": {"tempo": "t1; t2; t3"},
     "campionamentiTemporaliGruppi": {"tempo": "regolare"},
     "somiglianza-profilo": "andamento",
+    "confermeValoriOriginaliGruppi": {"tempo": "si", "profilo": "si"},
     "misureGruppi": {"coordinate": "weighted_minkowski"},
     "ordiniGruppi": {"coordinate": "3"},
     "pesiGruppi": {"coordinate": "1; 2"},
@@ -1683,5 +1685,85 @@ assert not p.crea_piano_confronto(
     {**risposte_blocchi_pair, "misureGruppi": {"coord": "euclidean"},
      "mancanti-gruppo-coord": "interpola_lineare"},
 )["completo"]
+
+
+# Coerenza tra riscalamenti confermati e misura scelta.
+# Originali per Pearson e DTW richiedono una conferma distinta da quella
+# generale: non possono ignorare il preprocessing in silenzio.
+risposte_senza_conferma_originali = {
+    **risposte_blocchi_eterogenei, "confermeValoriOriginaliGruppi": {},
+}
+piano_senza_conferma_originali = p.crea_piano_confronto(
+    dati_blocchi_eterogenei, risposte_senza_conferma_originali
+)
+assert not piano_senza_conferma_originali["completo"]
+gruppi_senza_conferma = {
+    percorso["idGruppo"]: percorso
+    for percorso in piano_senza_conferma_originali["percorsi"]
+    if percorso["tipo"] == "gruppo"
+}
+for id_gruppo in ("tempo", "profilo"):
+    assert gruppi_senza_conferma[id_gruppo]["compatibilitaPreelaborazione"]["richiesta"] == "originali_gruppo"
+    assert not gruppi_senza_conferma[id_gruppo]["compatibilitaPreelaborazione"]["confermata"]
+    assert gruppi_senza_conferma[id_gruppo]["stato"] == "da_completare"
+assert gruppi_senza_conferma["coordinate"]["compatibilitaPreelaborazione"]["richiesta"] is None
+
+# Piu' trasformazioni all'interno dello stesso gruppo di coordinate:
+# consentite, ma solo dopo una conferma aggiuntiva.
+scelte_scalatura_diversa = [
+    {"tipo": "auto", "metodo": "auto"} for _ in range(6)
+] + [
+    {"tipo": "auto", "metodo": "nessuno"},
+    {"tipo": "auto", "metodo": "zscore"},
+]
+dati_scalatura_diversa = p.prepara_tabella(
+    p.leggi_csv(csv_blocchi_eterogenei), scelte_scalatura_diversa
+)
+piano_scalatura_diversa = p.crea_piano_confronto(
+    dati_scalatura_diversa, risposte_blocchi_eterogenei
+)
+assert not piano_scalatura_diversa["completo"]
+coord_non_confermato = next(
+    percorso for percorso in piano_scalatura_diversa["percorsi"]
+    if percorso.get("idGruppo") == "coordinate"
+)
+assert coord_non_confermato["compatibilitaPreelaborazione"]["richiesta"] == "misti_gruppo"
+assert not coord_non_confermato["compatibilitaPreelaborazione"]["confermata"]
+risposte_scalatura_confermata = {
+    **risposte_blocchi_eterogenei,
+    "confermeRiscalamentiMistiGruppi": {"coordinate": "si"},
+}
+piano_scalatura_confermata = p.crea_piano_confronto(
+    dati_scalatura_diversa, risposte_scalatura_confermata
+)
+assert piano_scalatura_confermata["completo"], piano_scalatura_confermata
+matrice_scalatura_confermata = p.calcola_matrice(
+    dati_scalatura_diversa, risposte_scalatura_confermata
+)
+verifica_matrice_finale(matrice_scalatura_confermata, 5)
+
+# Una misura relativa sulle coordinate INDIPENDENTI non deve ignorare
+# riscalamenti già confermati senza ulteriore approvazione.
+dati_misura_relativa = p.prepara_tabella(p.leggi_csv(
+    "a,b\n1,8\n2,4\n3,9\n4,2\n5,7\n6,3\n7,10\n8,5\n9,6\n10,1"
+))
+risposte_relativa = {
+    "riga": "oggetto",
+    "confrontoQuantitativo": "relativo",
+    "valoriVicinoZero": "no",
+    "misuraNumericaManuale": "canberra",
+    "riscalamentoConfermato": True,
+    "colonne": {nome: {"ruolo": "quantita", "usa": True} for nome in ("a", "b")},
+}
+piano_relativa = p.crea_piano_confronto(dati_misura_relativa, risposte_relativa)
+assert not piano_relativa["completo"]
+assert piano_relativa["percorsi"][0]["compatibilitaPreelaborazione"]["richiesta"] == "originali_numerico"
+piano_relativa_confermata = p.crea_piano_confronto(
+    dati_misura_relativa,
+    {**risposte_relativa, "confermaValoriOriginaliNumerici": "si"},
+)
+assert piano_relativa_confermata["completo"], piano_relativa_confermata
+assert not piano_relativa_confermata["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"]
+assert piano_relativa_confermata["percorsi"][0]["compatibilitaPreelaborazione"]["confermata"]
 
 print("Tutti i test Python di preprocessing sono stati superati.")

@@ -175,6 +175,30 @@ confermato e' quello di coordinate quantitative. Non e' estesa
 automaticamente a Pearson, DTW, Mahalanobis o distanze relative:
 il sito segnala la loro incompatibilita' e chiede una scelta.
 
+### Compatibilita' dei riscalamenti con le misure locali
+
+La conferma del preprocessing preliminare non implica che tutte le misure
+debbano usarlo: il piano dichiara per ogni blocco l'origine effettiva.
+
+- I confronti fra coordinate quantitative usano il riscalamento confermato
+  quando il percorso lo prevede.
+- DTW, Pearson, coseno, Spearman e Aitchison operano in questa versione sui
+  valori originali. Se esistono trasformazioni preliminari confermate, il
+  sito richiede una **seconda conferma specifica per quel gruppo** prima di
+  calcolare la matrice: altrimenti il percorso rimane incompleto.
+- Se in un blocco quantitativo con distanza sulle coordinate si applicano
+  trasformazioni differenti, il sito chiede di confermare esplicitamente
+  la combinazione. La distanza puo' essere ben definita pur rappresentando
+  un confronto diverso da quello desiderato.
+- Per misure numeriche che usano i valori originali, come Canberra,
+  Bray-Curtis, chi-quadrato e Mahalanobis, la conferma generale del
+  riscalamento non e' sufficiente: occorre confermare che il riscalamento
+  venga ignorato dal relativo percorso.
+
+Le incompatibilita' non producono sostituzioni silenziose di misura o di
+preprocessing. Le conferme vengono invalidate quando cambia il metodo
+di riscalamento, la composizione dei gruppi o il confronto richiesto.
+
 ## Matrice complessiva con più percorsi
 
 Ogni percorso produce prima la propria matrice. Gower, i confronti 0/1 e le

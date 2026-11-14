@@ -99,6 +99,7 @@
         risultato = await P.preparaTabella(testoOriginale, scelte);
       }
       nascondiErrore();
+      annullaConfermeCompatibilita();
       riscalamentoConfermato = false;
       interpretazione.riscalamentoConfermato = false;
       disegnaMetodi();
@@ -190,6 +191,12 @@
       <strong>${escapeHtml(titolo)}</strong>
       <p>${escapeHtml(testo)}</p>
     </div>`;
+  }
+
+  function annullaConfermeCompatibilita() {
+    delete interpretazione.confermeValoriOriginaliGruppi;
+    delete interpretazione.confermeRiscalamentiMistiGruppi;
+    delete interpretazione.confermaValoriOriginaliNumerici;
   }
 
   function nascondiPiano() {
@@ -366,6 +373,7 @@
     if (!tabellaInteramenteNumerica()) return;
     const colonne = colonneNumericheDaRiscalare();
     if (!colonne.length) return;
+    annullaConfermeCompatibilita();
     riscalamentoConfermato = true;
     interpretazione.riscalamentoConfermato = true;
     vista = "lavoro";
@@ -609,6 +617,15 @@
         `${escapeHtml(chiave)} = ${escapeHtml(Array.isArray(valore) ? valore.join(", ") : valore)}`
       ).join(" · ");
       const editorNumerico = percorso.tipo === "numerico" ? editorMisuraNumerica(percorso) : "";
+      const compat = percorso.compatibilitaPreelaborazione || {};
+      const origineNonConfermata = compat.richiesta === "originali_numerico" && !compat.confermata
+        ? '<label>Confermi di usare i valori originali per questa misura, ' +
+          'senza applicare i riscalamenti preliminari già confermati?' +
+          '<select class="numeric-origin-confirmation">' +
+          '<option value="">Scegli una risposta</option>' +
+          '<option value="si">Sì, confermo l’uso dei valori originali</option>' +
+          '</select></label>'
+        : "";
       const pesoAggregazione = piano.conteggioPercorsi > 1
         ? `<label class="path-weight-label">Quanto conta questo percorso nella matrice finale?
             <input class="path-weight" type="number" min="0.01" step="0.1"
@@ -630,6 +647,7 @@
         <dl class="path-contract">
           <div><dt>Origine</dt><dd>${escapeHtml(pre.etichettaOrigine)}</dd></div>
           <div><dt>Trasformazioni</dt><dd>${passi}</dd></div>
+          <div><dt>Compatibilità</dt><dd>${escapeHtml(compat.descrizione || "Nessuna incompatibilità rilevata.")}</dd></div>
           ${parametri ? `<div><dt>Parametri</dt><dd>${parametri}</dd></div>` : ""}
           ${pesiGower ? `<div><dt>Pesi Gower</dt><dd>${pesiGower}</dd></div>` : ""}
           ${costantiGower ? `<div><dt>Colonne costanti</dt><dd>Contributo zero, ma peso mantenuto: ${costantiGower}</dd></div>` : ""}
@@ -642,6 +660,7 @@
         ${percorso.tipo === "numerico" ? controlloDipendenzaLineare(percorso) : ""}
         ${percorso.notaPreelaborazione ? `<p><strong>Quali valori vengono usati:</strong> ${escapeHtml(percorso.notaPreelaborazione)}</p>` : ""}
         ${pesoAggregazione}
+        ${origineNonConfermata}
         ${editorNumerico}
         ${alternative}
       </article>`;
@@ -1155,6 +1174,43 @@
         || (gruppo.tipo === "ripetute" && valoreRisposta(`somiglianza-${gruppo.id}`) === "valori_vicini")
         || (gruppo.tipo === "tempo" && valoreRisposta(`ritardo-${gruppo.id}`) === "no")
         || (gruppo.tipo === "parti" && valoreRisposta(`totale-${gruppo.id}`) === "no");
+      const metodiPreliminari = membri.map(profilo =>
+        risultato.colonne.find(colonna => colonna.nome === profilo.nome)
+      ).filter(colonna => colonna?.metodo && colonna.metodo !== "costante");
+      const riscalamentiEffettivi = riscalamentoConfermato &&
+        metodiPreliminari.some(colonna => colonna.metodo !== "nessuno");
+      const applicaRiscalamento = misuraPerCoordinate && gruppo.tipo !== "tempo";
+      const metodiDifferenti = new Set(metodiPreliminari.map(colonna => colonna.metodo)).size > 1;
+      if (riscalamentiEffettivi && !applicaRiscalamento && gruppo.tipo !== "altro") {
+        const conferma = interpretazione.confermeValoriOriginaliGruppi?.[gruppo.id] || "";
+        domande.push('<div class="question-item"><label><strong>Per il gruppo “' +
+          escapeHtml(gruppo.nome) + '”, confermi l’uso dei valori originali?</strong>' +
+          '<p>I riscalamenti preliminari NON saranno applicati a questo gruppo: ' +
+          'potrebbero alterare forma, andamento o significato della composizione.</p>' +
+          '<select class="group-preprocessing-confirmation" data-group-id="' +
+          escapeHtml(gruppo.id) + '" data-kind="originali">' +
+          '<option value=""' + (!conferma ? ' selected' : '') +
+          '>Conferma necessaria</option>' +
+          '<option value="si"' + (conferma === 'si' ? ' selected' : '') +
+          '>Confermo: usa i valori originali per questa misura</option>' +
+          '</select></label></div>');
+      } else if (riscalamentiEffettivi && applicaRiscalamento && metodiDifferenti) {
+        const conferma = interpretazione.confermeRiscalamentiMistiGruppi?.[gruppo.id] || "";
+        domande.push('<div class="question-item"><label><strong>Per il gruppo “' +
+          escapeHtml(gruppo.nome) + '”, confermi i metodi di riscalamento differenti?</strong>' +
+          '<p>Le colonne del gruppo ricevono trasformazioni differenti: ' +
+          metodiPreliminari.map(colonna =>
+            escapeHtml(colonna.nome) + ': ' + escapeHtml(etichettaMetodo(colonna.metodo))
+          ).join('; ') +
+          '. La distanza è calcolabile, ma la scelta modifica i pesi relativi delle coordinate.</p>' +
+          '<select class="group-preprocessing-confirmation" data-group-id="' +
+          escapeHtml(gruppo.id) + '" data-kind="misti">' +
+          '<option value=""' + (!conferma ? ' selected' : '') +
+          '>Conferma necessaria</option>' +
+          '<option value="si"' + (conferma === 'si' ? ' selected' : '') +
+          '>Confermo questi diversi riscalamenti</option>' +
+          '</select></label></div>');
+      }
       if (misuraPerCoordinate) {
         const idMisura = interpretazione.misureGruppi?.[gruppo.id] ||
           (gruppo.tipo === "coordinate" ? "" : "euclidean");
@@ -1330,6 +1386,11 @@
       preparaPiano();
       return;
     }
+    if (evento.target.matches(".numeric-origin-confirmation")) {
+      interpretazione.confermaValoriOriginaliNumerici = evento.target.value;
+      preparaPiano();
+      return;
+    }
     if (evento.target.id !== "numeric-dependency-choice") return;
     interpretazione.gestioneDipendenzaLineare = evento.target.value;
     preparaPiano();
@@ -1337,6 +1398,7 @@
   $("comparison-plan-paths").addEventListener("change", evento => {
     if (evento.target.id !== "numeric-measure-choice") return;
     interpretazione.misuraNumericaManuale = evento.target.value;
+    delete interpretazione.confermaValoriOriginaliNumerici;
     const nomi = pianoCorrente?.percorsi.find(p => p.tipo === "numerico")?.colonne || [];
     if (["weighted_minkowski", "weighted_chebyshev"].includes(evento.target.value) && !interpretazione.pesiMisuraManuale) {
       interpretazione.pesiMisuraManuale = nomi.map(() => "1").join("; ");
@@ -1346,6 +1408,7 @@
   $("comparison-plan-paths").addEventListener("click", evento => {
     if (evento.target.id !== "apply-numeric-measure") return;
     interpretazione.misuraNumericaManuale = $("numeric-measure-choice").value;
+    delete interpretazione.confermaValoriOriginaliNumerici;
     const q = $("numeric-measure-q");
     const pesi = $("numeric-measure-weights");
     if (q) interpretazione.ordineMisuraManuale = q.value;
@@ -1381,6 +1444,7 @@
       interpretazione.colonne[profilo.nome].usa = evento.target.checked;
       evento.target.nextElementSibling.textContent = evento.target.checked ? "Sì" : "No";
     }
+    annullaConfermeCompatibilita();
     riscalamentoConfermato = false;
     interpretazione.riscalamentoConfermato = false;
     disegnaQuestionario();
@@ -1420,9 +1484,19 @@
       disegnaQuestionario();
       return;
     }
+    if (evento.target.matches(".group-preprocessing-confirmation")) {
+      const id = evento.target.dataset.groupId;
+      const campo = evento.target.dataset.kind === "originali"
+        ? "confermeValoriOriginaliGruppi" : "confermeRiscalamentiMistiGruppi";
+      if (!interpretazione[campo]) interpretazione[campo] = {};
+      interpretazione[campo][id] = evento.target.value;
+      disegnaQuestionario();
+      return;
+    }
     if (evento.target.matches(".group-measure-setting")) {
       if (!interpretazione.misureGruppi) interpretazione.misureGruppi = {};
       interpretazione.misureGruppi[evento.target.dataset.groupId] = evento.target.value;
+      annullaConfermeCompatibilita();
       disegnaQuestionario();
       return;
     }
@@ -1462,7 +1536,9 @@
         if (/^(somiglianza|ritardo|totale)-/.test(chiave)) {
           const idGruppo = chiave.replace(/^(somiglianza|ritardo|totale)-/, "");
           if (interpretazione.misureGruppi) delete interpretazione.misureGruppi[idGruppo];
+          annullaConfermeCompatibilita();
         }
+        if (chiave === "confrontoQuantitativo") delete interpretazione.confermaValoriOriginaliNumerici;
         disegnaQuestionario();
       }
       else nascondiPiano();
@@ -1504,6 +1580,7 @@
   });
 
   $("add-column-group").addEventListener("click", () => {
+    annullaConfermeCompatibilita();
     riscalamentoConfermato = false;
     interpretazione.riscalamentoConfermato = false;
     creaGruppo();
@@ -1526,6 +1603,7 @@
     }
     if (gruppoId) interpretazione.assegnazioni[nome] = gruppoId;
     else delete interpretazione.assegnazioni[nome];
+    annullaConfermeCompatibilita();
     riscalamentoConfermato = false;
     interpretazione.riscalamentoConfermato = false;
     disegnaQuestionario();
@@ -1540,6 +1618,7 @@
       if (gruppo.tipo !== evento.target.value) invalidaConfermaTemporale(gruppo.id);
       gruppo.tipo = evento.target.value;
       if (interpretazione.misureGruppi) delete interpretazione.misureGruppi[gruppo.id];
+      annullaConfermeCompatibilita();
     }
     riscalamentoConfermato = false;
     interpretazione.riscalamentoConfermato = false;
@@ -1560,6 +1639,7 @@
     const gruppoId = pulsante.closest(".group-config").dataset.groupId;
     invalidaConfermaTemporale(gruppoId);
     interpretazione.gruppi = interpretazione.gruppi.filter(gruppo => gruppo.id !== gruppoId);
+    annullaConfermeCompatibilita();
     Object.keys(interpretazione.assegnazioni).forEach(nome => {
       if (interpretazione.assegnazioni[nome] === gruppoId) delete interpretazione.assegnazioni[nome];
     });

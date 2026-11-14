@@ -2037,6 +2037,89 @@ def _preelaborazione_originale(descrizione: str) -> dict[str, Any]:
     }
 
 
+def _controlla_compatibilita_preelaborazione(
+    percorso: dict[str, Any],
+    analisi_per_nome: dict[str, dict[str, Any]],
+    interpretazione: dict[str, Any],
+    preelaborazione: dict[str, Any],
+) -> dict[str, Any]:
+    """Confronta la scelta preliminare con la rappresentazione effettivamente usata.
+
+    Le misure che richiedono valori originali non vengono cambiate
+    silenziosamente. La conferma generale del riscalamento non equivale
+    a confermare di IGNORARLO in un particolare blocco.
+    """
+    usa_trasformata = bool(preelaborazione["usaTabellaTrasformata"])
+    origine = "trasformata" if usa_trasformata else "originale"
+    metodi = {
+        nome: analisi_per_nome[nome].get("metodo", "nessuno")
+        for nome in percorso["colonne"]
+        if analisi_per_nome[nome]["tipo"] in {"numerica", "numerica_costante"}
+    }
+    # Le colonne costanti sono già prive di variabilità.
+    efficaci = {
+        nome: metodo for nome, metodo in metodi.items() if metodo != "costante"
+    }
+    ha_riscalamenti = bool(interpretazione.get("riscalamentoConfermato")) and any(
+        metodo != "nessuno" for metodo in efficaci.values()
+    )
+    tipo = percorso["tipo"]
+    id_gruppo = str(percorso.get("idGruppo") or "")
+    richiesta: str | None = None
+    descrizione = (
+        "Questo percorso applica le trasformazioni indicate nel piano."
+        if usa_trasformata
+        else "Questo percorso utilizza i valori originali delle colonne."
+    )
+
+    if ha_riscalamenti and tipo == "gruppo" and not usa_trasformata:
+        richiesta = "originali_gruppo"
+        descrizione = (
+            "Le trasformazioni numeriche confermate NON vengono applicate a "
+            f"“{percorso['titolo']}”: la misura {percorso['metodo']} "
+            "usa le coordinate originali. Riscalare separatamente le colonne "
+            "potrebbe alterare profilo, andamento, composizione o confronto temporale."
+        )
+        confermato = (
+            (interpretazione.get("confermeValoriOriginaliGruppi") or {}).get(id_gruppo)
+            == "si"
+        )
+    elif ha_riscalamenti and tipo == "gruppo" and usa_trasformata and len(set(efficaci.values())) > 1:
+        richiesta = "misti_gruppo"
+        descrizione = (
+            f"Nel gruppo “{percorso['titolo']}” le colonne vengono trasformate "
+            "con metodi differenti. La distanza resta calcolabile, ma "
+            "la loro importanza relativa dipende dalla scelta delle trasformazioni. "
+            "Conferma che tale combinazione sia intenzionale."
+        )
+        confermato = (
+            (interpretazione.get("confermeRiscalamentiMistiGruppi") or {}).get(id_gruppo)
+            == "si"
+        )
+    elif ha_riscalamenti and tipo == "numerico" and not usa_trasformata:
+        richiesta = "originali_numerico"
+        descrizione = (
+            f"La misura {percorso['metodo']} usa i valori originali, non le "
+            "trasformazioni preliminari confermate. Applicare quelle "
+            "trasformazioni cambierebbe il significato del confronto. "
+            "Conferma esplicitamente di mantenere la misura sui valori originali."
+        )
+        confermato = interpretazione.get("confermaValoriOriginaliNumerici") == "si"
+    else:
+        confermato = True
+
+    if richiesta and not confermato:
+        percorso["stato"] = "da_completare"
+        percorso.setdefault("avvisi", []).append(descrizione)
+    return {
+        "origineEffettiva": origine,
+        "richiesta": richiesta,
+        "confermata": bool(confermato),
+        "metodiPreliminari": metodi,
+        "descrizione": descrizione,
+    }
+
+
 def _completa_specifica_percorso(
     percorso: dict[str, Any],
     analisi_per_nome: dict[str, dict[str, Any]],
@@ -2050,7 +2133,9 @@ def _completa_specifica_percorso(
         politica = percorso.get("politicaPreelaborazione", "trasformazioni_candidate")
         if politica == "originale":
             preelaborazione = _preelaborazione_originale(
-                "La misura confronta direttamente i valori originali e incorpora già la normalizzazione richiesta."
+                "La misura confronta direttamente i valori originali, senza applicare "
+                "il riscalamento preliminare: eventuali rapporti o normalizzazioni "
+                "sono definiti dalla misura stessa."
             )
         elif politica == "standardizzazione_interna":
             preelaborazione = _preelaborazione_originale(
@@ -2113,7 +2198,8 @@ def _completa_specifica_percorso(
         else:
             preelaborazione = _preelaborazione_originale(
                 "Il gruppo e' confrontato come un unico oggetto sui valori originali. "
-                "Riscalamenti separati potrebbero modificare forma, direzione o andamento temporale."
+                "Riscalamenti separati potrebbero modificare forma, direzione, "
+                "composizione o andamento temporale."
             )
     else:
         preelaborazione = _preelaborazione_originale(
@@ -2121,6 +2207,9 @@ def _completa_specifica_percorso(
             "della singola caratteristica."
         )
 
+    compatibilita = _controlla_compatibilita_preelaborazione(
+        percorso, analisi_per_nome, interpretazione, preelaborazione
+    )
     mancanti = _politica_mancanti(
         nomi, analisi_per_nome, percorso, interpretazione, numero_istanze
     )
@@ -2142,6 +2231,7 @@ def _completa_specifica_percorso(
             "scegli una misura basata sulle coordinate."
         )
     percorso["preelaborazione"] = preelaborazione
+    percorso["compatibilitaPreelaborazione"] = compatibilita
     percorso["origine"] = preelaborazione["etichettaOrigine"]
     percorso["mancanti"] = mancanti
     calcolabile = (
