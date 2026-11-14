@@ -842,7 +842,54 @@ async function testMancantiBinariPairwise() {
   assert.equal(dati.assegnazioni.flag2, "gruppo-1");
 }
 
+async function testMarcatoriMancantiMisti() {
+  const h = createHarness();
+  h.observations.tableIntercept = (csv, scelte) => {
+    const tabella = h.makeTable(csv, scelte);
+    for (const colonna of tabella.colonne) {
+      if (colonna.nome === "flag1") colonna.mancanti = 2;
+      if (colonna.nome === "categoria") colonna.mancanti = 2;
+    }
+    return Promise.resolve(tabella);
+  };
+  h.fire("csv-file", "change", {target: {files: [{
+    name: "marcatori.csv", type: "text/csv", size: 95,
+    text: async () => "flag1,categoria,id\n1,rosso,A\n?,N/A,B\nNA,NA,C\n0,blu,D"
+  }]}});
+  await flush();
+  h.fire("adaptive-questions", "change", {target: h.customTarget(
+    ".semantic-answer", {answer: "significatoMancanti"}, "misto"
+  )});
+  const html = h.element("adaptive-questions").innerHTML;
+  assert.match(html, /class="missing-marker-setting"/);
+  assert.match(html, /data-missing-column="flag1" data-missing-marker="\?"/);
+  assert.match(html, /data-missing-column="flag1" data-missing-marker="na"/);
+  assert.match(html, /data-missing-column="categoria" data-missing-marker="n\/a"/);
+  const set = (colonna, marcatore, stato) => {
+    h.fire("adaptive-questions", "change", {target: h.customTarget(
+      ".missing-marker-setting",
+      {missingColumn: colonna, missingMarker: marcatore}, stato
+    )});
+  };
+  set("flag1", "?", "sconosciuto");
+  set("flag1", "na", "assenza");
+  set("categoria", "n/a", "non_applicabile");
+  set("categoria", "na", "assenza");
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  const scelte = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(scelte.significatoMancanti, "misto");
+  assert.equal(scelte.statiMancantiPerColonna.flag1["?"], "sconosciuto");
+  assert.equal(scelte.statiMancantiPerColonna.flag1.na, "assenza");
+  assert.equal(scelte.statiMancantiPerColonna.categoria["n/a"],
+    "non_applicabile");
+  assert.equal(scelte.statiMancantiPerColonna.categoria.na, "assenza");
+  assert.doesNotMatch(h.element("adaptive-questions").innerHTML,
+    /data-gower-key="mancantiPerColonna"/);
+}
+
 (async () => {
+  await testMarcatoriMancantiMisti();
   await testMancantiBinariPairwise();
   await testSerieTemporaliPerRiga();
   await testScelteTemporaliAvanzate();
