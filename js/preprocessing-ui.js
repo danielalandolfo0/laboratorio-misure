@@ -46,7 +46,7 @@
   }
 
   function disegnaMetodi() {
-    const selezionate = new Set(colonneNumericheSelezionate().map(c => c.nome));
+    const selezionate = new Set(colonneNumericheDaRiscalare().map(c => c.nome));
     $("scaling-body").innerHTML = risultato.colonne
       .map((colonna, indice) => ({ colonna, indice }))
       .filter(({ colonna }) => selezionate.has(colonna.nome))
@@ -208,10 +208,18 @@
         && ["numerica", "numerica_costante"].includes(colonna.tipo);
     });
   }
+  function colonneNumericheDaRiscalare() {
+    if (!risultato) return [];
+    return risultato.colonne.filter(colonna => {
+      const risposta = interpretazione.colonne[colonna.nome];
+      return risposta?.usa && risposta.ruolo === "quantita" &&
+        ["numerica", "numerica_costante"].includes(colonna.tipo);
+    });
+  }
   function tabellaInteramenteNumerica() {
     if (!risultato) return false;
     const incluse = risultato.colonne.filter(c => interpretazione.colonne[c.nome]?.usa);
-    return incluse.length > 0 && incluse.length === colonneNumericheSelezionate().length;
+    return incluse.length > 0 && incluse.length === colonneNumericheDaRiscalare().length;
   }
 
   async function mostraDiagnosiPreliminare() {
@@ -326,7 +334,7 @@
 
   function confermaRiscalamentoNumerico() {
     if (!tabellaInteramenteNumerica()) return;
-    const colonne = colonneNumericheSelezionate();
+    const colonne = colonneNumericheDaRiscalare();
     if (!colonne.length) return;
     riscalamentoConfermato = true;
     interpretazione.riscalamentoConfermato = true;
@@ -767,6 +775,7 @@
         <label>Che cosa formano insieme?<select class="group-type" aria-label="Tipo di ${escapeHtml(gruppo.nome)}">
           <option value="altro"${gruppo.tipo === "altro" ? " selected" : ""}>Da specificare</option>
           <option value="ripetute"${gruppo.tipo === "ripetute" ? " selected" : ""}>Misurazioni dello stesso profilo</option>
+          <option value="coordinate"${gruppo.tipo === "coordinate" ? " selected" : ""}>Coordinate quantitative da confrontare insieme</option>
           <option value="tempo"${gruppo.tipo === "tempo" ? " selected" : ""}>Osservazioni successive nel tempo</option>
           <option value="parti"${gruppo.tipo === "parti" ? " selected" : ""}>Parti dello stesso totale</option>
         </select></label>
@@ -1080,6 +1089,51 @@
         "Per esempio, percentuali, quote o quantità la cui somma ha un significato preciso.",
         [["si", "Sì, conta la composizione del totale"], ["no", "No, sono quantità indipendenti"], ["ignoto", "Non lo so"]]
       ));
+      // Ogni gruppo quantitativo confrontato per coordinate puo' usare
+      // una misura locale differente. La semantica viene confermata prima.
+      const misuraPerCoordinate = gruppo.tipo === "coordinate"
+        || (gruppo.tipo === "ripetute" && valoreRisposta(`somiglianza-${gruppo.id}`) === "valori_vicini")
+        || (gruppo.tipo === "tempo" && valoreRisposta(`ritardo-${gruppo.id}`) === "no")
+        || (gruppo.tipo === "parti" && valoreRisposta(`totale-${gruppo.id}`) === "no");
+      if (misuraPerCoordinate) {
+        const idMisura = interpretazione.misureGruppi?.[gruppo.id] ||
+          (gruppo.tipo === "coordinate" ? "" : "euclidean");
+        const opzioniGruppo = [
+          ["euclidean", "Euclidea: considera la grandezza complessiva degli scarti"],
+          ["manhattan", "Manhattan: somma gli scarti assoluti"],
+          ["chebyshev", "Chebyshev: considera lo scarto piu' grande"],
+          ["minkowski", "Minkowski: regola l'influenza degli scarti con q"],
+          ["weighted_minkowski", "Minkowski pesata: scegli q e l'importanza di ogni colonna"],
+        ];
+        const menuMisure = '<option value=""' + (idMisura === "" ? " selected" : "") +
+          '>Scegli una misura per questo gruppo</option>' +
+          opzioniGruppo.map(([id, label]) => '<option value="' + id + '"' +
+            (id === idMisura ? " selected" : "") + '>' + escapeHtml(label) + '</option>').join("");
+        let parametriMisura = "";
+        if (["minkowski", "weighted_minkowski"].includes(idMisura)) {
+          parametriMisura += '<label>Esponente q (almeno 1)' +
+            '<input type="text" class="group-measure-parameter" data-group-id="' +
+            escapeHtml(gruppo.id) + '" data-parameter="q" value="' +
+            escapeHtml(interpretazione.ordiniGruppi?.[gruppo.id] || "2") +
+            '" placeholder="2"></label>';
+        }
+        if (idMisura === "weighted_minkowski") {
+          parametriMisura += '<label>Pesi delle colonne, nell\'ordine: ' +
+            membri.map(profilo => escapeHtml(profilo.nome)).join(", ") +
+            '<input type="text" class="group-measure-parameter" data-group-id="' +
+            escapeHtml(gruppo.id) + '" data-parameter="pesi" value="' +
+            escapeHtml(interpretazione.pesiGruppi?.[gruppo.id] || membri.map(() => "1").join("; ")) +
+            '" placeholder="es. 1; 2; 0,5"></label>' +
+            '<p>Ogni peso deve essere strettamente positivo. Il numero dei pesi deve coincidere con quello delle colonne del gruppo.</p>';
+        }
+        domande.push('<div class="question-item"><label><strong>Quale misura vuoi usare per il gruppo “' +
+          escapeHtml(gruppo.nome) + '”?</strong><select class="group-measure-setting" data-group-id="' +
+          escapeHtml(gruppo.id) + '">' + menuMisure +
+          '</select></label><p>La scelta riguarda solo questo gruppo. Le altre caratteristiche ' +
+          'possono essere confrontate con misure differenti, poi riunite in una sola matrice finale.</p>' +
+          parametriMisura + '</div>');
+      }
+
       const colonneGruppo = membri.map(profilo =>
         risultato.colonne.find(colonna => colonna.nome === profilo.nome)
       );
@@ -1168,7 +1222,7 @@
     if (!risultato) return;
     try {
       if (!riscalamentoConfermato || !tabellaInteramenteNumerica()) return;
-      const colonne = colonneNumericheSelezionate().map(c => c.nome);
+      const colonne = colonneNumericheDaRiscalare().map(c => c.nome);
       const indici = colonne.map(nome => risultato.originale.intestazioni.indexOf(nome));
       const righe = risultato.trasformate.map(riga => indici.map(i => riga[i]));
       const csv = "\uFEFF" + await P.creaCsv(colonne, righe);
@@ -1277,6 +1331,20 @@
       disegnaQuestionario();
       return;
     }
+    if (evento.target.matches(".group-measure-setting")) {
+      if (!interpretazione.misureGruppi) interpretazione.misureGruppi = {};
+      interpretazione.misureGruppi[evento.target.dataset.groupId] = evento.target.value;
+      disegnaQuestionario();
+      return;
+    }
+    if (evento.target.matches(".group-measure-parameter")) {
+      const id = evento.target.dataset.groupId;
+      const chiave = evento.target.dataset.parameter === "q" ? "ordiniGruppi" : "pesiGruppi";
+      if (!interpretazione[chiave]) interpretazione[chiave] = {};
+      interpretazione[chiave][id] = evento.target.value;
+      nascondiPiano();
+      return;
+    }
     if (evento.target.matches(".numeric-missing-setting")) {
       if (!interpretazione.mancantiNumericiPerColonna) {
         interpretazione.mancantiNumericiPerColonna = {};
@@ -1300,7 +1368,14 @@
     }
     if (evento.target.matches(".semantic-answer, .semantic-input")) {
       interpretazione[evento.target.dataset.answer] = evento.target.value;
-      if (evento.target.matches(".semantic-answer")) disegnaQuestionario();
+      if (evento.target.matches(".semantic-answer")) {
+        const chiave = evento.target.dataset.answer || "";
+        if (/^(somiglianza|ritardo|totale)-/.test(chiave)) {
+          const idGruppo = chiave.replace(/^(somiglianza|ritardo|totale)-/, "");
+          if (interpretazione.misureGruppi) delete interpretazione.misureGruppi[idGruppo];
+        }
+        disegnaQuestionario();
+      }
       else nascondiPiano();
     }
   });
@@ -1331,7 +1406,10 @@
     const gruppo = interpretazione.gruppi.find(elemento => elemento.id === contenitore.dataset.groupId);
     if (!gruppo) return;
     if (evento.target.matches(".group-name")) gruppo.nome = evento.target.value.trim() || gruppo.nome;
-    if (evento.target.matches(".group-type")) gruppo.tipo = evento.target.value;
+    if (evento.target.matches(".group-type")) {
+      gruppo.tipo = evento.target.value;
+      if (interpretazione.misureGruppi) delete interpretazione.misureGruppi[gruppo.id];
+    }
     riscalamentoConfermato = false;
     interpretazione.riscalamentoConfermato = false;
     disegnaQuestionario();
