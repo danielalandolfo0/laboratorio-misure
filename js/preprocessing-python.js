@@ -16,7 +16,7 @@
     const pyodide = await loadPyodide({
       indexURL: "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/"
     });
-    const risposta = await fetch("python/preprocessing.py?v=20261114-fase7-distribuzione1", { cache: "no-cache" });
+    const risposta = await fetch("python/preprocessing.py?v=20261114-fase7-problemi1", { cache: "no-cache" });
     if (!risposta.ok) throw new Error("Non è stato possibile caricare il modulo Python di preprocessing.");
     await pyodide.runPythonAsync(await risposta.text());
     analizzaCsvPython = pyodide.globals.get("analizza_csv_json");
@@ -59,7 +59,13 @@
       JSON.stringify(scelte),
       JSON.stringify(interpretazione)
     ));
-    if (!risposta.ok) throw new Error(risposta.errore);
+    if (!risposta.ok) {
+      const errore = new Error(risposta.errore);
+      if (risposta.rapportoProblemi) {
+        errore.rapportoProblemi = risposta.rapportoProblemi;
+      }
+      throw errore;
+    }
     return risposta.matrice;
   }
 
