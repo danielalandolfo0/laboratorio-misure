@@ -771,7 +771,8 @@ piano_singolare = p.crea_piano_confronto(
     risposte_quantitative(dipendenzaCoordinate="si"),
 )
 assert piano_singolare["completo"] is False
-assert any("covarianza empirica non è invertibile" in avviso for avviso in piano_singolare["percorsi"][0]["avvisi"])
+assert any("Mahalanobis classica" in avviso and "covarianza" in avviso
+           for avviso in piano_singolare["percorsi"][0]["avvisi"])
 
 dati_con_negativi = p.prepara_tabella(p.leggi_csv("a,b\n-2,1\n-1,2\n1,4\n3,7"))
 piano_bray_non_valido = p.crea_piano_confronto(
