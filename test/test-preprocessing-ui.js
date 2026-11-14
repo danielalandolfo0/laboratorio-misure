@@ -409,7 +409,35 @@ async function testGruppoTemporaleConferme() {
   assert.equal(nuova.campionamentiTemporaliGruppi?.["gruppo-1"], undefined);
 }
 
+async function testRiscalamentoNumericoInTabellaMista() {
+  const h = createHarness();
+  h.fire("csv-file", "change", {target: {files: [{
+    name: "misto.csv", type: "text/csv", size: 120,
+    text: async () =>
+      "categoria,c1,c2,id\nrosso,1,10,A\nblu,2,20,B\nverde,3,30,C"
+  }]}});
+  await flush();
+  // La categoria resta inclusa: non tutte le colonne hanno ruolo
+  // quantitativo, ma c1 e c2 costituiscono due variabili numeriche.
+  assert.equal(h.element("scaling-wrap").hidden, false,
+    "La presenza di categorie non deve nascondere il riscalamento numerico.");
+  assert.equal(h.element("prepare-comparison-plan").hidden, true,
+    "Prima del piano le due colonne richiedono una conferma.");
+  assert.match(h.element("scaling-body").innerHTML, /c1/);
+  assert.match(h.element("scaling-body").innerHTML, /c2/);
+  h.fire("confirm-numeric-scaling", "click");
+  assert.equal(h.element("prepare-comparison-plan").hidden, false);
+  assert.equal(h.element("view-work").disabled, false);
+  assert.match(h.element("preview-head").innerHTML, /c1/);
+  assert.doesNotMatch(h.element("preview-head").innerHTML, /categoria/);
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  assert.equal(h.observations.planCalls.at(-1).interpretazione.riscalamentoConfermato, true,
+    "La conferma deve arrivare realmente al motore di confronto.");
+}
+
 (async () => {
+  await testRiscalamentoNumericoInTabellaMista();
   await testStaleFiles();
   await testStaleFileRead();
   await testStalePlanAndMatrix();

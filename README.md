@@ -415,6 +415,30 @@ necessaria una verifica manuale di layout, accessibilità,
 gestione della tastiera, esportazione e percorso completo su
 GitHub Pages.
 
+### Collaudo trasversale con quattro percorsi simultanei
+
+Il file \`examples/collaudo/test_integrato_gower_gruppi_mancanti.csv\`
+contiene sei osservazioni e quattro tipi di confronto:
+Gower con dissimilarità nominali e intervalli ordinali personalizzati,
+Hamming su sequenze simboliche, Minkowski pesata con coordinate
+mancanti e trasformazione \`log(1+x)\`, Hellinger su probabilità.
+
+Il test \`test/test_integrazione.py\`, incluso in \`npm test\`,
+verifica in modo indipendente le formule delle distanze locali,
+la normalizzazione robusta del percorso numerico, la media pesata
+delle sole distanze disponibili, la completa matrice CSV, i
+cambi di misura e l'invarianza per permutazione delle righe.
+La presenza di categorie non impedisce più di confermare il
+riscalamento dei gruppi quantitativi: la conferma riguarda le
+colonne numeriche selezionate, senza applicarla automaticamente
+a Gower o Hellinger.
+
+Il caso è intenzionalmente non banale: due righe non hanno coordinate
+numeriche confrontabili e una terza non ne ha alcuna, ma gli altri
+percorsi possono ancora fornire una matrice globale completa.
+Questo test non dimostra la correttezza di ogni combinazione possibile:
+è una regressione riproducibile di un percorso trasversale complesso.
+
 ## Matrice complessiva con più percorsi
 
 Ogni percorso produce prima la propria matrice. Gower, i confronti 0/1 e le

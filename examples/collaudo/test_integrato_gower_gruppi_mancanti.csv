@@ -1,0 +1,7 @@
+livello,categoria,c1,c2,p1,p2,p3,codice,id
+basso,rosso,1,10,1,0,0,AAA,A
+medio,blu,2,12,0,1,0,AAB,B
+alto,verde,,15,0,0,1,ABB,C
+basso,blu,10,,0.5,0.5,0,BBA,D
+alto,rosso,,,0,0.5,0.5,BBB,E
+medio,verde,3,17,0.25,0.25,0.5,ABA,F
