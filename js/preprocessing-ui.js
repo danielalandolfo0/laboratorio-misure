@@ -1106,15 +1106,17 @@
       const tipi = membri.map(nome => risultato.colonne.find(colonna => colonna.nome === nome)?.tipo);
       const tutteNumeriche = tipi.length >= 2 && tipi.every(tipo =>
         tipo === "numerica" || tipo === "numerica_costante" ||
-        (gruppo.tipo === "distribuzione" && tipo === "binaria")
+        (["distribuzione", "tempo_coppie"].includes(gruppo.tipo) && tipo === "binaria")
       );
       const tutteQuantitative = tutteNumeriche && membri.every(nome => interpretazione.colonne[nome]?.ruolo === "quantita");
       const tutteBinarie = membri.length >= 2 && membri.every((nome, indice) =>
         ["binaria", "non_numerica", "numerica_costante"].includes(tipi[indice]) &&
         ["binaria", "presenza"].includes(interpretazione.colonne[nome]?.ruolo)
       );
-      const nota = membri.length < 2
-        ? "Assegna almeno due colonne a questo gruppo."
+      const nota = membri.length < (gruppo.tipo === "tempo_coppie" ? 4 : 2)
+        ? (gruppo.tipo === "tempo_coppie"
+          ? "Assegna almeno quattro colonne (due coppie tempo-valore)."
+          : "Assegna almeno due colonne a questo gruppo.")
         : gruppo.tipo === "vettore_binario" && !tutteBinarie
           ? "Per questo gruppo servono risposte binarie o presenze, con stati 0/1 oppure sì/no."
           : !tutteQuantitative && !["altro", "vettore_binario"].includes(gruppo.tipo)
@@ -1126,7 +1128,8 @@
           <option value="altro"${gruppo.tipo === "altro" ? " selected" : ""}>Da specificare</option>
           <option value="ripetute"${gruppo.tipo === "ripetute" ? " selected" : ""}>Misurazioni dello stesso profilo</option>
           <option value="coordinate"${gruppo.tipo === "coordinate" ? " selected" : ""}>Coordinate quantitative da confrontare insieme</option>
-          <option value="tempo"${gruppo.tipo === "tempo" ? " selected" : ""}>Osservazioni successive nel tempo</option>
+          <option value="tempo"${gruppo.tipo === "tempo" ? " selected" : ""}>Serie con gli stessi istanti per tutte le righe</option>
+          <option value="tempo_coppie"${gruppo.tipo === "tempo_coppie" ? " selected" : ""}>Serie con istanti diversi per ogni riga (coppie tempo-valore)</option>
           <option value="parti"${gruppo.tipo === "parti" ? " selected" : ""}>Parti dello stesso totale (Aitchison)</option>
           <option value="distribuzione"${gruppo.tipo === "distribuzione" ? " selected" : ""}>Distribuzione di probabilità o istogramma</option>
           <option value="vettore_binario"${gruppo.tipo === "vettore_binario" ? " selected" : ""}>Insieme di presenze/assenze da confrontare come vettore binario</option>
@@ -1644,7 +1647,7 @@
       const tipi = membri.map(profilo => risultato.colonne.find(colonna => colonna.nome === profilo.nome)?.tipo);
       const valido = membri.length >= 2 && membri.every((profilo, indice) =>
         (["numerica", "numerica_costante"].includes(tipi[indice]) ||
-          (gruppo.tipo === "distribuzione" && tipi[indice] === "binaria")) &&
+          (["distribuzione", "tempo_coppie"].includes(gruppo.tipo) && tipi[indice] === "binaria")) &&
           interpretazione.colonne[profilo.nome]?.ruolo === "quantita");
       if (gruppo.tipo === "vettore_binario") {
         const binarie = membri.length >= 2 && membri.every((profilo, indice) =>
@@ -1675,6 +1678,114 @@
             [["escludi_percorso", "Non usare questo blocco per una riga con vuoti"],
              ["zero", "Confermo che ogni vuoto rappresenta assenza (zero)"]]
           ));
+        }
+        return;
+      }
+
+      if (gruppo.tipo === "tempo_coppie") {
+        const corrette = membri.length >= 4 && membri.length % 2 === 0 &&
+          membri.every((profilo, i) =>
+            ["numerica", "numerica_costante", "binaria"].includes(tipi[i]) &&
+            interpretazione.colonne[profilo.nome]?.ruolo === "quantita"
+          );
+        if (!corrette) {
+          domande.push(notaAutomatica("Serie temporale per riga non configurabile",
+            "Assegna almeno quattro colonne numeriche al gruppo, "
+            + "con ruolo «quantità numerica» anche per i tempi 0/1."));
+          return;
+        }
+        const id = gruppo.id;
+        const impostato = chiave => interpretazione[chiave]?.[id] ?? "";
+        const campo = (chiave, titolo, esempio) =>
+          '<label>' + escapeHtml(titolo) + '<input type="text" ' +
+          'class="temporal-parameter" data-temporal-key="' + chiave +
+          '" data-group-id="' + escapeHtml(id) + '" value="' +
+          escapeHtml(impostato(chiave)) + '" placeholder="' +
+          escapeHtml(esempio) + '"></label>';
+        const menu = (chiave, titolo, opzioni) =>
+          '<label>' + escapeHtml(titolo) +
+          '<select class="temporal-option" data-temporal-key="' + chiave +
+          '" data-group-id="' + escapeHtml(id) + '">' +
+          opzioni.map(([value, label]) =>
+            '<option value="' + value + '"' +
+            (impostato(chiave) === value ? " selected" : "") + '>' +
+            escapeHtml(label) + '</option>').join("") + '</select></label>';
+        const nomi = membri.map(profilo => profilo.nome);
+        const esempio = [];
+        for (let i = 0; i < nomi.length; i += 2) {
+          esempio.push(nomi[i] + ":" + nomi[i + 1]);
+        }
+        domande.push('<div class="question-item"><strong>Serie a tempi per riga — ' +
+          escapeHtml(gruppo.nome) + '</strong><p>Ogni riga rappresenta una serie ' +
+          'di coppie (tempo, valore) con timestamp propri, non una griglia comune. ' +
+          'Conferma l’ordine delle coppie e assegna ciascuna colonna una volta sola. ' +
+          'I timestamp di ciascuna riga devono essere strettamente crescenti. ' +
+          'Non vengono ricampionate le serie.</p>' +
+          '<p>Colonne disponibili: ' + nomi.map(escapeHtml).join(", ") + '</p>' +
+          campo("coppieTemporaliGruppi", "Coppie cronologiche tempo:valore separate da ;",
+            esempio.join("; ")) +
+          menu("unitaTemporaleGruppi", "Unità fisica di tutti i timestamp",
+            [["", "Scegli unità"], ["secondi", "Secondi"], ["minuti", "Minuti"],
+             ["ore", "Ore"], ["giorni", "Giorni"], ["altre", "Altre unità"]]) +
+          '</div>');
+        const metodo = impostato("metodiAllineamentoTemporaleGruppi");
+        domande.push('<div class="question-item">' +
+          menu("metodiAllineamentoTemporaleGruppi", "Come confrontare le serie?",
+            [["", "Scegli la misura"], ["dtw", "DTW a costo medio minimo esatto"],
+             ["lcss", "LCSS su sottosequenze con tolleranze"]]) +
+          '<p>Il punto-a-punto e le pendenze richiedono istanti comparabili; ' +
+          'in questo formato sono disponibili DTW e LCSS.</p></div>');
+        if (metodo === "dtw") {
+          domande.push('<div class="question-item"><strong>Scelte DTW</strong>' +
+            menu("costiDTWGruppi", "Costo locale",
+              [["", "Scegli"], ["assoluto", "Scarto assoluto"],
+               ["quadratico", "Scarto quadratico"]]) +
+            campo("finestreDTWGruppi", "Finestra |indice i−indice j|",
+              "vuoto = nessun vincolo") +
+            menu("penalizzazioniDTWGruppi",
+              "Vuoi penalizzare lo sfasamento fisico tra i timestamp?",
+              [["", "Scegli"], ["si", "Sì, aggiungi λ·|t−s|/τ"],
+               ["no", "No, confronta solo valori e ordine degli eventi"]]) +
+            (impostato("penalizzazioniDTWGruppi") === "si"
+              ? campo("pesiRitardoDTWGruppi", "Peso della penalità λ > 0", "es. 1") +
+                campo("scaleRitardoDTWGruppi", "Scala temporale τ > 0", "es. 2")
+              : "") +
+            '<p>La finestra è simmetrica e non viene allargata automaticamente. ' +
+            'Il sito verifica che esistano cammini per tutte le coppie.</p></div>');
+        } else if (metodo === "lcss") {
+          domande.push('<div class="question-item"><strong>Scelte LCSS</strong>' +
+            campo("tolleranzeValoreLCSSGruppi", "Tolleranza valori εv ≥ 0", "es. 0.5") +
+            campo("tolleranzeTempoLCSSGruppi", "Tolleranza tempi εt ≥ 0", "es. 2") +
+            '<p>Due eventi possono coincidere solo entro entrambe le tolleranze; ' +
+            'la dissimilarità è 1−LCSS/min(lunghezze).</p></div>');
+        }
+        if (membri.some(profilo =>
+          (risultato.colonne.find(c => c.nome === profilo.nome)?.mancanti || 0) > 0
+        )) {
+          domande.push(domandaAdattiva(
+            'mancanti-gruppo-' + id,
+            'Come trattare le coppie con celle vuote nel gruppo “' +
+              escapeHtml(gruppo.nome) + '”?',
+            "Solo una coppia completamente vuota può essere ignorata. " +
+            "Un tempo senza valore (o viceversa) resta un errore; " +
+            "non vengono creati campioni fittizi.",
+            [["salta_slot", "Ometti le coppie con entrambi i campi vuoti"],
+             ["escludi_percorso", "Escludi l’intera serie della riga se manca un campo"]]
+          ));
+        }
+        const riscalamenti = riscalamentoConfermato && membri.some(profilo => {
+          const c = risultato.colonne.find(col => col.nome === profilo.nome);
+          return c?.metodo && !["nessuno", "costante"].includes(c.metodo);
+        });
+        if (riscalamenti) {
+          const conferma = interpretazione.confermeValoriOriginaliGruppi?.[id] || "";
+          domande.push('<div class="question-item"><label><strong>' +
+            'Confermi che tempi e valori di questo gruppo restino originali?</strong>' +
+            '<p>Il riscalamento preliminare non verrà applicato al confronto temporale.</p>' +
+            '<select class="group-preprocessing-confirmation" data-group-id="' +
+            escapeHtml(id) + '" data-kind="originali"><option value="">Conferma necessaria</option>' +
+            '<option value="si"' + (conferma === "si" ? " selected" : "") +
+            '>Confermo i valori originali</option></select></label></div>');
         }
         return;
       }
@@ -2428,7 +2539,7 @@
       "costiDTWGruppi", "finestreDTWGruppi",
       "penalizzazioniDTWGruppi", "pesiRitardoDTWGruppi",
       "scaleRitardoDTWGruppi", "tolleranzeValoreLCSSGruppi",
-      "tolleranzeTempoLCSSGruppi"
+      "tolleranzeTempoLCSSGruppi", "coppieTemporaliGruppi"
     ]) {
       if (interpretazione[chiave]) delete interpretazione[chiave][idGruppo];
     }

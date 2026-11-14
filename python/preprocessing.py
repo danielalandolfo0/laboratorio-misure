@@ -764,13 +764,18 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
                  "parti": "Parti dello stesso totale", "coordinate": "Coordinate quantitative da confrontare insieme",
                  "distribuzione": "Distribuzioni di probabilità o istogrammi",
                  "vettore_binario": "Vettore di presenze e assenze",
+                 "tempo_coppie": "Serie con timestamp diversi per ogni riga",
                  "altro": "Gruppo di caratteristiche"}.get(tipo_gruppo, "Gruppo di caratteristiche")
     id_gruppo = str(gruppo.get("id", ""))
     id_misura: str | None = None
     parametri: dict[str, Any] = {}
 
-    if len(membri) < 2:
-        misura, motivo = "Da completare", "Un gruppo deve contenere almeno due colonne."
+    if len(membri) < (4 if tipo_gruppo == "tempo_coppie" else 2):
+        misura, motivo = "Da completare", (
+            "Una serie con coppie tempo-valore richiede almeno due coppie, cioè quattro colonne."
+            if tipo_gruppo == "tempo_coppie" else
+            "Un gruppo deve contenere almeno due colonne."
+        )
         avvisi.append("Assegna almeno due colonne al gruppo oppure rimuovilo.")
         stato = "da_completare"
     else:
@@ -783,7 +788,7 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
             "numerica", "numerica_costante", "binaria"
         }
         quantitativo = (
-            (numerico_distribuzione if tipo_gruppo == "distribuzione" else numerico)
+            (numerico_distribuzione if tipo_gruppo in {"distribuzione", "tempo_coppie"} else numerico)
             and all(ruoli.get(m) == "quantita" for m in membri)
         )
         binario = (
@@ -791,7 +796,7 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
             and tipi <= {"binaria", "numerica_costante", "non_numerica"}
             and all(ruoli.get(m) in {"binaria", "presenza"} for m in membri)
         )
-        if tipo_gruppo in {"ripetute", "tempo", "parti", "coordinate", "distribuzione"} and not quantitativo:
+        if tipo_gruppo in {"ripetute", "tempo", "parti", "coordinate", "distribuzione", "tempo_coppie"} and not quantitativo:
             misura, motivo = "Da decidere", "Questa struttura richiede quantità numeriche, non codici o livelli ordinali."
             avvisi.append("Controlla il significato e il tipo delle colonne del gruppo.")
             stato = "da_completare"
@@ -832,6 +837,32 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
                     "jaccard": "Considera le co-presenze e i disaccordi, ignorando le assenze comuni; due vettori nulli hanno dissimilarità zero per convenzione.",
                     "dice": "Dà doppio peso alle co-presenze e ignora le assenze comuni; non è definita per un vettore nullo confrontato con se stesso.",
                 }[id_misura]
+        elif tipo_gruppo == "tempo_coppie":
+            # Timestamp e numero dei campioni sono propri di ogni singola riga.
+            allineamenti = interpretazione.get("metodiAllineamentoTemporaleGruppi") or {}
+            scelta = allineamenti.get(id_gruppo, "") if isinstance(allineamenti, dict) else ""
+            if scelta == "dtw":
+                misura = "Dynamic Time Warping"
+                id_misura = "dtw_eventi"
+                motivo = (
+                    "Ogni oggetto è una sequenza di coppie (tempo, valore). "
+                    "La DTW minimizza il costo medio effettivo del cammino; "
+                    "i timestamp entrano nel costo solo con penalità confermata."
+                )
+            elif scelta == "lcss":
+                misura = "Dissimilarità LCSS normalizzata"
+                id_misura = "lcss_eventi"
+                motivo = (
+                    "Ogni oggetto ha la propria sequenza cronologica; LCSS "
+                    "richiede tolleranze dichiarate su valori e timestamp fisici."
+                )
+            else:
+                misura, motivo = "Da decidere", (
+                    "Scegli DTW oppure LCSS; punto-a-punto e pendenze "
+                    "richiederebbero una griglia comune o interpolazione esplicita."
+                )
+                avvisi.append("Scegli DTW oppure LCSS per le serie a tempi per riga.")
+                stato = "da_completare"
         elif tipo_gruppo == "coordinate":
             misura, motivo = "Da decidere", (
                 "Scegli esplicitamente la misura per questo gruppo di coordinate quantitative."
@@ -1046,6 +1077,74 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
 
     colonne_nell_ordine = list(membri)
     campionamento_temporale: str | None = None
+    if tipo_gruppo == "tempo_coppie" and len(membri) >= 4:
+        testo_coppie = (interpretazione.get("coppieTemporaliGruppi") or {}).get(id_gruppo, "")
+        unita = (interpretazione.get("unitaTemporaleGruppi") or {}).get(id_gruppo, "")
+        try:
+            coppie = _interpreta_coppie_temporali(testo_coppie, membri)
+            parametri["coppie"] = coppie
+            colonne_nell_ordine = [colonna for coppia in coppie for colonna in coppia]
+        except ValueError as errore:
+            stato = "da_completare"
+            avvisi.append(str(errore))
+        if unita not in {"secondi", "minuti", "ore", "giorni", "altre"}:
+            stato = "da_completare"
+            avvisi.append("Indica un'unica unità per i timestamp di tutte le righe.")
+        else:
+            parametri["unitaTempo"] = unita
+        parametri["griglia"] = "per_riga"
+        if misura == "Dynamic Time Warping":
+            costo = (interpretazione.get("costiDTWGruppi") or {}).get(id_gruppo, "")
+            if costo not in {"assoluto", "quadratico"}:
+                stato = "da_completare"
+                avvisi.append("Scegli esplicitamente il costo locale DTW.")
+            else:
+                parametri["costoLocale"] = costo
+            finestra = (interpretazione.get("finestreDTWGruppi") or {}).get(id_gruppo, "")
+            if not isinstance(finestra, str) or (
+                finestra.strip() and not finestra.strip().isdigit()
+            ):
+                stato = "da_completare"
+                avvisi.append("La finestra DTW deve essere vuota oppure un intero non negativo.")
+            elif finestra.strip():
+                parametri["finestra"] = int(finestra.strip())
+            penalita = (interpretazione.get("penalizzazioniDTWGruppi") or {}).get(id_gruppo, "")
+            if penalita not in {"si", "no"}:
+                stato = "da_completare"
+                avvisi.append("Conferma se DTW deve penalizzare lo sfasamento temporale.")
+            elif penalita == "si":
+                try:
+                    lam = float(str((interpretazione.get("pesiRitardoDTWGruppi") or {}).get(id_gruppo, "")).replace(",", "."))
+                    tau = float(str((interpretazione.get("scaleRitardoDTWGruppi") or {}).get(id_gruppo, "")).replace(",", "."))
+                except (ValueError, TypeError):
+                    lam, tau = math.nan, math.nan
+                if not math.isfinite(lam) or lam <= 0:
+                    avvisi.append("Per penalizzare lo sfasamento indica λ > 0.")
+                    stato = "da_completare"
+                elif not math.isfinite(tau) or tau <= 0:
+                    avvisi.append("Indica una scala temporale τ > 0 nelle unità dichiarate.")
+                    stato = "da_completare"
+                else:
+                    parametri["lambdaRitardo"] = lam
+                    parametri["tauRitardo"] = tau
+            else:
+                parametri["timestampIgnoratiNelCosto"] = True
+                motivo += (
+                    " Hai confermato che lo sfasamento fisico non conta nel costo: "
+                    "i timestamp servono solo per ordinare i campioni."
+                )
+        elif misura == "Dissimilarità LCSS normalizzata":
+            try:
+                eps = float(str((interpretazione.get("tolleranzeValoreLCSSGruppi") or {}).get(id_gruppo, "")).replace(",", "."))
+                tol_t = float(str((interpretazione.get("tolleranzeTempoLCSSGruppi") or {}).get(id_gruppo, "")).replace(",", "."))
+            except (ValueError, TypeError):
+                eps, tol_t = math.nan, math.nan
+            if not all(math.isfinite(v) and v >= 0 for v in (eps, tol_t)):
+                stato = "da_completare"
+                avvisi.append("LCSS richiede tolleranze finite e non negative per valori e tempo.")
+            else:
+                parametri["tolleranzaValori"] = eps
+                parametri["tolleranzaTempo"] = tol_t
     if tipo_gruppo == "tempo" and len(membri) >= 2:
         ordini = interpretazione.get("ordiniTemporaliGruppi") or {}
         campionamenti = interpretazione.get("campionamentiTemporaliGruppi") or {}
@@ -2377,6 +2476,28 @@ def _politica_mancanti(
         id_gruppo = percorso.get("idGruppo", "")
         tipo_gruppo = percorso.get("tipoGruppo", "altro")
         strategia = interpretazione.get(f"mancanti-gruppo-{id_gruppo}", "")
+        if tipo_gruppo == "tempo_coppie":
+            if strategia not in {"salta_slot", "escludi_percorso"}:
+                return {
+                    "presenza": True, "strategia": "da_definire", "pronta": False,
+                    "colonne": colonne,
+                    "descrizione": (
+                        "Sono presenti coppie con celle vuote: scegli se ignorare "
+                        "soltanto le coppie completamente vuote o escludere l'intera "
+                        "serie della riga. Timestamp e valori non sono imputati."
+                    ),
+                }
+            return {
+                "presenza": True, "strategia": strategia, "pronta": True,
+                "colonne": colonne,
+                "descrizione": (
+                    "Sono ignorate soltanto coppie tempo-valore entrambe vuote. "
+                    "Una coppia parziale è un errore e non viene ricostruita."
+                    if strategia == "salta_slot" else
+                    "Una riga con una qualsiasi coppia vuota o parziale "
+                    "non contribuisce a questo percorso temporale."
+                ),
+            }
         if tipo_gruppo == "vettore_binario":
             if strategia not in {"escludi_percorso", "zero"}:
                 return {
@@ -3386,6 +3507,7 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
     for percorso in percorsi:
         _verifica_distribuzione_percorso(percorso, risultato)
         _verifica_vettore_binario_percorso(percorso, risultato)
+        _verifica_serie_a_coppie_percorso(percorso, risultato)
         _verifica_specializzati_percorso(percorso, risultato)
     # Hamming richiede che tutte le sequenze confrontabili abbiano una
     # lunghezza comune. Il controllo precede il calcolo; non si converte
@@ -4685,6 +4807,122 @@ def _kendall_tau_b(x: list[float], y: list[float]) -> float | None:
 
 
 
+
+
+def _interpreta_coppie_temporali(
+    descrizione: str, colonne: list[str],
+) -> list[list[str]]:
+    """Appaiamento dichiarato dall'utente, senza inferenza dalle intestazioni."""
+    if not isinstance(descrizione, str) or not descrizione.strip():
+        raise ValueError(
+            "Indica le coppie in ordine come tempo1:valore1; tempo2:valore2, "
+            "includendo tutte e sole le colonne del gruppo."
+        )
+    parti = [s.strip() for s in descrizione.split(";")]
+    coppie = [[nome.strip() for nome in parte.split(":")] for parte in parti]
+    if len(coppie) < 2 or any(
+        len(coppia) != 2 or any(not nome for nome in coppia) for coppia in coppie
+    ) or len(coppie) * 2 != len(colonne):
+        raise ValueError(
+            "Servono almeno due coppie tempo:valore, separate da punto e virgola."
+        )
+    usate = [nome for coppia in coppie for nome in coppia]
+    if len(set(usate)) != len(usate) or set(usate) != set(colonne):
+        raise ValueError(
+            "Ogni colonna del gruppo deve comparire esattamente una volta, "
+            "come tempo o valore: correggi le coppie duplicate o mancanti."
+        )
+    return coppie
+
+
+def _serie_da_coppie(
+    tabella: dict[str, Any], percorso: dict[str, Any],
+) -> list[dict[str, list[float]] | None]:
+    """Serie univariate con tempi individuali. Nessuna imputazione tacita."""
+    coppie = percorso.get("parametri", {}).get("coppie", [])
+    strategia = percorso["mancanti"]["strategia"]
+    indici = {nome: i for i, nome in enumerate(tabella["intestazioni"])}
+    if len(coppie) < 2:
+        raise ValueError("Non sono state confermate almeno due coppie tempo-valore.")
+    serie: list[dict[str, list[float]] | None] = []
+    for numero_riga, riga in enumerate(tabella["righe"], 1):
+        tempi: list[float] = []
+        valori: list[float] = []
+        esclusa = False
+        for nome_t, nome_v in coppie:
+            t_raw, v_raw = riga[indici[nome_t]], riga[indici[nome_v]]
+            manca_t, manca_v = mancante(t_raw), mancante(v_raw)
+            if manca_t or manca_v:
+                if strategia == "escludi_percorso":
+                    esclusa = True
+                    break
+                if manca_t and manca_v and strategia == "salta_slot":
+                    continue
+                if manca_t != manca_v:
+                    raise ValueError(
+                        f"Riga {numero_riga}, coppia {nome_t}:{nome_v}: "
+                        "manca solo il timestamp o solo il valore. "
+                        "Correggi il CSV oppure escludi esplicitamente l'intera serie."
+                    )
+                raise ValueError(
+                    f"Riga {numero_riga}: conferma la politica per le coppie vuote."
+                )
+            t = leggi_numero(t_raw, tabella["separatore"])
+            v = leggi_numero(v_raw, tabella["separatore"])
+            if t is INVALIDO or t is None or v is INVALIDO or v is None:
+                raise ValueError(
+                    f"Riga {numero_riga}, coppia {nome_t}:{nome_v}: "
+                    "timestamp e valori devono essere numerici e finiti."
+                )
+            if tempi and float(t) <= tempi[-1]:
+                raise ValueError(
+                    f"Riga {numero_riga}: timestamp non strettamente crescenti "
+                    "nell'ordine delle coppie confermato."
+                )
+            tempi.append(float(t))
+            valori.append(float(v))
+        if esclusa:
+            serie.append(None)
+        elif not tempi:
+            raise ValueError(
+                f"Riga {numero_riga}: la serie è completamente vuota. "
+                "Nessuna dissimilarità viene inventata: correggi il CSV "
+                "oppure escludi il percorso della riga."
+            )
+        else:
+            serie.append({"tempi": tempi, "valori": valori})
+    return serie
+
+
+def _verifica_serie_a_coppie_percorso(
+    percorso: dict[str, Any], risultato: dict[str, Any],
+) -> None:
+    if percorso.get("tipoGruppo") != "tempo_coppie" or percorso["stato"] == "da_completare":
+        return
+    try:
+        serie = _serie_da_coppie(risultato["originale"], percorso)
+        valide = [s for s in serie if s is not None]
+        if len(valide) < 2:
+            raise ValueError("Restano meno di due serie non vuote confrontabili.")
+        params = percorso["parametri"]
+        if percorso["metodo"] == "Dynamic Time Warping" and "finestra" in params:
+            lunghezze = [len(s["valori"]) for s in valide]
+            if max(lunghezze) - min(lunghezze) > params["finestra"]:
+                raise ValueError(
+                    "La finestra DTW dichiarata rende impossibile il cammino "
+                    "tra almeno due serie di lunghezza diversa."
+                )
+        percorso["righeSerieValide"] = len(valide)
+        percorso["lunghezzeSerie"] = [
+            len(s["valori"]) if s is not None else None for s in serie
+        ]
+    except ValueError as errore:
+        percorso["stato"] = "da_completare"
+        percorso["calcolo"]["disponibile"] = False
+        percorso["calcolo"]["descrizione"] = "Controlla le coppie temporali."
+        percorso.setdefault("avvisi", []).append(str(errore))
+
+
 def _leggi_griglia_temporale(testo: str, numero: int) -> list[float]:
     """Coordinate fisiche della stessa griglia per tutte le osservazioni."""
     parti = [s.strip() for s in testo.split(";")]
@@ -4808,11 +5046,14 @@ def _distanza_dtw(
     peso_ritardo = parametri.get("lambdaRitardo")
     tau = parametri.get("tauRitardo")
     tempi = parametri.get("tempi", [])
+    tempi_x = parametri.get("tempiX", tempi)
+    tempi_y = parametri.get("tempiY", tempi)
     if peso_ritardo is not None:
         if (not math.isfinite(peso_ritardo) or peso_ritardo < 0
                 or not isinstance(tau, (int, float))
                 or not math.isfinite(tau) or tau <= 0
-                or len(tempi) != n or len(tempi) != m):
+                or len(tempi_x) != n or len(tempi_y) != m
+                or any(not math.isfinite(t) for t in [*tempi_x, *tempi_y])):
             raise ValueError("La penalità DTW richiede λ≥0, τ>0 e timestamp completi.")
     if n * m * (n + m) > 4_000_000:
         raise ValueError(
@@ -4831,7 +5072,7 @@ def _distanza_dtw(
             scarto = abs(x[i] - y[j])
             costo_locale = scarto if costo_tipo == "assoluto" else scarto ** 2
             if peso_ritardo is not None:
-                costo_locale += peso_ritardo * abs(tempi[i] - tempi[j]) / tau
+                costo_locale += peso_ritardo * abs(tempi_x[i] - tempi_y[j]) / tau
             if i == 0 and j == 0:
                 tabella[i][j][1] = costo_locale
                 continue
@@ -5035,6 +5276,34 @@ def _calcola_matrice_specializzata(
                 matrice[i][k] = distanza
                 matrice[k][i] = distanza
         limite: float | None = 1.0
+    elif percorso.get("tipoGruppo") == "tempo_coppie":
+        serie = _serie_da_coppie(tabella, percorso)
+        params = percorso.get("parametri", {})
+        for i in range(n):
+            for k in range(i + 1, n):
+                if serie[i] is None or serie[k] is None:
+                    distanza = None
+                elif metodo == "Dynamic Time Warping":
+                    config = {
+                        chiave: params[chiave] for chiave in
+                        ("costoLocale", "finestra", "lambdaRitardo", "tauRitardo")
+                        if chiave in params
+                    }
+                    config["tempiX"] = serie[i]["tempi"]
+                    config["tempiY"] = serie[k]["tempi"]
+                    distanza = _distanza_dtw(
+                        serie[i]["valori"], serie[k]["valori"], config
+                    )
+                elif metodo == "Dissimilarità LCSS normalizzata":
+                    distanza = _distanza_lcss(
+                        serie[i]["valori"], serie[k]["valori"],
+                        serie[i]["tempi"], serie[k]["tempi"],
+                        params["tolleranzaValori"], params["tolleranzaTempo"]
+                    )
+                else:
+                    raise ValueError("Scegli DTW o LCSS per le serie a tempi individuali.")
+                matrice[i][k] = matrice[k][i] = distanza
+        limite = 1.0 if metodo == "Dissimilarità LCSS normalizzata" else None
     elif percorso.get("tipoGruppo") == "vettore_binario":
         vettori_binari = _decodifica_vettori_binari(risultato, percorso)
         for i in range(n):
@@ -5196,6 +5465,29 @@ def _calcola_matrice_specializzata(
             f"({percorso['parametri']['unita']}); "
             "valori richiesti in [0,P), senza correzioni modulari implicite."
         )
+    if percorso.get("tipoGruppo") == "tempo_coppie":
+        params = percorso.get("parametri", {})
+        nota += (
+            " I timestamp sono letti da coppie di colonne esplicite, "
+            "diverse per ciascuna riga e strettamente crescenti. "
+            f"Unità: {params.get('unitaTempo')}. "
+            "Nessun ricampionamento o imputazione implicita."
+        )
+        if metodo == "Dynamic Time Warping":
+            nota += (
+                " DTW a minimo costo medio esatto, costo locale "
+                f"{params.get('costoLocale')}; finestra={params.get('finestra', 'nessuna')}; "
+                f"λ={params.get('lambdaRitardo', 'non applicato')}; "
+                f"τ={params.get('tauRitardo', 'non applicato')}."
+            )
+            if params.get("timestampIgnoratiNelCosto"):
+                nota += " Lo sfasamento temporale è ignorato per scelta esplicita."
+        else:
+            nota += (
+                " LCSS con tolleranze su valore e tempo "
+                f"({params.get('tolleranzaValori')}, {params.get('tolleranzaTempo')}); "
+                "normalizzazione 1−LCSS/min(lunghezze)."
+            )
     if percorso.get("tipoGruppo") == "vettore_binario":
         nota += (
             " Il gruppo confronta simultaneamente tutte le colonne come "
