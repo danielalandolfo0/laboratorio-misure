@@ -122,6 +122,28 @@ async function mobile(browser){
     const matrix=fs.readFileSync(await downloaded.path(),"utf8").trim().split(/\r?\n/);
     assert.equal(matrix.length,5);
     fs.writeFileSync(path.join(OUT,"numerico-mobile-export.csv"),matrix.join("\n"));
+    const layout = await page.evaluate(() => {
+      const root = document.documentElement;
+      const visible = [...document.querySelectorAll(
+        ".data-prep input, .data-prep select, .data-prep textarea"
+      )].filter(el => el.getClientRects().length && getComputedStyle(el).visibility !== "hidden");
+      const withoutLabel = visible.filter(el =>
+        !(el.labels?.length || el.closest("label") ||
+          el.getAttribute("aria-label") || el.getAttribute("aria-labelledby"))
+      ).map(el => el.id || el.className);
+      return {
+        innerWidth: window.innerWidth,
+        pageWidth: root.scrollWidth,
+        visibleControls: visible.length,
+        withoutLabel
+      };
+    });
+    fs.writeFileSync(path.join(OUT,"mobile-layout.json"), JSON.stringify(layout,null,2));
+    assert.ok(layout.pageWidth <= layout.innerWidth + 2,
+      "La pagina non deve avere uno scorrimento orizzontale globale: " +
+      JSON.stringify(layout));
+    assert.deepEqual(layout.withoutLabel, [],
+      "Controlli visibili senza nome accessibile: " + JSON.stringify(layout));
     await capture("success");
   }catch(e){await capture("failure");e.message+="\n"+JSON.stringify(errors);throw e}
   finally{await ctx.close()}
