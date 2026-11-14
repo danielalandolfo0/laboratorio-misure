@@ -6092,6 +6092,55 @@ def _normalizza_per_aggregazione(
     return matrice, descrizione
 
 
+def _diagnostica_distribuzione_finale(coppie: list[float]) -> dict[str, Any]:
+    """Descrizione delle sole coppie i<j, senza alterare la matrice.
+
+    Quantili empirici con interpolazione lineare: posizione p*(m-1).
+    I cinque intervalli sono [0, .2), ..., [.8, 1]; l'ultimo include 1.
+    Le quote descrivono il campione, non sono probabilita' inferenziali.
+    """
+    ordinati = sorted(coppie)
+    m = len(ordinati)
+
+    def quantile(p: float) -> float | None:
+        if not m:
+            return None
+        posizione = p * (m - 1)
+        inferiore = math.floor(posizione)
+        superiore = math.ceil(posizione)
+        quota = posizione - inferiore
+        return ordinati[inferiore] * (1 - quota) + ordinati[superiore] * quota
+
+    conteggi = [0, 0, 0, 0, 0]
+    for valore in coppie:
+        if not math.isfinite(valore) or not 0 <= valore <= 1:
+            raise ValueError("La distribuzione richiede dissimilarita' finite in [0,1].")
+        indice = min(4, int(valore * 5))
+        conteggi[indice] += 1
+
+    return {
+        "numeroCoppie": m,
+        "minimo": ordinati[0] if m else None,
+        "massimo": ordinati[-1] if m else None,
+        "media": math.fsum(ordinati) / m if m else None,
+        "mediana": quantile(.5),
+        "primoQuartile": quantile(.25),
+        "terzoQuartile": quantile(.75),
+        "coppieZero": sum(x <= 1e-12 for x in ordinati),
+        "coppieUno": sum(x >= 1 - 1e-12 for x in ordinati),
+        "intervalli": [
+            {
+                "inizio": k / 5,
+                "fine": (k + 1) / 5,
+                "fineInclusa": k == 4,
+                "coppie": conteggi[k],
+                "frazione": conteggi[k] / m if m else 0.0,
+            }
+            for k in range(5)
+        ],
+    }
+
+
 def _valida_matrice_finale(
     matrice: list[list[float | None]], etichette: list[str],
 ) -> dict[str, Any]:
@@ -6168,6 +6217,7 @@ def _valida_matrice_finale(
         # gia' bloccato la matrice finale prima di questo punto.
         "coppieNonDisponibili": 0,
         "coppieZeroDistinte": zeri,
+        "distribuzioneDissimilarita": _diagnostica_distribuzione_finale(coppie),
         "gruppiProfiliIdentici": gruppi_profili_uguali,
         "avvisi": avvisi,
     }
