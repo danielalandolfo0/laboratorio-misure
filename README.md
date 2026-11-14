@@ -34,6 +34,33 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 - confronto simbolo per simbolo e matrici di programmazione dinamica per le stringhe;
 - controlli sulla validità degli input numerici e binari.
 
+## Fase 7: distribuzione delle dissimilarità finali
+
+Una volta validata la **singola matrice finale**, il sito presenta una
+diagnostica descrittiva non bloccante su tutte e sole le \(m=n(n-1)/2\)
+coppie distinte \(i<j\). Di conseguenza la diagonale nulla non genera
+artificiosamente dissimilarità piccole e una coppia simmetrica
+\(D_{ij}=D_{ji}\) è contata una sola volta. Sono riportati minimo,
+massimo, media, mediana, primo e terzo quartile delle dissimilarità,
+oltre ai conteggi delle coppie vicine a zero e a uno (tolleranza
+\(10^{-12}\)).
+
+I quantili empirici usano l'interpolazione **lineare** della sequenza
+ordinata: a livello \(p\), la posizione è \(p(m-1)\), partendo da zero.
+La ripartizione usa cinque intervalli disgiunti:
+\([0,0.2)\), \([0.2,0.4)\), \([0.4,0.6)\), \([0.6,0.8)\),
+\([0.8,1]\). Ogni intervallo presenta il conteggio e la frazione
+sulle \(m\) coppie; gli estremi sinistri sono inclusi e soltanto
+l'ultimo estremo destro è incluso. In caso di meno di due righe,
+le statistiche non definibili sono \`null\`.
+
+La distribuzione mostra eventuale concentrazione dei confronti,
+ma non introduce nuove soglie per modificare la matrice né
+interpreta le frazioni osservate come probabilità teoriche.
+Il risultato viene documentato anche nel campo
+\`risultato.diagnosticaFinale.distribuzioneDissimilarita\`
+del rapporto JSON; CSV e metodo di aggregazione restano invariati.
+
 ## Fase 7: sensibilità ai pesi e blocchi sempre nulli
 
 Dopo il calcolo compare una **diagnostica non bloccante** che non
