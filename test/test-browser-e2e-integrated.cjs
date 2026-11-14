@@ -255,8 +255,8 @@ async function main() {
     assert.equal(await dettagliPesi.isVisible(), true);
     assert.match(await dettagliPesi.innerText(), /Influenza dei pesi e dei blocchi/);
     assert.equal(await dettagliPesi.locator("tbody tr").count(), 4);
-    assert.match(await dettagliPesi.innerText(), /peso ×0,5/);
-    assert.match(await dettagliPesi.innerText(), /peso ×2/);
+    assert.match(await dettagliPesi.innerText(), /peso ×0,5/i);
+    assert.match(await dettagliPesi.innerText(), /peso ×2/i);
     checkpoint("Matrice 6×6: A/B e A/E coincidono con le formule");
 
     const pending=page.waitForEvent("download");
