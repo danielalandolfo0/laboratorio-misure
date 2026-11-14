@@ -45,6 +45,11 @@ i cammini ammissibili su piccole sequenze, includendo il costo quadratico
 e le finestre. Vengono inoltre verificate le proprietà della matrice
 finale e l'impossibilità di sostituire distanze non definite con zeri.
 
+Il caso può essere provato manualmente caricando
+`examples/collaudo/bray_curtis_due_vettori_nulli.csv`: seleziona le due
+colonne quantitative, conferma la misura Bray–Curtis e verifica
+entrambe le scelte relative alle righe A e B.
+
 Un caso particolarmente importante è Bray–Curtis, per la quale
 
 \[
