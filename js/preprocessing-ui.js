@@ -957,11 +957,19 @@
     $("comparison-plan-warnings").innerHTML = avvisi.length
       ? `<p><strong>Che cosa controllare prima del calcolo:</strong></p><ul>${avvisi.map(avviso => `<li>${escapeHtml(avviso)}</li>`).join("")}</ul>`
       : "";
-    $("comparison-plan-intro").textContent = !piano.completo
+    const semantica = piano.diagnosticaMancantiSemantici;
+    const totaliMancanti = semantica?.attiva
+      ? (" Marcatori confermati: " +
+        "sconosciuti " + (semantica.totali?.sconosciuto || 0) +
+        ", non applicabili " + (semantica.totali?.non_applicabile || 0) +
+        ", assenze reali " + (semantica.totali?.assenza || 0) +
+        ". Gli ultimi sono osservati soltanto nei blocchi compatibili.")
+      : "";
+    $("comparison-plan-intro").textContent = (!piano.completo
       ? "Il piano è stato preparato, ma alcune informazioni devono ancora essere completate."
       : piano.conteggioPercorsi === 1
         ? "È stato individuato un unico percorso di confronto."
-        : `Sono stati individuati ${piano.conteggioPercorsi} percorsi. Il sito li renderà confrontabili e produrrà una sola matrice complessiva usando le importanze indicate.`;
+        : `Sono stati individuati ${piano.conteggioPercorsi} percorsi. Il sito li renderà confrontabili e produrrà una sola matrice complessiva usando le importanze indicate.`) + totaliMancanti;
     const percorsiCalcolabili = piano.percorsi.filter(percorso => percorso.calcolo.disponibile);
     $("gower-actions").hidden = !(
       piano.completo && piano.conteggioPercorsi > 0
@@ -985,7 +993,11 @@
     </tr>`).join("");
     $("gower-result-title").textContent = risposta.metodo;
     const avvisiFinali = risposta.diagnosticaFinale?.avvisi || [];
-    $("gower-result-caption").textContent = `${risposta.etichette.length} × ${risposta.etichette.length}. ${risposta.nota}${limite < risposta.etichette.length ? ` Anteprima delle prime ${limite} righe.` : ""}${avvisiFinali.length ? " Diagnostica (non bloccante): " + avvisiFinali.join(" ") : ""}`;
+    const stati = risposta.diagnosticaMancantiSemantici;
+    const diagnosticaMista = stati?.attiva
+      ? ` Marcatori nel CSV: ${stati.totali?.sconosciuto || 0} sconosciuti, ${stati.totali?.non_applicabile || 0} non applicabili, ${stati.totali?.assenza || 0} assenze realmente osservate confermate.`
+      : "";
+    $("gower-result-caption").textContent = `${risposta.etichette.length} × ${risposta.etichette.length}. ${risposta.nota}${limite < risposta.etichette.length ? ` Anteprima delle prime ${limite} righe.` : ""}${diagnosticaMista}${avvisiFinali.length ? " Diagnostica (non bloccante): " + avvisiFinali.join(" ") : ""}`;
     $("download-gower").disabled = false;
     $("gower-result").hidden = false;
     aggiornaGuida();
