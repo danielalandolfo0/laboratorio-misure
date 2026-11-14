@@ -2414,6 +2414,7 @@
     }
     annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
+    invalidaPesiPerStruttura();
     riscalamentoConfermato = false;
     interpretazione.riscalamentoConfermato = false;
     disegnaQuestionario();
@@ -2658,6 +2659,7 @@
       return;
     }
     annullaScelteNormalizzazione();
+    invalidaPesiPerStruttura();
     const gruppo = creaGruppo();
     gruppo.nome = proposta.nome;
     gruppo.tipo = tipo;
@@ -2671,6 +2673,7 @@
   $("add-column-group").addEventListener("click", () => {
     annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
+    invalidaPesiPerStruttura();
     riscalamentoConfermato = false;
     interpretazione.riscalamentoConfermato = false;
     creaGruppo();
@@ -2704,6 +2707,7 @@
     }
     if (gruppoId) interpretazione.assegnazioni[nome] = gruppoId;
     else delete interpretazione.assegnazioni[nome];
+    if (gruppoId !== precedenteGruppo) invalidaPesiPerStruttura();
     annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
     riscalamentoConfermato = false;
@@ -2722,6 +2726,7 @@
         delete interpretazione[`misuraBinaria-${gruppo.id}`];
       }
       gruppo.tipo = evento.target.value;
+      invalidaPesiPerStruttura();
       if (interpretazione.misureGruppi) delete interpretazione.misureGruppi[gruppo.id];
       annullaScelteNormalizzazione();
       annullaConfermeCompatibilita();
@@ -2746,6 +2751,7 @@
     invalidaConfermaTemporale(gruppoId);
     delete interpretazione[`misuraBinaria-${gruppoId}`];
     interpretazione.gruppi = interpretazione.gruppi.filter(gruppo => gruppo.id !== gruppoId);
+    invalidaPesiPerStruttura();
     annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
     Object.keys(interpretazione.assegnazioni).forEach(nome => {
