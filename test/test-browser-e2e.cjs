@@ -124,6 +124,56 @@ async function gower(browser){
     assert.deepEqual(erroreCoppie.rapporto.coppieNonConfrontabili,[[1,2]]);
     fs.writeFileSync(path.join(OUT,"gower-rapporto.json"),rapportoJson);
 
+    // Collaudo del contratto Bray–Curtis 0/0 con il VERO motore Pyodide.
+    // Il piano deve chiedere la decisione; la scelta "indefinita"
+    // deve mantenere la coppia priva di contributo e bloccare la matrice.
+    const brayZeroNelBrowser = await page.evaluate(async () => {
+      const csv = "x,y\n0,0\n0,0\n3,2";
+      const opzioni = {
+        riga: "oggetto", confrontoQuantitativo: "abbondanza",
+        gestioneDipendenzaLineare: "mantieni",
+        colonne: {
+          x: {ruolo: "quantita", usa: true},
+          y: {ruolo: "quantita", usa: true}
+        }
+      };
+      const nonConfermato = await window.Preprocessing.creaPiano(csv, [], opzioni);
+      const confermato = await window.Preprocessing.creaPiano(csv, [], {
+        ...opzioni, convenzioneBrayCurtisZero: "zero"
+      });
+      const matrice = await window.Preprocessing.calcolaMatrice(csv, [], {
+        ...opzioni, convenzioneBrayCurtisZero: "zero"
+      });
+      let nonDefinito;
+      try {
+        await window.Preprocessing.calcolaMatrice(csv, [], {
+          ...opzioni, convenzioneBrayCurtisZero: "indefinita"
+        });
+        nonDefinito = {errore: false};
+      } catch (errore) {
+        nonDefinito = {errore: true, rapporto: errore.rapportoProblemi};
+      }
+      return {
+        attende: !nonConfermato.completo,
+        misura: nonConfermato.percorsi[0].idMisura,
+        coppie: nonConfermato.percorsi[0].coppieBrayDoppioZero,
+        confermato: confermato.completo,
+        matrice: matrice.matrice,
+        nonDefinito
+      };
+    });
+    assert.equal(brayZeroNelBrowser.attende, true);
+    assert.equal(brayZeroNelBrowser.misura, "bray_curtis");
+    assert.equal(brayZeroNelBrowser.coppie, 1);
+    assert.equal(brayZeroNelBrowser.confermato, true);
+    equal(brayZeroNelBrowser.matrice[0][1], 0);
+    equal(brayZeroNelBrowser.matrice[0][2], 1);
+    assert.equal(brayZeroNelBrowser.nonDefinito.errore, true);
+    assert.deepEqual(
+      brayZeroNelBrowser.nonDefinito.rapporto.coppieNonConfrontabili, [[1,2]]
+    );
+
+
     // Cambiando il significato di una coppia categoriale, la misura
     // locale deve cambiare davvero: blu/rosso passa da 1 a 0.2.
     await page.locator(
