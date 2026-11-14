@@ -1999,7 +1999,7 @@ assert not piano_br_illecito["percorsi"][0]["normalizzazione"]["valida"]
 
 # Percorso singolo: modifica realmente l'output mantenendo tutte le righe.
 dati_con_estremo_norm = p.prepara_tabella(p.leggi_csv(
-    "x\n0\n1\n2\n3\n40"
+    "x,id\n0,a\n1,b\n2,c\n3,d\n40,e"
 ))
 base_estremo_norm = {
     "riga": "oggetto",
