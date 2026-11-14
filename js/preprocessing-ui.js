@@ -1280,6 +1280,7 @@
 
   async function calcolaMatrice() {
     if (!pianoCorrente) return;
+    azzeraProblemiCalcolo();
     const versione = ++versioneMatrice;
     const versioneFile = versioneDati;
     const versioneConfigurazione = versionePiano;
