@@ -2476,6 +2476,28 @@ def _politica_mancanti(
         id_gruppo = percorso.get("idGruppo", "")
         tipo_gruppo = percorso.get("tipoGruppo", "altro")
         strategia = interpretazione.get(f"mancanti-gruppo-{id_gruppo}", "")
+        if tipo_gruppo == "tempo_coppie":
+            if strategia not in {"salta_slot", "escludi_percorso"}:
+                return {
+                    "presenza": True, "strategia": "da_definire", "pronta": False,
+                    "colonne": colonne,
+                    "descrizione": (
+                        "Sono presenti coppie con celle vuote: scegli se ignorare "
+                        "soltanto le coppie completamente vuote o escludere l'intera "
+                        "serie della riga. Timestamp e valori non sono imputati."
+                    ),
+                }
+            return {
+                "presenza": True, "strategia": strategia, "pronta": True,
+                "colonne": colonne,
+                "descrizione": (
+                    "Sono ignorate soltanto coppie tempo-valore entrambe vuote. "
+                    "Una coppia parziale è un errore e non viene ricostruita."
+                    if strategia == "salta_slot" else
+                    "Una riga con una qualsiasi coppia vuota o parziale "
+                    "non contribuisce a questo percorso temporale."
+                ),
+            }
         if tipo_gruppo == "vettore_binario":
             if strategia not in {"escludi_percorso", "zero"}:
                 return {
@@ -4784,6 +4806,122 @@ def _kendall_tau_b(x: list[float], y: list[float]) -> float | None:
 
 
 
+
+
+def _interpreta_coppie_temporali(
+    descrizione: str, colonne: list[str],
+) -> list[list[str]]:
+    """Appaiamento dichiarato dall'utente, senza inferenza dalle intestazioni."""
+    if not isinstance(descrizione, str) or not descrizione.strip():
+        raise ValueError(
+            "Indica le coppie in ordine come tempo1:valore1; tempo2:valore2, "
+            "includendo tutte e sole le colonne del gruppo."
+        )
+    parti = [s.strip() for s in descrizione.split(";")]
+    coppie = [[nome.strip() for nome in parte.split(":")] for parte in parti]
+    if len(coppie) < 2 or any(
+        len(coppia) != 2 or any(not nome for nome in coppia) for coppia in coppie
+    ) or len(coppie) * 2 != len(colonne):
+        raise ValueError(
+            "Servono almeno due coppie tempo:valore, separate da punto e virgola."
+        )
+    usate = [nome for coppia in coppie for nome in coppia]
+    if len(set(usate)) != len(usate) or set(usate) != set(colonne):
+        raise ValueError(
+            "Ogni colonna del gruppo deve comparire esattamente una volta, "
+            "come tempo o valore: correggi le coppie duplicate o mancanti."
+        )
+    return coppie
+
+
+def _serie_da_coppie(
+    tabella: dict[str, Any], percorso: dict[str, Any],
+) -> list[dict[str, list[float]] | None]:
+    """Serie univariate con tempi individuali. Nessuna imputazione tacita."""
+    coppie = percorso.get("parametri", {}).get("coppie", [])
+    strategia = percorso["mancanti"]["strategia"]
+    indici = {nome: i for i, nome in enumerate(tabella["intestazioni"])}
+    if len(coppie) < 2:
+        raise ValueError("Non sono state confermate almeno due coppie tempo-valore.")
+    serie: list[dict[str, list[float]] | None] = []
+    for numero_riga, riga in enumerate(tabella["righe"], 1):
+        tempi: list[float] = []
+        valori: list[float] = []
+        esclusa = False
+        for nome_t, nome_v in coppie:
+            t_raw, v_raw = riga[indici[nome_t]], riga[indici[nome_v]]
+            manca_t, manca_v = mancante(t_raw), mancante(v_raw)
+            if manca_t or manca_v:
+                if strategia == "escludi_percorso":
+                    esclusa = True
+                    break
+                if manca_t and manca_v and strategia == "salta_slot":
+                    continue
+                if manca_t != manca_v:
+                    raise ValueError(
+                        f"Riga {numero_riga}, coppia {nome_t}:{nome_v}: "
+                        "manca solo il timestamp o solo il valore. "
+                        "Correggi il CSV oppure escludi esplicitamente l'intera serie."
+                    )
+                raise ValueError(
+                    f"Riga {numero_riga}: conferma la politica per le coppie vuote."
+                )
+            t = leggi_numero(t_raw, tabella["separatore"])
+            v = leggi_numero(v_raw, tabella["separatore"])
+            if t is INVALIDO or t is None or v is INVALIDO or v is None:
+                raise ValueError(
+                    f"Riga {numero_riga}, coppia {nome_t}:{nome_v}: "
+                    "timestamp e valori devono essere numerici e finiti."
+                )
+            if tempi and float(t) <= tempi[-1]:
+                raise ValueError(
+                    f"Riga {numero_riga}: timestamp non strettamente crescenti "
+                    "nell'ordine delle coppie confermato."
+                )
+            tempi.append(float(t))
+            valori.append(float(v))
+        if esclusa:
+            serie.append(None)
+        elif not tempi:
+            raise ValueError(
+                f"Riga {numero_riga}: la serie è completamente vuota. "
+                "Nessuna dissimilarità viene inventata: correggi il CSV "
+                "oppure escludi il percorso della riga."
+            )
+        else:
+            serie.append({"tempi": tempi, "valori": valori})
+    return serie
+
+
+def _verifica_serie_a_coppie_percorso(
+    percorso: dict[str, Any], risultato: dict[str, Any],
+) -> None:
+    if percorso.get("tipoGruppo") != "tempo_coppie" or percorso["stato"] == "da_completare":
+        return
+    try:
+        serie = _serie_da_coppie(risultato["originale"], percorso)
+        valide = [s for s in serie if s is not None]
+        if len(valide) < 2:
+            raise ValueError("Restano meno di due serie non vuote confrontabili.")
+        params = percorso["parametri"]
+        if percorso["metodo"] == "Dynamic Time Warping" and "finestra" in params:
+            lunghezze = [len(s["valori"]) for s in valide]
+            if max(lunghezze) - min(lunghezze) > params["finestra"]:
+                raise ValueError(
+                    "La finestra DTW dichiarata rende impossibile il cammino "
+                    "tra almeno due serie di lunghezza diversa."
+                )
+        percorso["righeSerieValide"] = len(valide)
+        percorso["lunghezzeSerie"] = [
+            len(s["valori"]) if s is not None else None for s in serie
+        ]
+    except ValueError as errore:
+        percorso["stato"] = "da_completare"
+        percorso["calcolo"]["disponibile"] = False
+        percorso["calcolo"]["descrizione"] = "Controlla le coppie temporali."
+        percorso.setdefault("avvisi", []).append(str(errore))
+
+
 def _leggi_griglia_temporale(testo: str, numero: int) -> list[float]:
     """Coordinate fisiche della stessa griglia per tutte le osservazioni."""
     parti = [s.strip() for s in testo.split(";")]
@@ -4907,11 +5045,14 @@ def _distanza_dtw(
     peso_ritardo = parametri.get("lambdaRitardo")
     tau = parametri.get("tauRitardo")
     tempi = parametri.get("tempi", [])
+    tempi_x = parametri.get("tempiX", tempi)
+    tempi_y = parametri.get("tempiY", tempi)
     if peso_ritardo is not None:
         if (not math.isfinite(peso_ritardo) or peso_ritardo < 0
                 or not isinstance(tau, (int, float))
                 or not math.isfinite(tau) or tau <= 0
-                or len(tempi) != n or len(tempi) != m):
+                or len(tempi_x) != n or len(tempi_y) != m
+                or any(not math.isfinite(t) for t in [*tempi_x, *tempi_y])):
             raise ValueError("La penalità DTW richiede λ≥0, τ>0 e timestamp completi.")
     if n * m * (n + m) > 4_000_000:
         raise ValueError(
@@ -4930,7 +5071,7 @@ def _distanza_dtw(
             scarto = abs(x[i] - y[j])
             costo_locale = scarto if costo_tipo == "assoluto" else scarto ** 2
             if peso_ritardo is not None:
-                costo_locale += peso_ritardo * abs(tempi[i] - tempi[j]) / tau
+                costo_locale += peso_ritardo * abs(tempi_x[i] - tempi_y[j]) / tau
             if i == 0 and j == 0:
                 tabella[i][j][1] = costo_locale
                 continue
