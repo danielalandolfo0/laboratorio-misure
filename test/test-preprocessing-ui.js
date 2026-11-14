@@ -434,13 +434,23 @@ async function testRiscalamentoNumericoInTabellaMista() {
     "Prima del piano le due colonne richiedono una conferma.");
   assert.match(h.element("scaling-body").innerHTML, /c1/);
   assert.match(h.element("scaling-body").innerHTML, /c2/);
+  assert.match(h.element("adaptive-questions").innerHTML, /id="gestioneQuantitativeMiste"/);
+  assert.doesNotMatch(h.element("adaptive-questions").innerHTML, /id="confrontoQuantitativo"/);
   h.fire("confirm-numeric-scaling", "click");
   assert.equal(h.element("prepare-comparison-plan").hidden, false);
   assert.equal(h.element("view-work").disabled, false);
   assert.match(h.element("preview-head").innerHTML, /c1/);
   assert.doesNotMatch(h.element("preview-head").innerHTML, /categoria/);
+  h.fire("adaptive-questions", "change", {target: h.customTarget(
+    ".semantic-answer", {answer: "gestioneQuantitativeMiste"}, "separato"
+  )});
+  assert.match(h.element("adaptive-questions").innerHTML, /id="confrontoQuantitativo"/);
+  assert.match(h.element("adaptive-questions").innerHTML, /data-gower-key="modalitaCategorieGower"/);
+  assert.doesNotMatch(h.element("adaptive-questions").innerHTML,
+    /data-gower-key="pesiGower" data-gower-column="c1"/);
   h.fire("prepare-comparison-plan", "click");
   await flush();
+  assert.equal(h.observations.planCalls.at(-1).interpretazione.gestioneQuantitativeMiste, "separato");
   assert.equal(h.observations.planCalls.at(-1).interpretazione.riscalamentoConfermato, true,
     "La conferma deve arrivare realmente al motore di confronto.");
 }

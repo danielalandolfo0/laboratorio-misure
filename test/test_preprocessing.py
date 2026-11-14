@@ -358,7 +358,7 @@ assert piano_fixture_sparsa["diagnosi"]["indicatori"]["matriceSparsa"] is True
 assert piano_fixture_sparsa["diagnosi"]["proposta"]["politicaPreelaborazione"] == "maxabs_automatico"
 
 piano_fixture_mista = p.crea_piano_confronto(
-    fixture_mista, {"riga": "persona", "zeriCondivisi": "si", "colonne": {}}
+    fixture_mista, {"riga": "persona", "zeriCondivisi": "si", "gestioneQuantitativeMiste": "gower", "colonne": {}}
 )
 assert piano_fixture_mista["diagnosi"]["famigliaId"] == "misto"
 assert piano_fixture_mista["diagnosi"]["proposta"]["idMisura"] == "gower_classica"
@@ -389,7 +389,7 @@ matrici_fixture = [
     ),
     p.calcola_matrice_gower(
         fixture_mista,
-        {"riga": "persona", "zeriCondivisi": "si", "colonne": {}},
+        {"riga": "persona", "zeriCondivisi": "si", "gestioneQuantitativeMiste": "gower", "colonne": {}},
     ),
 ]
 metodi_fixture = [
@@ -445,7 +445,7 @@ assert "Indica che cosa rappresenta ogni riga." in piano_incompleto["avvisi"]
 
 piano_semplice = p.crea_piano_confronto(
     preparata,
-    {"riga": "persona", "zeriCondivisi": "no", "ordineLivelli": "si", "colonne": {}},
+    {"riga": "persona", "zeriCondivisi": "no", "ordineLivelli": "si", "gestioneQuantitativeMiste": "gower", "colonne": {}},
 )
 assert piano_semplice["completo"] is True
 misure_piano = {blocco["nome"]: blocco["misura"] for blocco in piano_semplice["blocchi"]}
@@ -463,7 +463,7 @@ assert piano_semplice["percorsi"][0]["calcolo"]["disponibile"] is True
 
 matrice_gower = p.calcola_matrice_gower(
     preparata,
-    {"riga": "persona", "zeriCondivisi": "no", "ordineLivelli": "si", "colonne": {}},
+    {"riga": "persona", "zeriCondivisi": "no", "ordineLivelli": "si", "gestioneQuantitativeMiste": "gower", "colonne": {}},
 )
 assert matrice_gower["metodo"] == "Dissimilarità di Gower classica"
 quasi_uguali(matrice_gower["matrice"][0][1], 0.75)
@@ -1114,6 +1114,7 @@ misti_con_due_quantita = p.prepara_tabella(p.leggi_csv(
 ))
 base_misto_due = {
     "riga": "oggetto",
+    "gestioneQuantitativeMiste": "gower",
     "colonne": {
         "a": {"ruolo": "quantita", "usa": True},
         "b": {"ruolo": "quantita", "usa": True},
@@ -1140,6 +1141,67 @@ assert not p.crea_piano_confronto(
     {**base_misto_due, "tipoGowerNumeriche": "robusta", "righeOutlierGower": {"b": "0"}},
 )["completo"]
 
+
+# Due quantità in un CSV misto: scelta esplicita tra Gower unificata
+# e due blocchi con geometrie differenti, sempre una sola matrice.
+dati_misti_blocchi = p.prepara_tabella(
+    p.leggi_csv("x,y,categoria\n0,0,rosso\n3,0,rosso\n0,4,blu"),
+    [{"tipo": "auto", "metodo": "nessuno"},
+     {"tipo": "auto", "metodo": "nessuno"},
+     {"tipo": "auto", "metodo": "auto"}],
+)
+risposte_blocchi_misti = {
+    "riga": "oggetto",
+    "confrontoQuantitativo": "assoluto",
+    "comparabilitaScale": "comparabili",
+    "aggregazioneScarti": "quadratica",
+    "dipendenzaCoordinate": "no",
+    "importanzaCoordinate": "uguale",
+    "riscalamentoConfermato": True,
+    "colonne": {
+        "x": {"ruolo": "quantita", "usa": True},
+        "y": {"ruolo": "quantita", "usa": True},
+        "categoria": {"ruolo": "categoria", "usa": True},
+    },
+}
+piano_senza_struttura = p.crea_piano_confronto(dati_misti_blocchi, risposte_blocchi_misti)
+assert not piano_senza_struttura["completo"]
+assert any("Gower" in avviso and "blocco" in avviso for avviso in piano_senza_struttura["avvisi"])
+scelta_unica = {**risposte_blocchi_misti, "gestioneQuantitativeMiste": "gower"}
+piano_unico = p.crea_piano_confronto(dati_misti_blocchi, scelta_unica)
+assert piano_unico["completo"], piano_unico
+assert [percorso["tipo"] for percorso in piano_unico["percorsi"]] == ["gower"]
+matrice_unica = p.calcola_matrice(dati_misti_blocchi, scelta_unica)["matrice"]
+quasi_uguali(matrice_unica[0][1], 1 / 3)
+quasi_uguali(matrice_unica[0][2], 2 / 3)
+quasi_uguali(matrice_unica[1][2], 1)
+
+scelta_blocchi = {**risposte_blocchi_misti, "gestioneQuantitativeMiste": "separato"}
+piano_blocchi = p.crea_piano_confronto(dati_misti_blocchi, scelta_blocchi)
+assert piano_blocchi["completo"], piano_blocchi
+assert [percorso["tipo"] for percorso in piano_blocchi["percorsi"]] == ["numerico", "gower"]
+assert [percorso["colonne"] for percorso in piano_blocchi["percorsi"]] == [
+    ["x", "y"], ["categoria"]
+]
+assert piano_blocchi["percorsi"][0]["idMisura"] == "euclidean"
+assert piano_blocchi["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"]
+assert [passo["metodo"] for passo in piano_blocchi["percorsi"][0]["preelaborazione"]["passi"]] == [
+    "nessuno", "nessuno"
+]
+matrice_blocchi = p.calcola_matrice(dati_misti_blocchi, scelta_blocchi)["matrice"]
+quasi_uguali(matrice_blocchi[0][1], 0.3)
+quasi_uguali(matrice_blocchi[0][2], 0.9)
+quasi_uguali(matrice_blocchi[1][2], 1)
+scelta_blocchi_pesata = {
+    **scelta_blocchi,
+    "pesiPercorsi": {"percorso-1": "3", "percorso-2": "1"},
+}
+matrice_blocchi_pesata = p.calcola_matrice(
+    dati_misti_blocchi, scelta_blocchi_pesata
+)["matrice"]
+quasi_uguali(matrice_blocchi_pesata[0][1], 0.45)
+quasi_uguali(matrice_blocchi_pesata[0][2], 0.85)
+quasi_uguali(matrice_blocchi_pesata[1][2], 1)
 
 # Sono riconosciute anche le colonne sì/no, senza imporre un codice 0/1.
 rilevata_testuale = p.prepara_tabella(p.leggi_csv("presente,classe\\nsì,A\\nno,B".replace("\\n", "\n")))

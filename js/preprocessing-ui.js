@@ -610,7 +610,9 @@
           ? `La covarianza è invertibile. ${indicatori.motivoCovarianza}`
           : `Mahalanobis classica non è utilizzabile in modo affidabile. ${indicatori.motivoCovarianza || "Verifica non superata."}`]);
     } else if (diagnosi.famigliaId === "misto") {
-      elementi.push(["Valori utilizzati", "Originali: nessun riscalamento preliminare"]);
+      elementi.push(["Valori utilizzati", proposta.idMisura === "blocchi_misti"
+        ? "Quantità: preprocessing confermato se pertinente; Gower: valori originali"
+        : "Gower sui valori originali: nessun riscalamento preliminare"]);
       elementi.push(["Valori estremi quantitativi", indicatori.outlier
         ? `Rilevati in: ${(indicatori.colonneOutlier || []).join(", ")}`
         : "Non rilevati"]);
@@ -1394,11 +1396,32 @@
       !interpretazione.assegnazioni[profilo.nome] && ruoliStandard.has(interpretazione.colonne[profilo.nome].ruolo)
     );
     const quantitativeIndipendenti = colonneNumericheSelezionate();
-    const percorsoNumerico = indipendentiStandard.length > 0 && indipendentiStandard.every(profilo => {
+    const nomiQuantitativi = new Set(quantitativeIndipendenti.map(colonna => colonna.nome));
+    const altreIndipendentiStandard = indipendentiStandard.filter(
+      profilo => !nomiQuantitativi.has(profilo.nome)
+    );
+    const mistoConQuantitative = quantitativeIndipendenti.length >= 2 &&
+      altreIndipendentiStandard.length > 0;
+    if (mistoConQuantitative) domande.push(domandaAdattiva(
+      "gestioneQuantitativeMiste",
+      "Come vuoi confrontare le quantità numeriche insieme alle altre caratteristiche?",
+      "Puoi usare Gower classica, che confronta ogni quantità separatamente con "
+        + "scarti normalizzati, oppure un blocco numerico unico con una misura "
+        + "scelta da te, da aggregare al blocco delle altre caratteristiche. "
+        + "In entrambi i casi il risultato è una sola matrice.",
+      [
+        ["gower", "Gower su tutte: ogni quantità dà un contributo separato"],
+        ["separato", "Blocco numerico distinto: scelgo come confrontare insieme le quantità"]
+      ]
+    ));
+    const separaQuantitative = mistoConQuantitative &&
+      valoreRisposta("gestioneQuantitativeMiste") === "separato";
+    const percorsoNumerico = separaQuantitative ||
+      (indipendentiStandard.length > 0 && indipendentiStandard.every(profilo => {
       const colonna = risultato.colonne.find(elemento => elemento.nome === profilo.nome);
       return interpretazione.colonne[profilo.nome].ruolo === "quantita"
         && ["numerica", "numerica_costante"].includes(colonna?.tipo);
-    });
+    }));
     if (percorsoNumerico) {
       const quantitativeConMancanti = quantitativeIndipendenti.filter(
         colonna => colonna.mancanti > 0
@@ -1457,7 +1480,8 @@
         [["no", "No, accade raramente"], ["si", "Sì, e questi valori sono significativi"], ["ignoto", "Non lo so — mostrami un avviso nel risultato"]]
       ));
     } else if (quantitativeIndipendenti.length >= 1 && indipendentiStandard.some(profilo =>
-      interpretazione.colonne[profilo.nome]?.ruolo !== "quantita")) {
+      interpretazione.colonne[profilo.nome]?.ruolo !== "quantita") &&
+      (!mistoConQuantitative || valoreRisposta("gestioneQuantitativeMiste") === "gower")) {
       domande.push(notaAutomatica(
         "Caratteristiche quantitative nel percorso misto",
         "Le colonne numeriche indipendenti sono analizzate insieme, ma la misura finale per le caratteristiche indipendenti di tipo diverso resta Gower: ogni quantità contribuisce con uno scarto normalizzato. Non viene applicata una distanza euclidea separata."
@@ -1469,8 +1493,10 @@
         "classica"
       ));
     }
-    if (!percorsoNumerico && indipendentiStandard.length) {
-      domande.push(domandeConfigurazioneGower(indipendentiStandard));
+    const profiliGower = separaQuantitative
+      ? altreIndipendentiStandard : indipendentiStandard;
+    if (profiliGower.length && (!percorsoNumerico || separaQuantitative)) {
+      domande.push(domandeConfigurazioneGower(profiliGower));
     }
     profiliInclusi.filter(profilo =>
       !interpretazione.assegnazioni[profilo.nome] &&
@@ -2034,12 +2060,19 @@
       interpretazione[evento.target.dataset.answer] = evento.target.value;
       if (evento.target.matches(".semantic-answer")) {
         const chiave = evento.target.dataset.answer || "";
-        if (/^(confrontoQuantitativo|aggregazioneScarti|dipendenzaCoordinate|importanzaCoordinate|somiglianza-|ritardo-|totale-|mancanti-gruppo-|naturaDistribuzione-|misuraDistribuzione-)/.test(chiave)) {
+        if (/^(gestioneQuantitativeMiste|confrontoQuantitativo|aggregazioneScarti|dipendenzaCoordinate|importanzaCoordinate|somiglianza-|ritardo-|totale-|mancanti-gruppo-|naturaDistribuzione-|misuraDistribuzione-)/.test(chiave)) {
           annullaScelteNormalizzazione();
         }
         if (/^(somiglianza|ritardo|totale|naturaDistribuzione|misuraDistribuzione)-/.test(chiave)) {
           const idGruppo = chiave.replace(/^(somiglianza|ritardo|totale|naturaDistribuzione|misuraDistribuzione)-/, "");
           if (interpretazione.misureGruppi) delete interpretazione.misureGruppi[idGruppo];
+          annullaConfermeCompatibilita();
+        }
+        if (chiave === "gestioneQuantitativeMiste") {
+          // Cambiando la struttura cambiano anche gli ID dei percorsi.
+          delete interpretazione.pesiPercorsi;
+          delete interpretazione.misuraNumericaManuale;
+          delete interpretazione.pesiMisuraManuale;
           annullaConfermeCompatibilita();
         }
         if (chiave === "confrontoQuantitativo") delete interpretazione.confermaValoriOriginaliNumerici;

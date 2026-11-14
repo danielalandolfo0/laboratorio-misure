@@ -2479,7 +2479,25 @@ def _crea_percorsi(
     standard = [nome for nome in indipendenti if ruoli[nome] in RUOLI_GOWER]
     separati = [nome for nome in indipendenti if nome not in standard]
 
-    if standard:
+    # Nei CSV misti la scelta della geometria numerica resta all'utente:
+    # Gower classica su tutte le caratteristiche, oppure un percorso numerico
+    # distinto e un percorso Gower per le restanti caratteristiche.
+    quantitative_miste = [
+        nome for nome in standard
+        if ruoli[nome] == "quantita"
+        and analisi_per_nome[nome]["tipo"] in {"numerica", "numerica_costante"}
+    ]
+    altre_miste = [nome for nome in standard if nome not in quantitative_miste]
+    separa_miste = (
+        len(quantitative_miste) >= 2 and bool(altre_miste)
+        and interpretazione.get("gestioneQuantitativeMiste") == "separato"
+    )
+    insiemi_standard = (
+        [quantitative_miste, altre_miste] if separa_miste else [standard]
+    )
+    for standard in insiemi_standard:
+        if not standard:
+            continue
         solo_quantitative = all(
             ruoli[nome] == "quantita"
             and analisi_per_nome[nome]["tipo"] in {"numerica", "numerica_costante"}
@@ -2890,6 +2908,38 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
             percorso.setdefault("avvisi", []).append(str(errore))
 
     avvisi: list[str] = []
+    standard_indipendenti = [
+        nome for nome in indipendenti if ruoli[nome] in RUOLI_GOWER
+    ]
+    quantitative_indipendenti = [
+        nome for nome in standard_indipendenti
+        if ruoli[nome] == "quantita"
+        and analisi_per_nome[nome]["tipo"] in {"numerica", "numerica_costante"}
+    ]
+    altre_standard = [
+        nome for nome in standard_indipendenti if nome not in quantitative_indipendenti
+    ]
+    if len(quantitative_indipendenti) >= 2 and altre_standard:
+        scelta_miste = interpretazione.get("gestioneQuantitativeMiste")
+        if scelta_miste not in {"gower", "separato"}:
+            avvisi.append(
+                "Decidi se confrontare tutte le caratteristiche indipendenti "
+                "con Gower oppure confrontare le quantità con una misura numerica "
+                "in un blocco separato. Nessuna struttura viene scelta automaticamente."
+            )
+        elif scelta_miste == "separato":
+            diagnosi["proposta"] = {
+                "idMisura": "blocchi_misti",
+                "misura": "Blocchi distinti: quantitativo e Gower",
+                "politicaPreelaborazione": "specifica_del_percorso",
+                "motivo": (
+                    "Le quantità indipendenti formano un blocco con la misura "
+                    "numerica selezionata; le altre caratteristiche standard "
+                    "formano un blocco Gower. I due contributi normalizzati "
+                    "vengono aggregati con pesi positivi in una sola matrice."
+                ),
+            }
+            diagnosi["conferma"] = ""
     if not interpretazione.get("riga"):
         avvisi.append("Indica che cosa rappresenta ogni riga.")
     if not blocchi:
