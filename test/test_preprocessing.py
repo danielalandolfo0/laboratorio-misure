@@ -3211,4 +3211,192 @@ verifica_matrice_finale(
     p.calcola_matrice(dati_vuoti_irregolari, scelta_interpolazione), 3
 )
 
+# CSV largo per serie univariate con timestamp individuali:
+# una riga = un caso; gli slot sono coppie tempo/valore esplicite.
+serie_per_riga = p.prepara_tabella(p.leggi_csv(
+    "id,t1,v1,t2,v2,t3,v3,categoria\n"
+    "A,0,0,1,2,3,0,x\n"
+    "B,0,0,2,2,4,0,x\n"
+    "C,0,1,3,1,NA,NA,y"
+))
+risposte_serie_per_riga = {
+    "riga": "oggetto",
+    "significatoMancanti": "sconosciuto",
+    "colonne": {
+        **{nome: {"ruolo": "quantita", "usa": True}
+           for nome in ("t1", "v1", "t2", "v2", "t3", "v3")},
+        "id": {"ruolo": "identificativo", "usa": False},
+        "categoria": {"ruolo": "categoria", "usa": True},
+    },
+    "gruppi": [{"id": "serie", "nome": "Serie per caso", "tipo": "tempo_coppie"}],
+    "assegnazioni": {
+        nome: "serie" for nome in ("t1", "v1", "t2", "v2", "t3", "v3")
+    },
+    "coppieTemporaliGruppi": {"serie": "t1:v1; t2:v2; t3:v3"},
+    "unitaTemporaleGruppi": {"serie": "ore"},
+    "mancanti-gruppo-serie": "salta_slot",
+    "metodiAllineamentoTemporaleGruppi": {"serie": "lcss"},
+    "tolleranzeValoreLCSSGruppi": {"serie": "0"},
+    "tolleranzeTempoLCSSGruppi": {"serie": "0"},
+}
+piano_serie_per_riga = p.crea_piano_confronto(
+    serie_per_riga, risposte_serie_per_riga
+)
+assert piano_serie_per_riga["completo"], piano_serie_per_riga
+assert [v["tipo"] for v in piano_serie_per_riga["percorsi"]] == [
+    "gower", "gruppo"
+]
+percorso_serie = piano_serie_per_riga["percorsi"][1]
+assert percorso_serie["tipoGruppo"] == "tempo_coppie"
+assert percorso_serie["parametri"]["coppie"] == [
+    ["t1", "v1"], ["t2", "v2"], ["t3", "v3"]
+]
+assert percorso_serie["colonne"] == ["t1", "v1", "t2", "v2", "t3", "v3"]
+assert percorso_serie["lunghezzeSerie"] == [3, 3, 2]
+assert percorso_serie["normalizzazione"]["limiteTeorico"] == 1
+assert percorso_serie["mancanti"]["strategia"] == "salta_slot"
+serie_locale = p._calcola_matrice_specializzata(
+    serie_per_riga, risposte_serie_per_riga, percorso_serie
+)
+quasi_uguali(serie_locale["matrice"][0][1], 2/3)
+quasi_uguali(serie_locale["matrice"][0][2], 1)
+quasi_uguali(serie_locale["matrice"][1][2], 1)
+serie_globale = p.calcola_matrice(serie_per_riga, risposte_serie_per_riga)
+verifica_matrice_finale(serie_globale, 3)
+assert len(serie_globale["contributi"]) == 2
+quasi_uguali(serie_globale["matrice"][0][1], 1/3)
+quasi_uguali(serie_globale["matrice"][0][2], 1)
+assert serie_globale["etichette"] == ["A", "B", "C"]
+
+# Innalzando la tolleranza fisica di tempo a 1, A e B diventano
+# perfettamente allineabili, senza cambiare il confronto dei valori.
+piu_tollerante = {
+    **risposte_serie_per_riga,
+    "tolleranzeTempoLCSSGruppi": {"serie": "1"},
+}
+quasi_uguali(
+    p.calcola_matrice(serie_per_riga, piu_tollerante)["matrice"][0][1], 0
+)
+
+# La DTW senza penalità deve ignorare i timestamp fisici soltanto
+# dopo scelta esplicita. Con penalità positiva confronta anche gli
+# istanti individuali; l'espressione non usa il solo costo totale.
+dtw_base_righe = {
+    **risposte_serie_per_riga,
+    "metodiAllineamentoTemporaleGruppi": {"serie": "dtw"},
+    "costiDTWGruppi": {"serie": "assoluto"},
+    "penalizzazioniDTWGruppi": {"serie": "no"},
+}
+piano_dtw_righe = p.crea_piano_confronto(serie_per_riga, dtw_base_righe)
+assert piano_dtw_righe["completo"], piano_dtw_righe
+assert piano_dtw_righe["percorsi"][1]["parametri"]["timestampIgnoratiNelCosto"]
+locale_dtw_righe = p._calcola_matrice_specializzata(
+    serie_per_riga, dtw_base_righe, piano_dtw_righe["percorsi"][1]
+)
+quasi_uguali(locale_dtw_righe["matrice"][0][1], 0)
+assert "Lo sfasamento temporale è ignorato" in locale_dtw_righe["nota"]
+
+dtw_penalizzata = {
+    **dtw_base_righe,
+    "penalizzazioniDTWGruppi": {"serie": "si"},
+    "pesiRitardoDTWGruppi": {"serie": "1"},
+    "scaleRitardoDTWGruppi": {"serie": "1"},
+    "finestreDTWGruppi": {"serie": "1"},
+}
+piano_dtw_penalizzata = p.crea_piano_confronto(
+    serie_per_riga, dtw_penalizzata
+)
+assert piano_dtw_penalizzata["completo"], piano_dtw_penalizzata
+locale_dtw_penalizzata = p._calcola_matrice_specializzata(
+    serie_per_riga, dtw_penalizzata,
+    piano_dtw_penalizzata["percorsi"][1],
+)
+assert locale_dtw_penalizzata["matrice"][0][1] > 0
+quasi_uguali(p._distanza_dtw(
+    [0, 2, 0], [0, 2, 0],
+    {"costoLocale": "assoluto", "finestra": 0,
+     "lambdaRitardo": 1, "tauRitardo": 1,
+     "tempiX": [0, 1, 3], "tempiY": [0, 2, 4]}
+), 2 / 3)
+quasi_uguali(p._distanza_dtw(
+    [0, 2, 0], [0, 2, 0],
+    {"costoLocale": "assoluto", "finestra": 0,
+     "lambdaRitardo": 1, "tauRitardo": 1,
+     "tempiX": [0, 2, 4], "tempiY": [0, 1, 3]}
+), 2 / 3)
+verifica_matrice_finale(p.calcola_matrice(
+    serie_per_riga, dtw_penalizzata
+), 3)
+
+# La banda |i-j|=0 è simmetrica ma non raggiunge una serie di
+# lunghezza 2 partendo da una di lunghezza 3.
+assert not p.crea_piano_confronto(
+    serie_per_riga,
+    {**dtw_penalizzata, "finestreDTWGruppi": {"serie": "0"}}
+)["completo"]
+for modifica in [
+    {"costiDTWGruppi": {}},
+    {"penalizzazioniDTWGruppi": {}},
+    {"pesiRitardoDTWGruppi": {"serie": "0"}},
+    {"scaleRitardoDTWGruppi": {"serie": "0"}},
+    {"finestreDTWGruppi": {"serie": "-1"}},
+    {"unitaTemporaleGruppi": {"serie": ""}},
+    {"coppieTemporaliGruppi": {}},
+    {"coppieTemporaliGruppi": {"serie": "t1:v1; t2:v2; t1:v3"}},
+    {"coppieTemporaliGruppi": {"serie": "t1:v1; t2:v2"}},
+]:
+    scelta = {**dtw_penalizzata, **modifica}
+    assert not p.crea_piano_confronto(
+        serie_per_riga, scelta
+    )["completo"], modifica
+
+# Mancanti: senza risposta non si inventa la presenza di un campione;
+# la coppia parziale resta errata anche quando è autorizzato saltare
+# le coppie interamente vuote.
+assert not p.crea_piano_confronto(
+    serie_per_riga,
+    {**risposte_serie_per_riga, "mancanti-gruppo-serie": ""}
+)["completo"]
+parziale = p.prepara_tabella(p.leggi_csv(
+    "id,t1,v1,t2,v2,t3,v3,categoria\n"
+    "A,0,0,1,2,3,0,x\n"
+    "B,0,0,2,2,4,0,x\n"
+    "C,0,1,3,1,NA,2,y"
+))
+piano_parziale = p.crea_piano_confronto(
+    parziale, risposte_serie_per_riga
+)
+assert not piano_parziale["completo"], piano_parziale
+assert any("manca solo" in avviso for percorso in piano_parziale["percorsi"]
+           for avviso in percorso["avvisi"])
+# Escludendo consapevolmente tutta la serie C, la categoria resta
+# confrontabile con il medesimo numero di righe nella matrice finale.
+escludi_serie = {
+    **risposte_serie_per_riga, "mancanti-gruppo-serie": "escludi_percorso"
+}
+assert p.crea_piano_confronto(parziale, escludi_serie)["completo"]
+globale_esclusione = p.calcola_matrice(parziale, escludi_serie)
+verifica_matrice_finale(globale_esclusione, 3)
+quasi_uguali(globale_esclusione["matrice"][0][2], 1)
+
+# Timestamp regressivi, uguali o non numerici bloccano il piano.
+for rigac in ("C,0,1,3,1,2,2,y", "C,0,1,3,1,3,2,y",
+              "C,0,1,3,1,abc,2,y"):
+    tab = p.prepara_tabella(p.leggi_csv(
+        "id,t1,v1,t2,v2,t3,v3,categoria\n"
+        "A,0,0,1,2,3,0,x\n"
+        "B,0,0,2,2,4,0,x\n" + rigac
+    ))
+    assert not p.crea_piano_confronto(tab, risposte_serie_per_riga)["completo"], rigac
+# Una serie tutta vuota non è posta a distanza zero per convenzione.
+tutta_vuota = p.prepara_tabella(p.leggi_csv(
+    "id,t1,v1,t2,v2,t3,v3,categoria\n"
+    "A,0,0,1,2,3,0,x\n"
+    "B,0,0,2,2,4,0,x\n"
+    "C,NA,NA,NA,NA,NA,NA,y"
+))
+assert not p.crea_piano_confronto(
+    tutta_vuota, risposte_serie_per_riga
+)["completo"]
+
 print("Tutti i test Python di preprocessing sono stati superati.")
