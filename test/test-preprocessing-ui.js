@@ -711,7 +711,93 @@ async function testScelteTemporaliAvanzate() {
   assert.equal(last.unitaTemporaleGruppi?.["gruppo-1"], undefined);
 }
 
+async function testSerieTemporaliPerRiga() {
+  const h = createHarness();
+  h.observations.tableIntercept = (csv, scelte) => {
+    const tabella = h.makeTable(csv, scelte);
+    for (const colonna of tabella.colonne) {
+      if (["t3", "v3"].includes(colonna.nome)) colonna.mancanti = 1;
+    }
+    return Promise.resolve(tabella);
+  };
+  h.fire("csv-file", "change", {target: {files: [{
+    name: "serie-per-riga.csv", type: "text/csv", size: 150,
+    text: async () =>
+      "id,t1,v1,t2,v2,t3,v3,categoria\n" +
+      "A,0,0,1,2,3,0,x\nB,0,0,2,2,4,0,x\nC,0,1,3,1,NA,NA,y"
+  }]}});
+  await flush();
+  h.fire("add-column-group", "click");
+  for (const nome of ["t1", "v1", "t2", "v2", "t3", "v3"]) {
+    h.fire("group-assignment-body", "change", {target: h.customTarget(
+      ".group-assignment", {groupColumn: nome}, "gruppo-1"
+    )});
+  }
+  assert.match(h.element("group-config-list").innerHTML,
+    /value="tempo_coppie"/);
+  const tipo = h.customTarget(".group-type", {}, "tempo_coppie");
+  tipo.closest = () => ({dataset: {groupId: "gruppo-1"}});
+  h.fire("group-config-list", "change", {target: tipo});
+  const html = h.element("adaptive-questions").innerHTML;
+  assert.match(html, /data-temporal-key="coppieTemporaliGruppi"/);
+  assert.match(html, /data-temporal-key="unitaTemporaleGruppi"/);
+  assert.match(html, /data-temporal-key="metodiAllineamentoTemporaleGruppi"/);
+  assert.match(html, /id="mancanti-gruppo-gruppo-1"/);
+  const param = (key, value) => h.fire("adaptive-questions", "input", {
+    target: h.customTarget(".temporal-parameter",
+      {groupId: "gruppo-1", temporalKey: key}, value)
+  });
+  const sel = (key, value) => h.fire("adaptive-questions", "change", {
+    target: h.customTarget(".temporal-option",
+      {groupId: "gruppo-1", temporalKey: key}, value)
+  });
+  param("coppieTemporaliGruppi", "t1:v1; t2:v2; t3:v3");
+  sel("unitaTemporaleGruppi", "ore");
+  h.fire("adaptive-questions", "change", {target: h.customTarget(
+    ".semantic-answer", {answer: "mancanti-gruppo-gruppo-1"}, "salta_slot"
+  )});
+  sel("metodiAllineamentoTemporaleGruppi", "dtw");
+  assert.match(h.element("adaptive-questions").innerHTML,
+    /data-temporal-key="penalizzazioniDTWGruppi"/);
+  sel("costiDTWGruppi", "assoluto");
+  sel("penalizzazioniDTWGruppi", "si");
+  param("pesiRitardoDTWGruppi", "1");
+  param("scaleRitardoDTWGruppi", "2");
+  param("finestreDTWGruppi", "1");
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  let scelta = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(scelta.coppieTemporaliGruppi["gruppo-1"],
+    "t1:v1; t2:v2; t3:v3");
+  assert.equal(scelta.unitaTemporaleGruppi["gruppo-1"], "ore");
+  assert.equal(scelta.metodiAllineamentoTemporaleGruppi["gruppo-1"], "dtw");
+  assert.equal(scelta.pesiRitardoDTWGruppi["gruppo-1"], "1");
+  assert.equal(scelta.finestreDTWGruppi["gruppo-1"], "1");
+  assert.equal(scelta["mancanti-gruppo-gruppo-1"], "salta_slot");
+  sel("metodiAllineamentoTemporaleGruppi", "lcss");
+  assert.match(h.element("adaptive-questions").innerHTML,
+    /data-temporal-key="tolleranzeValoreLCSSGruppi"/);
+  assert.match(h.element("adaptive-questions").innerHTML,
+    /data-temporal-key="tolleranzeTempoLCSSGruppi"/);
+  param("tolleranzeValoreLCSSGruppi", "0.5");
+  param("tolleranzeTempoLCSSGruppi", "1");
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  scelta = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(scelta.metodiAllineamentoTemporaleGruppi["gruppo-1"], "lcss");
+  assert.equal(scelta.tolleranzeTempoLCSSGruppi["gruppo-1"], "1");
+  h.fire("group-assignment-body", "change", {target: h.customTarget(
+    ".group-assignment", {groupColumn: "v3"}, ""
+  )});
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  scelta = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(scelta.coppieTemporaliGruppi?.["gruppo-1"], undefined);
+  assert.equal(scelta.metodiAllineamentoTemporaleGruppi?.["gruppo-1"], undefined);
+}
+
 (async () => {
+  await testSerieTemporaliPerRiga();
   await testScelteTemporaliAvanzate();
   await testInsiemiECicliQuestionario();
   await testGruppoBinarioESceltaTestuale();
