@@ -333,6 +333,7 @@
     $("calculate-gower").disabled = false;
     $("calculate-gower").textContent = "Calcola la matrice finale";
     $("download-gower").disabled = true;
+    $("download-report").disabled = true;
     aggiornaVisibilitaTrasformazione();
     aggiornaGuida();
   }
@@ -1052,6 +1053,7 @@
       : "";
     $("gower-result-caption").textContent = `${risposta.etichette.length} × ${risposta.etichette.length}. ${risposta.nota}${limite < risposta.etichette.length ? ` Anteprima delle prime ${limite} righe.` : ""}${diagnosticaMista}${avvisiFinali.length ? " Diagnostica (non bloccante): " + avvisiFinali.join(" ") : ""}`;
     $("download-gower").disabled = false;
+    $("download-report").disabled = false;
     $("gower-result").hidden = false;
     aggiornaGuida();
   }
@@ -1062,6 +1064,7 @@
     const versioneFile = versioneDati;
     const versioneConfigurazione = versionePiano;
     const pulsante = $("calculate-gower");
+    $("download-report").disabled = true;
     const testo = pulsante.textContent;
     pulsante.disabled = true;
     pulsante.textContent = "Calcolo…";
@@ -1083,6 +1086,7 @@
       matriceCorrente = null;
       $("gower-result").hidden = true;
       $("download-gower").disabled = true;
+      $("download-report").disabled = true;
       mostraErrore(errore.message);
     } finally {
       if (versione === versioneMatrice) {
@@ -1102,6 +1106,63 @@
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  }
+
+  async function scaricaRapporto() {
+    // Il rapporto incorpora la sorgente e l'intera matrice. Si calcola
+    // nuovamente nello stesso motore, evitando di assemblare in JS un
+    // "piano" e una matrice appartenenti a revisioni differenti.
+    if (!matriceCorrente || !pianoCorrente?.completo) return;
+    const versione = versioneMatrice;
+    const versioneFile = versioneDati;
+    const versioneConfigurazione = versionePiano;
+    const matriceAttuale = matriceCorrente;
+    const pulsante = $("download-report");
+    const etichetta = pulsante.textContent;
+    pulsante.disabled = true;
+    pulsante.textContent = "Preparazione rapporto…";
+    try {
+      const rapporto = await P.creaRapporto(
+        testoOriginale,
+        scelte.map(scelta => ({...scelta})),
+        JSON.parse(JSON.stringify(interpretazione)),
+        $("csv-file-name").textContent
+      );
+      if (versione !== versioneMatrice ||
+          versioneFile !== versioneDati ||
+          versioneConfigurazione !== versionePiano ||
+          matriceCorrente !== matriceAttuale) return;
+      if (rapporto.risultato.csvMatrice !== matriceAttuale.csv) {
+        throw new Error(
+          "La matrice del rapporto non coincide con quella visualizzata. " +
+          "Ricalcola la matrice prima di esportare il rapporto."
+        );
+      }
+      const json = JSON.stringify(rapporto, null, 2) + "\n";
+      const url = URL.createObjectURL(new Blob([json], {
+        type: "application/json;charset=utf-8"
+      }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "rapporto_calcolo.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      nascondiErrore();
+    } catch (errore) {
+      if (versione !== versioneMatrice ||
+          versioneFile !== versioneDati ||
+          versioneConfigurazione !== versionePiano) return;
+      mostraErrore(errore.message);
+    } finally {
+      if (versione === versioneMatrice &&
+          versioneFile === versioneDati &&
+          versioneConfigurazione === versionePiano) {
+        pulsante.disabled = false;
+        pulsante.textContent = etichetta;
+      }
+    }
   }
 
   async function preparaPiano() {
@@ -2311,6 +2372,7 @@
   $("prepare-comparison-plan").addEventListener("click", preparaPiano);
   $("calculate-gower").addEventListener("click", calcolaMatrice);
   $("download-gower").addEventListener("click", scaricaMatrice);
+  $("download-report").addEventListener("click", scaricaRapporto);
   $("comparison-plan-paths").addEventListener("change", evento => {
     if (evento.target.matches(".global-weights-mode")) {
       interpretazione.modalitaPesiPercorsi = evento.target.value;

@@ -34,6 +34,60 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 - confronto simbolo per simbolo e matrici di programmazione dinamica per le stringhe;
 - controlli sulla validità degli input numerici e binari.
 
+## Fase 7: rapporto completo riproducibile
+
+Dopo aver preparato un piano **completo** e calcolato la matrice finale,
+il sito propone due esportazioni distinte:
+
+- **Scarica la matrice in CSV**: il risultato principale, una sola matrice
+  simmetrica e completa, compatibile con i programmi che leggono tabelle.
+- **Scarica il rapporto completo (JSON)**: documentazione metodologica
+  e dati necessari a ricalcolare e verificare la stessa matrice.
+
+Il rapporto \`rapporto_calcolo.json\`, versione schema 1, contiene:
+
+| Campo | Informazioni |
+| --- | --- |
+| \`sorgente\` | Nome del file, **CSV originale completo**, separatore, intestazioni, dimensioni |
+| \`configurazione\` | Scelte di tipo e trasformazione per colonna, **tutte** le risposte del questionario, inclusi pesi e parametri |
+| \`preprocessing\` | Profilazione e statistiche delle colonne, riepilogo, spiegazione dell'origine dei dati |
+| \`piano\` | Blocchi disgiunti, colonne assegnate, misure effettive e parametri, trasformazioni, mancanti, pesi e normalizzazioni con le decisioni applicate |
+| \`risultato\` | Matrice numerica completa, etichette, **CSV della matrice**, contributi con pesi, diagnostica finale, note sulle normalizzazioni |
+| \`riproducibilita\` | Impronte **SHA-256** dei byte UTF-8 del CSV originale e della configurazione JSON canonica, istruzioni per ripetere il calcolo |
+| \`revisioneMotore\` | Identificativo della revisione della logica che produce il rapporto; non equivale a un hash del codice sorgente |
+
+Non si mescolano configurazioni e risultati di calcoli diversi:
+l'esportazione viene **rigenerata con lo stesso motore Python**
+dopo la selezione delle scelte, e il browser controlla che il CSV
+della matrice ottenuta sia identico a quello visibile. Se il file o
+il piano sono cambiati nel frattempo, il download viene annullato.
+I rapporti sono JSON standard: valori numerici non finiti che
+dovessero comparire nella sola diagnostica vengono descritti in modo
+esplicito, non codificati con i token JSON non validi \`NaN\` o
+\`Infinity\`. Una matrice contenente distanze non finite non è
+comunque un risultato ammesso dal validatore.
+
+**Riservatezza:** il JSON è intenzionalmente *autosufficiente*: contiene
+tutte le celle del **CSV originale**, anche quelle identificative e
+non selezionate come caratteristiche di confronto. Può quindi contenere
+dati personali o riservati. Il download è un'azione richiesta
+esplicitamente; il report non viene caricato su server di raccolta dati
+dal sito. Condividilo soltanto quando hai il diritto di condividere
+il CSV originale. Non è un report anonimizzato.
+
+**Ripetizione del calcolo:** con la stessa revisione del modulo
+\`python/preprocessing.py\`, si estraggono \`csvOriginale\`,
+\`sceltePreprocessing\` e \`risposteQuestionario\`; quindi si invocano
+\`leggi_csv\`, \`prepara_tabella\`, \`crea_piano_confronto\` e
+\`calcola_matrice\` con tali valori. La matrice e il CSV rigenerati
+si confrontano con \`risultato.matrice\` e
+\`risultato.csvMatrice\`. Il campo \`sha256CsvOriginale\` permette
+di verificare che il CSV non sia stato modificato; l'hash della
+configurazione usa le chiavi ordinate, senza spazi, con Unicode
+non escapato. Le future modifiche agli algoritmi non sono garantite
+bit-per-bit equivalenti: conservare anche la revisione del codice
+è opportuno per una riproduzione scientifica a lungo termine.
+
 ## Struttura del progetto
 
 ```text

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import datetime as dt
+import hashlib
 import io
 import json
 import math
@@ -6349,6 +6350,149 @@ def crea_csv(intestazioni: list[str], righe: list[list[Any]]) -> str:
     for riga in [intestazioni, *righe]:
         scrittore.writerow([_valore_csv(valore) for valore in riga])
     return destinazione.getvalue().rstrip("\n")
+
+
+RAPPORTO_FORMATO = "laboratorio-misure/rapporto-calcolo"
+RAPPORTO_VERSIONE_SCHEMA = 1
+RAPPORTO_REVISIONE_MOTORE = "20261114-fase7-rapporto-v1"
+
+
+def _normalizza_json_rapporto(dato: Any) -> Any:
+    """JSON standard: valori non finiti nelle sole diagnostiche sono espliciti.
+
+    Un risultato di matrice non finito viene invece rifiutato dal calcolo
+    e dal validatore, prima di poter costruire il rapporto.
+    """
+    if isinstance(dato, float) and not math.isfinite(dato):
+        return {"valoreNonFinito": (
+            "NaN" if math.isnan(dato) else
+            "+Inf" if dato > 0 else "-Inf"
+        )}
+    if isinstance(dato, dict):
+        return {str(chiave): _normalizza_json_rapporto(valore)
+                for chiave, valore in dato.items()}
+    if isinstance(dato, (list, tuple)):
+        return [_normalizza_json_rapporto(valore) for valore in dato]
+    return dato
+
+
+def crea_rapporto_calcolo(
+    testo: str, scelte: list[dict[str, str]],
+    interpretazione: dict[str, Any], nome_file: str = "dati.csv",
+) -> dict[str, Any]:
+    """Rapporto autosufficiente per ricalcolare la matrice sulla stessa logica.
+
+    Una sola origine dei calcoli: piano e matrice vengono ricalcolati con
+    gli stessi parametri, senza dedurre un significato dalle etichette.
+    Il file contiene intenzionalmente l'intero CSV originale.
+    """
+    if not isinstance(scelte, list) or not isinstance(interpretazione, dict):
+        raise ValueError("Le scelte e le risposte per il rapporto devono essere valide.")
+    if not isinstance(nome_file, str):
+        raise ValueError("Il nome del CSV deve essere una stringa.")
+    tabella = leggi_csv(testo)
+    preparata = prepara_tabella(tabella, scelte)
+    piano = crea_piano_confronto(preparata, interpretazione)
+    if not piano["completo"]:
+        raise ValueError(
+            "Il rapporto completo è disponibile solo per un piano calcolabile. "
+            "Risolvi prima le domande e gli avvisi bloccanti."
+        )
+    risultato = calcola_matrice(preparata, interpretazione)
+    dati_configurazione = {
+        "sceltePreprocessing": scelte,
+        "risposteQuestionario": interpretazione,
+    }
+    canonica = json.dumps(
+        dati_configurazione, ensure_ascii=False, sort_keys=True,
+        separators=(",", ":"), allow_nan=False,
+    )
+    output = {
+        "formato": RAPPORTO_FORMATO,
+        "versioneSchema": RAPPORTO_VERSIONE_SCHEMA,
+        "revisioneMotore": RAPPORTO_REVISIONE_MOTORE,
+        "avvisoRiservatezza": (
+            "Questo file incorpora tutte le celle e le intestazioni del CSV "
+            "originale, comprese eventuali informazioni personali. "
+            "Conservalo e condividilo soltanto con destinatari autorizzati."
+        ),
+        "riproducibilita": {
+            "condizione": (
+                "A parità di CSV originale, opzioni confermate e revisione "
+                "della logica di calcolo, il piano e la matrice si possono "
+                "rigenerare. Versioni future del motore possono utilizzare "
+                "regole differenti; i controlli numerici rispettano le "
+                "tolleranze della validazione documentata."
+            ),
+            "sha256CsvOriginale": hashlib.sha256(
+                testo.encode("utf-8")
+            ).hexdigest(),
+            "sha256Configurazione": hashlib.sha256(
+                canonica.encode("utf-8")
+            ).hexdigest(),
+            "procedura": (
+                "leggi_csv(csvOriginale); prepara_tabella(tabella, "
+                "sceltePreprocessing); crea_piano_confronto(preparata, "
+                "risposteQuestionario); calcola_matrice(preparata, "
+                "risposteQuestionario)."
+            ),
+        },
+        "sorgente": {
+            "nomeFile": nome_file,
+            "csvOriginale": testo,
+            "separatoreRilevato": tabella["separatore"],
+            "intestazioni": tabella["intestazioni"],
+            "numeroRighe": len(tabella["righe"]),
+            "numeroColonne": len(tabella["intestazioni"]),
+        },
+        "configurazione": dati_configurazione,
+        "preprocessing": {
+            "riepilogo": preparata["riepilogo"],
+            "analisiColonne": preparata["colonne"],
+            "nota": (
+                "Le trasformazioni effettive utilizzate dalle singole misure "
+                "sono specificate nel campo piano.percorsi.preelaborazione; "
+                "non tutte le misure impiegano la tabella riscalata."
+            ),
+        },
+        "piano": piano,
+        "risultato": {
+            "metodo": risultato["metodo"],
+            "etichette": risultato["etichette"],
+            "colonne": risultato["colonne"],
+            "matrice": risultato["matrice"],
+            "csvMatrice": risultato["csv"],
+            "nota": risultato["nota"],
+            "contributi": risultato.get("contributi", []),
+            "pesaturaGlobale": risultato.get("pesaturaGlobale", piano["pesaturaGlobale"]),
+            "diagnosticaFinale": risultato["diagnosticaFinale"],
+            "diagnosticaMancantiSemantici": risultato["diagnosticaMancantiSemantici"],
+            "normalizzazioneFinale": risultato.get("normalizzazioneFinale"),
+            "limiteAggregazione": risultato.get("limiteAggregazione"),
+        },
+    }
+    return _normalizza_json_rapporto(output)
+
+
+def crea_rapporto_json(
+    testo: str, scelte_json: str = "[]", interpretazione_json: str = "{}",
+    nome_file: str = "dati.csv",
+) -> str:
+    try:
+        scelte = json.loads(scelte_json or "[]")
+        interpretazione = json.loads(interpretazione_json or "{}")
+        rapporto = crea_rapporto_calcolo(
+            testo, scelte, interpretazione, nome_file,
+        )
+        return json.dumps(
+            {"ok": True, "rapporto": rapporto}, ensure_ascii=False,
+            separators=(",", ":"), allow_nan=False,
+        )
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError) as errore:
+        return json.dumps(
+            {"ok": False, "errore": str(errore)}, ensure_ascii=False,
+            separators=(",", ":"), allow_nan=False,
+        )
 
 
 def analizza_csv_json(testo: str, scelte_json: str = "[]") -> str:

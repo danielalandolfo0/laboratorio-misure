@@ -18,6 +18,7 @@ async function flush() {
 
 function createHarness() {
   const dom = new Map();
+  const downloadBlobs = new Map();
   class Element {
     constructor(id) {
       this.id = id;
@@ -44,7 +45,14 @@ function createHarness() {
     }
     appendChild() {}
     append() {}
-    click() {}
+    click() {
+      if (this.download) {
+        observations.downloads.push({
+          name: this.download, url: this.href,
+          blob: downloadBlobs.get(this.href)
+        });
+      }
+    }
     remove() {}
     setAttribute() {}
     getAttribute() { return "false"; }
@@ -73,6 +81,9 @@ function createHarness() {
     planIntercept: null,
     matrixIntercept: null,
     tableIntercept: null,
+    reportCalls: [],
+    reportIntercept: null,
+    downloads: [],
   };
   function makeTable(text, choices = []) {
     const lines = text.trim().split(/\r?\n/);
@@ -177,13 +188,30 @@ function createHarness() {
       return observations.matrixIntercept?.(text, choices, interpretazione) ||
         Promise.resolve(makeMatrix());
     },
+    creaRapporto: (text, choices, interpretazione, nomeFile) => {
+      observations.reportCalls.push({text, choices, interpretazione, nomeFile});
+      return observations.reportIntercept?.(text, choices, interpretazione, nomeFile) ||
+        Promise.resolve({
+          formato: "laboratorio-misure/rapporto-calcolo",
+          sorgente: {nomeFile, csvOriginale: text},
+          configurazione: {sceltePreprocessing: choices, risposteQuestionario: interpretazione},
+          risultato: {csvMatrice: makeMatrix().csv, diagnosticaFinale: {avvisi: []}}
+        });
+    },
     creaCsv: async () => "csv"
   };
 
   const source = fs.readFileSync("js/preprocessing-ui.js", "utf8");
   vm.runInNewContext(source, {
     window: {Preprocessing: preprocessing},
-    document, URL: {createObjectURL: () => "blob:mock", revokeObjectURL() {}},
+    document, URL: {
+      createObjectURL: blob => {
+        const uri = "blob:mock-" + downloadBlobs.size;
+        downloadBlobs.set(uri, blob);
+        return uri;
+      },
+      revokeObjectURL() {}
+    },
     Blob, Intl, Number, Math, Set, JSON, console, Array, Promise
   }, {filename: "js/preprocessing-ui.js"});
 
@@ -1043,7 +1071,64 @@ async function testModalitaPesiGlobali() {
   assert.equal(ultima.pesiPercorsi, undefined);
 }
 
+async function testRapportoCompletoEConcorrenza() {
+  const h = createHarness();
+  h.fire("load-example-csv", "click");
+  await flush();
+  assert.equal(h.element("download-report").disabled, true);
+  h.fire("row-meaning", "change", {value: "oggetto"});
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  assert.equal(h.element("download-report").disabled, true);
+  h.fire("calculate-gower", "click");
+  await flush();
+  assert.equal(h.element("download-report").disabled, false);
+  h.fire("download-report", "click");
+  await flush();
+  assert.equal(h.observations.reportCalls.length, 1);
+  const request = h.observations.reportCalls.at(-1);
+  assert.match(request.text, /misura_A,misura_B/);
+  assert.equal(request.nomeFile, "esempio.csv");
+  assert.equal(request.interpretazione.riga, "oggetto");
+  assert.equal(h.observations.downloads.length, 1);
+  assert.equal(h.observations.downloads[0].name, "rapporto_calcolo.json");
+  const blob = h.observations.downloads[0].blob;
+  assert.equal(blob.type, "application/json;charset=utf-8");
+  const rapporto = JSON.parse(await blob.text());
+  assert.equal(rapporto.formato, "laboratorio-misure/rapporto-calcolo");
+  assert.equal(rapporto.sorgente.csvOriginale, request.text);
+  assert.equal(rapporto.configurazione.risposteQuestionario.riga, "oggetto");
+  assert.equal(rapporto.risultato.csvMatrice, h.makeMatrix().csv);
+
+  // Il server e l'interfaccia non devono mai allegare alla matrice
+  // visualizzata un rapporto che restituisce un'altra matrice.
+  h.observations.reportIntercept = async () => ({
+    risultato: {csvMatrice: "altra matrice"}
+  });
+  h.fire("download-report", "click");
+  await flush();
+  assert.equal(h.observations.downloads.length, 1);
+  assert.match(h.element("csv-error").textContent, /non coincide/);
+  assert.equal(h.element("download-report").disabled, false);
+
+  // Un nuovo CSV invalida anche un download che stava ancora calcolando:
+  // non deve partire un file associato alle vecchie scelte.
+  const pending = deferred();
+  h.observations.reportIntercept = () => pending.promise;
+  h.fire("download-report", "click");
+  assert.equal(h.element("download-report").disabled, true);
+  h.fire("load-example-csv", "click");
+  await flush();
+  pending.resolve({
+    risultato: {csvMatrice: h.makeMatrix().csv}
+  });
+  await flush();
+  assert.equal(h.observations.downloads.length, 1);
+  assert.equal(h.element("download-report").disabled, true);
+}
+
 (async () => {
+  await testRapportoCompletoEConcorrenza();
   await testModalitaPesiGlobali();
   await testLogaritmoStrettamentePositivo();
   await testMarcatoriMancantiMisti();

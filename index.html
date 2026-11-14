@@ -190,6 +190,8 @@
           <div class="gower-actions" id="gower-actions" hidden>
             <button class="action" id="calculate-gower" type="button">Calcola la matrice finale</button>
             <button class="secondary-action" id="download-gower" type="button" disabled>Scarica la matrice in CSV</button>
+            <button class="secondary-action" id="download-report" type="button" disabled>Scarica il rapporto completo (JSON)</button>
+            <p class="data-privacy-note">Il rapporto contiene il CSV originale, le decisioni, le misure, i pesi, la diagnostica e la matrice: può includere dati personali. Viene preparato nel browser e salvato soltanto quando lo richiedi.</p>
           </div>
           <section class="gower-result" id="gower-result" aria-labelledby="gower-result-title" hidden>
             <h5 id="gower-result-title"></h5>
@@ -330,8 +332,8 @@
 
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
-  <script defer src="js/preprocessing-python.js?v=20261104-specialized1"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261114-guidance1"></script>
+  <script defer src="js/preprocessing-python.js?v=20261114-fase7-report1"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261114-fase7-report1"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>

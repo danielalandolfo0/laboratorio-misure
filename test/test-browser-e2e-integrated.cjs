@@ -6,6 +6,7 @@
  * passa dai controlli HTML visibili, come farebbe una persona.
  */
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const {chromium} = require("playwright");
@@ -272,6 +273,34 @@ async function main() {
     approx(parseValue(clean[1][2]),expectedAB,1e-9);
     approx(parseValue(clean[1][5]),19/21,1e-9);
     fs.writeFileSync(path.join(OUT,"four-block-export.csv"),csv);
+
+    const pendingReport=page.waitForEvent("download");
+    await page.locator("#download-report").click();
+    const reportFile=await pendingReport;
+    assert.equal(reportFile.suggestedFilename(),"rapporto_calcolo.json");
+    const content=fs.readFileSync(await reportFile.path(),"utf8");
+    const report=JSON.parse(content);
+    assert.equal(report.formato,"laboratorio-misure/rapporto-calcolo");
+    assert.equal(report.sorgente.csvOriginale,INPUT);
+    assert.equal(report.sorgente.nomeFile,"test_integrato_gower_gruppi_mancanti.csv");
+    assert.equal(report.riproducibilita.sha256CsvOriginale,
+      crypto.createHash("sha256").update(INPUT,"utf8").digest("hex"));
+    assert.equal(report.piano.conteggioPercorsi,4);
+    assert.equal(report.piano.completo,true);
+    assert.equal(report.piano.pesaturaGlobale.modalita,"personalizzati");
+    assert.deepEqual(report.piano.percorsi.map(p=>p.pesoAggregazione),[2,1,3,4]);
+    assert.deepEqual(report.risultato.contributi.map(c=>c.peso),[2,1,3,4]);
+    assert.deepEqual(report.risultato.etichette,["A","B","C","D","E","F"]);
+    approx(report.risultato.matrice[0][1],expectedAB,1e-9);
+    approx(report.risultato.matrice[0][4],19/21,1e-9);
+    assert.equal(report.risultato.csvMatrice,csv.replace(/^\uFEFF/,""));
+    assert.ok(report.risultato.diagnosticaFinale);
+    assert.ok(report.configurazione.risposteQuestionario);
+    assert.ok(report.piano.percorsi.some(p=>p.normalizzazione.metodo==="robusta"));
+    assert.ok(report.piano.percorsi.some(p=>p.metodo==="Dynamic Time Warping")===false);
+    fs.writeFileSync(path.join(OUT,"four-block-rapporto.json"),content);
+    checkpoint("Rapporto JSON completo: input, decisioni, quattro percorsi, diagnostica e matrice");
+
     assert.match(await page.locator("#comparison-guide-phase").innerText(),/La matrice è pronta/);
     await snapshot("success");
     checkpoint("Esportazione CSV: matrice completa, simmetrica e valida");
