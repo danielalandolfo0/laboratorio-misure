@@ -1217,7 +1217,94 @@ async function testDiagnosticaSensibilitaPesi() {
   assert.equal(h.element("gower-diagnostics").innerHTML, "");
 }
 
+async function testRapportoCumulativoProblemi() {
+  const h = createHarness();
+  h.fire("load-example-csv", "click");
+  await flush();
+  h.fire("row-meaning", "change", {value: "oggetto"});
+
+  const problema = {
+    gravita: "bloccante", ambito: "percorso", idPercorso: "percorso-1",
+    nome: "Gruppo <speciale>", colonne: ["x", "<y>"],
+    messaggio: "Impossibile: <dato mancante>",
+    decisioniPossibili: ["Scegli un'altra misura", "Rivedi i mancanti"]
+  };
+  const pianoNonCompleto = h.makePlan();
+  pianoNonCompleto.completo = false;
+  pianoNonCompleto.avvisi = ["Manca una decisione"];
+  pianoNonCompleto.rapportoProblemi = {
+    fase: "piano", calcoloConsentito: false,
+    numeroBloccanti: 1, numeroAvvisi: 1,
+    bloccanti: [problema],
+    nonBloccanti: [{
+      gravita: "avviso", nome: "Costante", colonne: ["z"],
+      messaggio: "Il contributo zero è mantenuto", decisioniPossibili: []
+    }]
+  };
+  h.observations.planIntercept = () => Promise.resolve(pianoNonCompleto);
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  const testoPiano = h.element("comparison-plan-warnings").innerHTML;
+  assert.match(testoPiano, /Rapporto complessivo del piano/);
+  assert.match(testoPiano, /1 problemi bloccanti/);
+  assert.match(testoPiano, /1 avvisi informativi/);
+  assert.match(testoPiano, /Gruppo &lt;speciale&gt;/);
+  assert.match(testoPiano, /&lt;dato mancante&gt;/);
+  assert.doesNotMatch(testoPiano, /<dato mancante>/);
+  assert.match(testoPiano, /Osservazioni che non impediscono il calcolo/);
+  assert.equal(h.element("gower-actions").hidden, true);
+
+  const pianoPronto = h.makePlan();
+  pianoPronto.rapportoProblemi = {
+    fase: "piano", calcoloConsentito: true,
+    numeroBloccanti: 0, numeroAvvisi: 0, bloccanti: [],
+    nonBloccanti: []
+  };
+  h.observations.planIntercept = () => Promise.resolve(pianoPronto);
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  assert.equal(h.element("gower-actions").hidden, false);
+
+  const errore = new Error("Tre coppie non hanno contributi validi");
+  errore.rapportoProblemi = {
+    fase: "calcolo", numeroBloccanti: 1, numeroAvvisi: 0,
+    bloccanti: [problema], nonBloccanti: [],
+    numeroCoppieNonConfrontabili: 3,
+    etichette: ["=FORMULA", "B;C", 'Riga "D"', "E"],
+    coppieNonConfrontabili: [[1, 2], [1, 4], [3, 4]]
+  };
+  h.observations.matrixIntercept = () => Promise.reject(errore);
+  h.fire("calculate-gower", "click");
+  await flush();
+  assert.equal(h.element("comparison-calculation-problems").hidden, false);
+  assert.equal(h.element("download-uncovered-pairs").hidden, false);
+  assert.equal(h.element("gower-result").hidden, true);
+  assert.equal(h.element("download-gower").disabled, true);
+  assert.match(h.element("csv-error").textContent, /Tre coppie/);
+  const relazione = h.element("comparison-calculation-problems-body").innerHTML;
+  assert.match(relazione, /Tutte le coppie non confrontabili: 3/);
+  assert.match(relazione, /Gruppo &lt;speciale&gt;/);
+  assert.doesNotMatch(relazione, /Gruppo <speciale>/);
+
+  h.fire("download-uncovered-pairs", "click");
+  assert.equal(h.observations.downloads.length, 1);
+  assert.equal(h.observations.downloads[0].name, "coppie_non_confrontabili.csv");
+  const csv = await h.observations.downloads[0].blob.text();
+  assert.match(csv, /riga_1;riga_2;etichetta_1;etichetta_2/);
+  assert.match(csv, /"1";"2";"'=FORMULA";"B;C"/);
+  assert.match(csv, /"3";"4";"Riga ""D""";"E"/);
+  assert.equal(csv.trim().split(/\r?\n/).length, 4);
+
+  h.observations.matrixIntercept = () => Promise.resolve(h.makeMatrix());
+  h.fire("calculate-gower", "click");
+  await flush();
+  assert.equal(h.element("comparison-calculation-problems").hidden, true);
+  assert.equal(h.element("download-uncovered-pairs").hidden, true);
+  assert.equal(h.element("gower-result").hidden, false);
+}
+
 (async () => {
+  await testRapportoCumulativoProblemi();
   await testDiagnosticaSensibilitaPesi();
   await testRapportoCompletoEConcorrenza();
   await testModalitaPesiGlobali();
