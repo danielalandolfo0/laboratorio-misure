@@ -253,6 +253,39 @@ trasformazione effettivamente usata nei calcoli e nella sua anteprima.
 Le misure basate su valori originali, come Canberra, Bray-Curtis,
 Mahalanobis e Gower classica, non ricevono automaticamente log(1+x).
 
+### Normalizzazione dei contributi locali, anche robusta
+
+La matrice globale combina distanze locali \(\delta_k\in[0,1]\). La
+normalizzazione e' **successiva** al riscalamento delle singole colonne e
+non modifica i dati di partenza. Il piano dichiara sempre, per ogni
+percorso, la regola scelta.
+
+- Per misure con massimo teorico noto (come Gower, confronti testuali
+  normalizzati, Pearson/coseno e Bray--Curtis su quantità non negative),
+  mantiene quel limite e non riscalibra sul campione. Canberra ha come
+  limite teorico il numero delle coordinate.
+- Senza un massimo teorico disponibile, il default e' il **massimo
+  campionario delle distanze definite su coppie distinte**; se tutte le
+  distanze valide sono zero, conserva il blocco a dissimilarità nulla.
+- In alternativa, l'utente puo' selezionare la **scala robusta** e
+  indicare quali **righe del CSV** considera anomale. Si ottiene
+  \[
+  M_k^{rob}=\max_{a<b,\ a,b\in A_k}d_k(a,b),\qquad
+  \delta_k^{rob}(i,j)=\min\{d_k(i,j)/M_k^{rob},1\}.
+  \]
+  Qui \(A_k\) contiene le righe confermate *non anomale*; le altre
+  rimangono nella matrice finale e vengono escluse solo dalla stima
+  della scala. Se il massimo robusto e' zero mentre esistono distanze
+  positive, oppure le righe non anomale non forniscono coppie valide,
+  il sistema blocca il calcolo e chiede una revisione. Non ricorre
+  automaticamente a un percentile o alla regola 7 IQR.
+
+La diagnostica conclusiva indica quante coppie sono state saturate a 1
+nel singolo blocco; la saturazione non e' un errore ma puo' ridurre
+la capacita' discriminante dei confronti. In caso di scelta robusta,
+la normalizzazione potrebbe non conservare la proprieta' triangolare
+delle distanze originarie. La scelta non elimina osservazioni o blocchi.
+
 ## Matrice complessiva con più percorsi
 
 Ogni percorso produce prima la propria matrice. Gower, i confronti 0/1 e le

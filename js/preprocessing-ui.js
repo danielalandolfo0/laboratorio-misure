@@ -712,6 +712,47 @@
           '<option value="si">Sì, confermo l’uso dei valori originali</option>' +
           '</select></label>'
         : "";
+
+      const norma = percorso.normalizzazione || {};
+      const valoreMetodo = String(norma.metodo || "campionaria");
+      const nomeId = escapeHtml(percorso.idPercorso);
+      const limitata = norma.limiteTeorico !== null && norma.limiteTeorico !== undefined;
+      const opzioniNorma = limitata
+        ? [['teorica', 'Conserva il limite teorico della misura']]
+        : [
+            ['campionaria', 'Massimo di tutte le distanze osservate'],
+            ['robusta', 'Massimo delle distanze tra le righe non anomale che confermo']
+          ];
+      if (!opzioniNorma.some(([id]) => id === valoreMetodo)) {
+        opzioniNorma.unshift([valoreMetodo, 'Scelta precedente incompatibile: modifica per proseguire']);
+      }
+      const menuNorma = opzioniNorma.map(([id, label]) =>
+        '<option value="' + escapeHtml(id) + '"' +
+        (id === valoreMetodo ? ' selected' : '') + '>' + escapeHtml(label) + '</option>'
+      ).join('');
+      const righeDaEscludere = interpretazione.righeAnomaleNormalizzazione?.[percorso.idPercorso] || '';
+      const configNorma = '<div class="question-item"><label><strong>Come riportare ' +
+        'la dissimilarità di questo percorso nell’intervallo [0,1]?</strong>' +
+        '<select class="path-normalization-method" data-path-id="' + nomeId + '">' +
+        menuNorma + '</select></label>' +
+        (limitata
+          ? '<p>Il limite è noto teoricamente: ' + formatoNumero(norma.limiteTeorico) +
+            '. Non si modifica la scala in base alle osservazioni caricate.</p>'
+          : '<p>In assenza di un massimo teorico, la scelta iniziale è il massimo ' +
+            'campionario. Puoi scegliere invece una scala robusta quando confermi ' +
+            'quali righe sono anomale; gli outlier restano nella matrice e alcune ' +
+            'coppie potrebbero saturare a 1.</p>') +
+        (!limitata && valoreMetodo === 'robusta'
+          ? '<label>Righe anomale del CSV da escludere SOLO dalla stima della scala ' +
+            '(prima riga dei dati = 1, separa con ;)' +
+            '<input type="text" class="path-robust-rows" data-path-id="' + nomeId +
+            '" value="' + escapeHtml(righeDaEscludere) +
+            '" placeholder="es. 3; 8"></label>' +
+            '<p>Servono almeno due righe non anomale confrontabili, con distanza ' +
+            'massima positiva salvo il caso di tutte le distanze nulle. ' +
+            'Nessuna riga viene esclusa dalla matrice finale.</p>'
+          : '') +
+        '<p>Regola applicata: ' + escapeHtml(norma.descrizione || '') + '</p></div>';
       const pesoAggregazione = piano.conteggioPercorsi > 1
         ? `<label class="path-weight-label">Quanto conta questo percorso nella matrice finale?
             <input class="path-weight" type="number" min="0.01" step="0.1"
@@ -746,6 +787,7 @@
         ${percorso.tipo === "numerico" ? controlloDipendenzaLineare(percorso) : ""}
         ${percorso.notaPreelaborazione ? `<p><strong>Quali valori vengono usati:</strong> ${escapeHtml(percorso.notaPreelaborazione)}</p>` : ""}
         ${pesoAggregazione}
+        ${configNorma}
         ${origineNonConfermata}
         ${editorNumerico}
         ${alternative}
@@ -1466,6 +1508,21 @@
   $("calculate-gower").addEventListener("click", calcolaMatrice);
   $("download-gower").addEventListener("click", scaricaMatrice);
   $("comparison-plan-paths").addEventListener("change", evento => {
+    if (evento.target.matches(".path-normalization-method")) {
+      if (!interpretazione.normalizzazioniPercorsi) interpretazione.normalizzazioniPercorsi = {};
+      interpretazione.normalizzazioniPercorsi[evento.target.dataset.pathId] = evento.target.value;
+      preparaPiano();
+      return;
+    }
+    if (evento.target.matches(".path-robust-rows")) {
+      if (!interpretazione.righeAnomaleNormalizzazione) {
+        interpretazione.righeAnomaleNormalizzazione = {};
+      }
+      interpretazione.righeAnomaleNormalizzazione[evento.target.dataset.pathId] =
+        evento.target.value;
+      preparaPiano();
+      return;
+    }
     if (evento.target.matches(".path-weight")) {
       if (!interpretazione.pesiPercorsi) interpretazione.pesiPercorsi = {};
       interpretazione.pesiPercorsi[evento.target.dataset.pathId] = evento.target.value;

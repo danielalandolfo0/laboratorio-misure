@@ -2493,6 +2493,99 @@ def _crea_percorsi(
     ]
 
 
+
+def _limite_teorico_percorso(percorso: dict[str, Any]) -> float | None:
+    """Restituisce un limite matematico, non il massimo del campione."""
+    tipo = percorso["tipo"]
+    misura = percorso.get("metodo", "")
+    if tipo == "gower":
+        return 1.0
+    if tipo == "numerico":
+        if percorso.get("idMisura") == "bray_curtis":
+            # Vettori non negativi: somma |a-b| <= somma(a+b).
+            return 1.0
+        if percorso.get("idMisura") == "canberra":
+            # Ciascun addendo e' in [0,1]; il massimo teorico e' p.
+            return float(len(percorso["colonne"]))
+        return None
+    if tipo == "separato":
+        if misura in {"Uguale o diverso", "Distanza di Levenshtein normalizzata"}:
+            return 1.0
+    if misura in {
+        "Dissimilarità coseno", "Dissimilarità di Pearson",
+        "Dissimilarità di Spearman",
+    }:
+        return 2.0
+    return None
+
+
+def _prepara_normalizzazione_percorso(
+    percorso: dict[str, Any],
+    interpretazione: dict[str, Any],
+    numero_righe: int,
+) -> dict[str, Any]:
+    """Richiede una scelta esplicita per la scala robusta; mai percentili impliciti."""
+    limite = _limite_teorico_percorso(percorso)
+    configurate = interpretazione.get("normalizzazioniPercorsi") or {}
+    escluse_per_percorso = interpretazione.get("righeAnomaleNormalizzazione") or {}
+    if not isinstance(configurate, dict) or not isinstance(escluse_per_percorso, dict):
+        raise ValueError("La configurazione delle normalizzazioni non e' valida.")
+    id_percorso = percorso["idPercorso"]
+    metodo_default = "teorica" if limite is not None else "campionaria"
+    metodo = configurate.get(id_percorso, metodo_default)
+    errori: list[str] = []
+    righe_escluse: list[int] = []
+    if limite is not None:
+        if metodo != "teorica":
+            errori.append(
+                "Questa misura ha un limite teorico noto: si conserva la scala "
+                "naturale e non si usa una normalizzazione campionaria o robusta."
+            )
+    elif metodo not in {"campionaria", "robusta"}:
+        errori.append("Scegli il massimo campionario oppure la scala robusta per questo percorso.")
+    elif metodo == "robusta":
+        testo = escluse_per_percorso.get(id_percorso, "")
+        if not isinstance(testo, str) or not testo.strip():
+            errori.append(
+                "Per la scala robusta indica i numeri delle righe anomale del CSV "
+                "(senza intestazione), separati da punto e virgola. "
+                "Le righe restano nella matrice."
+            )
+        else:
+            parti = [p for p in re.split(r"[;,\\s]+", testo.strip()) if p]
+            if any(not p.isdigit() or not 1 <= int(p) <= numero_righe for p in parti):
+                errori.append(
+                    f"I numeri delle righe anomale devono essere interi da 1 a {numero_righe}."
+                )
+            else:
+                righe_escluse = sorted(int(p) for p in parti)
+                if len(righe_escluse) != len(set(righe_escluse)):
+                    errori.append("Ogni riga anomala deve essere elencata una volta sola.")
+                if numero_righe - len(righe_escluse) < 2:
+                    errori.append(
+                        "Per stimare il massimo robusto servono almeno due righe non anomale."
+                    )
+    if errori:
+        percorso["stato"] = "da_completare"
+        percorso["calcolo"]["disponibile"] = False
+        percorso["calcolo"]["descrizione"] = "Completa la normalizzazione di questo percorso."
+        percorso.setdefault("avvisi", []).extend(errori)
+    return {
+        "metodo": metodo,
+        "limiteTeorico": limite,
+        "righeAnomale": righe_escluse,
+        "valida": not errori,
+        "descrizione": (
+            f"Limite teorico: {format(limite, '.6g')}. Si preserva la scala naturale."
+            if limite is not None else
+            "Massimo campionario delle dissimilarita' valide su coppie distinte."
+            if metodo == "campionaria" else
+            "Massimo delle dissimilarita' tra le sole righe confermate non anomale; "
+            "le altre righe restano nel confronto e possono saturare a 1."
+        ),
+    }
+
+
 def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, Any]) -> dict[str, Any]:
     """Costruisce un piano verificabile senza calcolare ancora le distanze."""
     if not isinstance(interpretazione, dict):
@@ -2617,6 +2710,9 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
             )
             peso = 1.0
         percorso["pesoAggregazione"] = peso
+        percorso["normalizzazione"] = _prepara_normalizzazione_percorso(
+            percorso, interpretazione, len(risultato["originale"]["righe"])
+        )
     incluse_con_estremi = any(analisi_per_nome[n].get("statistiche", {}).get("estremi", 0) > 0 for n in incluse)
     incluse_con_candidati_multivariati = any(
         percorso["tipo"] == "numerico"
@@ -3324,7 +3420,8 @@ def calcola_matrice_numerica(
     return {
         "metodo": percorso["metodo"], "colonne": nomi,
         "etichette": etichette, "matrice": matrice,
-        "indiciRighe": indici_usati, "limiteAggregazione": None,
+        "indiciRighe": indici_usati,
+        "limiteAggregazione": _limite_teorico_percorso(percorso),
         "csv": crea_csv(["Riga", *etichette], righe_csv), "nota": nota,
     }
 
@@ -3665,45 +3762,136 @@ def _calcola_matrice_specializzata(
     }
 
 
-def _normalizza_per_aggregazione(
+def _normalizza_per_aggregazione_con_diagnostica(
     risultato_percorso: dict[str, Any],
-) -> tuple[list[list[float | None]], str]:
-    """Applica il massimo teorico, se noto, oppure il massimo campionario.
+    specifica: dict[str, Any] | None = None,
+) -> tuple[list[list[float | None]], str, dict[str, Any]]:
+    """Normalizza conservando le coppie non disponibili, senza dati inventati.
 
-    I contributi non disponibili rimangono None e non diventano mai zero.
-    La normalizzazione robusta non e' scelta automaticamente.
+    Se la misura ha massimo teorico, questo prevale. Se non lo ha, il
+    massimo campionario usa solo coppie distinte definite. La variante
+    robusta e' ammessa soltanto su richiesta dell'utente.
     """
     matrice = risultato_percorso["matrice"]
+    n = len(matrice)
+    if any(len(riga) != n for riga in matrice):
+        raise ValueError("La matrice locale non e' quadrata.")
+    indici = risultato_percorso.get("indiciRighe", list(range(n)))
+    if len(indici) != n or len(set(indici)) != n:
+        raise ValueError("Gli indici delle righe della matrice locale non sono coerenti.")
     limite = risultato_percorso.get("limiteAggregazione")
-    valori = [
-        float(v)
-        for riga in matrice for v in riga if v is not None
-    ]
-    if any(not math.isfinite(v) or v < -1e-10 for v in valori):
-        raise ValueError("Il percorso contiene dissimilarita' negative o non finite.")
-    if limite is not None:
+    metodo = (
+        specifica.get("metodo", "")
+        if specifica is not None
+        else "teorica" if limite is not None else "campionaria"
+    )
+    valori_validi: list[tuple[int, int, float]] = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            x, y = matrice[i][j], matrice[j][i]
+            if x is None or y is None:
+                if x is not None or y is not None:
+                    raise ValueError("La disponibilita' della dissimilarita' locale non e' simmetrica.")
+                continue
+            x, y = float(x), float(y)
+            if not math.isfinite(x) or not math.isfinite(y) or x < 0 or y < 0:
+                raise ValueError("La matrice locale contiene dissimilarita' negative o non finite.")
+            if abs(x-y) > 1e-10:
+                raise ValueError("La dissimilarita' locale non e' simmetrica.")
+            valori_validi.append((i, j, x))
+    if not valori_validi:
+        raise ValueError(
+            "Questo percorso non contiene coppie distinte confrontabili: "
+            "rivedi i mancanti, le colonne o la misura prima di aggregarlo."
+        )
+
+    massimo = max(v for _, _, v in valori_validi)
+    if metodo == "teorica":
+        if limite is None:
+            raise ValueError("Questo percorso non dispone di un massimo teorico utilizzabile.")
         scala = float(limite)
         if not math.isfinite(scala) or scala <= 0:
-            raise ValueError("La scala teorica deve essere finita e positiva.")
-        if any(v > scala + 1e-9 * max(1.0, scala) for v in valori):
+            raise ValueError("Il massimo teorico deve essere finito e positivo.")
+        if massimo > scala + 1e-9 * max(1.0, scala):
             raise ValueError("La dissimilarita' supera il massimo teorico dichiarato.")
         descrizione = f"scala teorica 0–{format(scala, '.12g')}"
+    elif metodo == "campionaria":
+        if limite is not None:
+            raise ValueError("Per questa misura si deve conservare la scala teorica.")
+        scala = massimo if massimo > 0 else 1.0
+        descrizione = (
+            f"massimo campionario = {format(scala, '.6g')}"
+            if massimo > 0 else "tutte le dissimilarita' definite sono nulle"
+        )
+    elif metodo == "robusta":
+        if limite is not None:
+            raise ValueError("La scala robusta non e' applicabile a questa misura gia' limitata.")
+        righe_anomale = (specifica or {}).get("righeAnomale", [])
+        if (
+            not isinstance(righe_anomale, list)
+            or not righe_anomale
+            or any(not isinstance(v, int) or v < 1 for v in righe_anomale)
+            or len(righe_anomale) != len(set(righe_anomale))
+        ):
+            raise ValueError("Conferma almeno una riga anomala valida per la scala robusta.")
+        escluse = set(righe_anomale)
+        non_anomale = {k for k, indice in enumerate(indici) if indice + 1 not in escluse}
+        if len(non_anomale) < 2:
+            raise ValueError("La scala robusta richiede almeno due righe non anomale.")
+        confronti_non_anomali = [
+            v for i, j, v in valori_validi if i in non_anomale and j in non_anomale
+        ]
+        if not confronti_non_anomali:
+            raise ValueError(
+                "Non esistono due righe non anomale confrontabili per stimare la scala robusta."
+            )
+        scala_robusta = max(confronti_non_anomali)
+        if scala_robusta == 0 and massimo > 0:
+            raise ValueError(
+                "La scala robusta e' zero, ma esistono dissimilarita' positive. "
+                "Rivedi le righe anomale o seleziona il massimo campionario."
+            )
+        scala = scala_robusta if scala_robusta > 0 else 1.0
+        descrizione = (
+            f"massimo robusto = {format(scala_robusta, '.6g')}, "
+            f"righe escluse soltanto dalla scala: {', '.join(map(str, sorted(escluse)))}"
+            if massimo > 0 else
+            "tutte le dissimilarita' definite sono nulle, scala robusta confermata"
+        )
     else:
-        scala = max(valori, default=0.0)
-        if scala == 0:
-            scala = 1.0
-            descrizione = "tutte le dissimilarita' definite sono nulle"
-        else:
-            descrizione = f"massimo campionario = {format(scala, '.6g')}"
+        raise ValueError("Metodo di normalizzazione locale non riconosciuto.")
+
     normalizzata = [
         [
-            None if valore is None else min(max(float(valore) / scala, 0.0), 1.0)
+            None if valore is None else
+            min(max(float(valore) / scala, 0.0), 1.0)
             for valore in riga
         ]
         for riga in matrice
     ]
-    return normalizzata, descrizione
+    sature = sum(v > scala for _, _, v in valori_validi)
+    diagnostica = {
+        "metodo": metodo,
+        "scala": scala,
+        "coppieValide": len(valori_validi),
+        "coppieSaturate": sature if metodo == "robusta" else 0,
+        "righeEscluseSoloDallaScala": (specifica or {}).get("righeAnomale", [])
+            if metodo == "robusta" else [],
+    }
+    if metodo == "robusta":
+        descrizione += f"; coppie saturate a 1: {sature}"
+    return normalizzata, descrizione, diagnostica
 
+
+def _normalizza_per_aggregazione(
+    risultato_percorso: dict[str, Any],
+    specifica: dict[str, Any] | None = None,
+) -> tuple[list[list[float | None]], str]:
+    """Compatibilita' con gli utilizzi esistenti: matrice, descrizione."""
+    matrice, descrizione, _ = _normalizza_per_aggregazione_con_diagnostica(
+        risultato_percorso, specifica
+    )
+    return matrice, descrizione
 
 
 def _valida_matrice_finale(
@@ -3802,9 +3990,19 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
     if len(percorsi) == 1:
         # Anche un unico percorso deve produrre valori finali in [0,1].
         singolo = calcola(percorsi[0])
-        normalizzata, descrizione = _normalizza_per_aggregazione(singolo)
+        normalizzata, descrizione, diagnostica_normalizzazione = (
+            _normalizza_per_aggregazione_con_diagnostica(
+                singolo, percorsi[0]["normalizzazione"]
+            )
+        )
         etichette = singolo["etichette"]
         singolo["diagnosticaFinale"] = _valida_matrice_finale(normalizzata, etichette)
+        if diagnostica_normalizzazione["coppieSaturate"]:
+            singolo["diagnosticaFinale"]["avvisi"].append(
+                f"{diagnostica_normalizzazione['coppieSaturate']} coppie sono "
+                "saturate a 1 dalla normalizzazione robusta."
+            )
+        singolo["normalizzazioneFinale"] = diagnostica_normalizzazione
         singolo["matrice"] = normalizzata
         singolo["limiteAggregazione"] = 1.0
         singolo["csv"] = crea_csv(
@@ -3820,7 +4018,11 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
     componenti: list[dict[str, Any]] = []
     for percorso in percorsi:
         risultato_percorso = calcola(percorso)
-        matrice_normalizzata, normalizzazione = _normalizza_per_aggregazione(risultato_percorso)
+        matrice_normalizzata, normalizzazione, diagnostica_normalizzazione = (
+            _normalizza_per_aggregazione_con_diagnostica(
+                risultato_percorso, percorso["normalizzazione"]
+            )
+        )
         componenti.append({
             "percorso": percorso,
             "risultato": risultato_percorso,
@@ -3830,6 +4032,7 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
                 for posizione, indice_originale in enumerate(risultato_percorso["indiciRighe"])
             },
             "normalizzazione": normalizzazione,
+            "diagnosticaNormalizzazione": diagnostica_normalizzazione,
         })
 
     matrice_finale: list[list[float | None]] = [[0.0 for _ in range(n)] for _ in range(n)]
@@ -3854,6 +4057,13 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
 
     etichette = _etichette_righe(risultato, interpretazione)
     diagnostica_finale = _valida_matrice_finale(matrice_finale, etichette)
+    for componente in componenti:
+        numero_sature = componente["diagnosticaNormalizzazione"]["coppieSaturate"]
+        if numero_sature:
+            diagnostica_finale["avvisi"].append(
+                f"Percorso “{componente['percorso']['titolo']}”: "
+                f"{numero_sature} coppie locali saturate a 1 dalla scala robusta."
+            )
     righe_csv = [[etichetta, *riga] for etichetta, riga in zip(etichette, matrice_finale)]
     contributi = [
         {
@@ -3862,6 +4072,7 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
             "metodo": componente["percorso"]["metodo"],
             "peso": componente["percorso"]["pesoAggregazione"],
             "normalizzazione": componente["normalizzazione"],
+            "diagnosticaNormalizzazione": componente["diagnosticaNormalizzazione"],
         }
         for componente in componenti
     ]

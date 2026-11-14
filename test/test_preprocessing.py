@@ -1896,4 +1896,165 @@ assert piano_robusta["completo"], piano_robusta
 assert [v["metodo"] for v in piano_robusta["percorsi"][0]["preelaborazione"]["passi"]] == [
     "robusto", "nessuno"
 ]
+
+# Normalizzazione robusta per blocco: max su righe non anomale confermate,
+# saturazione dei soli confronti oltre tale max, nessuna riga eliminata.
+locale_norma = {
+    "matrice": [
+        [0.0, 1.0, 2.0, 30.0],
+        [1.0, 0.0, 1.0, 29.0],
+        [2.0, 1.0, 0.0, 28.0],
+        [30.0, 29.0, 28.0, 0.0],
+    ],
+    "indiciRighe": [0, 1, 2, 3],
+    "limiteAggregazione": None,
+}
+conf_robusta = {"metodo": "robusta", "righeAnomale": [4]}
+matrice_robusta, criterio_robusto, info_robusto = (
+    p._normalizza_per_aggregazione_con_diagnostica(locale_norma, conf_robusta)
+)
+quasi_uguali(info_robusto["scala"], 2)
+quasi_uguali(matrice_robusta[0][1], .5)
+quasi_uguali(matrice_robusta[0][2], 1)
+quasi_uguali(matrice_robusta[1][3], 1)
+assert info_robusto["coppieSaturate"] == 3
+assert "massimo robusto" in criterio_robusto
+norma_campionaria, _, _ = p._normalizza_per_aggregazione_con_diagnostica(
+    locale_norma, {"metodo": "campionaria"}
+)
+quasi_uguali(norma_campionaria[0][1], 1 / 30)
+assert norma_campionaria != matrice_robusta
+
+# Conserva gli indici ORIGINALI, anche se il percorso ha escluso righe
+# per altri motivi e le posizioni nella matrice sono diverse.
+locale_indici = {
+    "matrice": [
+        [0.0, 2.0, 40.0],
+        [2.0, 0.0, 35.0],
+        [40.0, 35.0, 0.0],
+    ],
+    "indiciRighe": [0, 2, 4],
+    "limiteAggregazione": None,
+}
+vettore_norm, _, info_indici = p._normalizza_per_aggregazione_con_diagnostica(
+    locale_indici, {"metodo": "robusta", "righeAnomale": [5]}
+)
+quasi_uguali(vettore_norm[0][1], 1)
+assert info_indici["coppieSaturate"] == 2
+
+for errata in (
+    {"metodo": "robusta", "righeAnomale": []},
+    {"metodo": "robusta", "righeAnomale": [1, 2, 3]},
+    {"metodo": "sconosciuta"},
+):
+    try:
+        p._normalizza_per_aggregazione_con_diagnostica(locale_norma, errata)
+        assert False, "La normalizzazione errata deve fallire."
+    except ValueError:
+        pass
+try:
+    p._normalizza_per_aggregazione_con_diagnostica(
+        {"matrice": [[0, 0], [0, 0]], "limiteAggregazione": None},
+        {"metodo": "robusta", "righeAnomale": [2]},
+    )
+    assert False, "Servono almeno due osservazioni non anomale."
+except ValueError:
+    pass
+
+# Non ripiega dal massimo robusto zero al massimo campionario.
+try:
+    p._normalizza_per_aggregazione_con_diagnostica(
+        {
+            "matrice": [[0, 0, 7], [0, 0, 8], [7, 8, 0]],
+            "indiciRighe": [0, 1, 2], "limiteAggregazione": None,
+        }, {"metodo": "robusta", "righeAnomale": [3]}
+    )
+    assert False, "Un massimo robusto nullo con distanze positive deve bloccare."
+except ValueError as errore:
+    assert "scala robusta" in str(errore)
+# Blocco interamente costante: conserva i contributi a zero.
+nulla_robusta, _, info_nulla = p._normalizza_per_aggregazione_con_diagnostica(
+    {"matrice": [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
+     "indiciRighe": [0, 1, 2], "limiteAggregazione": None},
+    {"metodo": "robusta", "righeAnomale": [3]},
+)
+assert all(valore == 0 for riga in nulla_robusta for valore in riga)
+assert info_nulla["coppieSaturate"] == 0
+
+# Scala naturale preesistente: nessuna amplificazione campionaria.
+bray_con_limite = p.crea_piano_confronto(
+    scale_simili,
+    {**risposte_accessibili, "confrontoQuantitativo": "abbondanza"},
+)
+assert bray_con_limite["percorsi"][0]["normalizzazione"]["metodo"] == "teorica"
+assert bray_con_limite["percorsi"][0]["normalizzazione"]["limiteTeorico"] == 1
+piano_br_illecito = p.crea_piano_confronto(
+    scale_simili,
+    {**risposte_accessibili, "confrontoQuantitativo": "abbondanza",
+     "normalizzazioniPercorsi": {"percorso-1": "robusta"},
+     "righeAnomaleNormalizzazione": {"percorso-1": "3"}},
+)
+assert not piano_br_illecito["completo"]
+assert not piano_br_illecito["percorsi"][0]["normalizzazione"]["valida"]
+
+# Percorso singolo: modifica realmente l'output mantenendo tutte le righe.
+dati_con_estremo_norm = p.prepara_tabella(p.leggi_csv(
+    "x\n0\n1\n2\n3\n40"
+))
+base_estremo_norm = {
+    "riga": "oggetto",
+    "significatoEstremi": "reali",
+    "confrontoQuantitativo": "assoluto",
+    "misuraNumericaManuale": "euclidean",
+    "colonne": {"x": {"ruolo": "quantita", "usa": True}},
+}
+piano_robusto_incompleto = p.crea_piano_confronto(
+    dati_con_estremo_norm,
+    {**base_estremo_norm, "normalizzazioniPercorsi": {"percorso-1": "robusta"}},
+)
+assert not piano_robusto_incompleto["completo"]
+for stringa_errata in ("0", "6", "5;5", "1;2;3;4"):
+    assert not p.crea_piano_confronto(
+        dati_con_estremo_norm,
+        {**base_estremo_norm,
+         "normalizzazioniPercorsi": {"percorso-1": "robusta"},
+         "righeAnomaleNormalizzazione": {"percorso-1": stringa_errata}},
+    )["completo"]
+confermate_estremo = {
+    **base_estremo_norm,
+    "normalizzazioniPercorsi": {"percorso-1": "robusta"},
+    "righeAnomaleNormalizzazione": {"percorso-1": "5"},
+}
+piano_robusto_ok = p.crea_piano_confronto(
+    dati_con_estremo_norm, confermate_estremo
+)
+assert piano_robusto_ok["completo"], piano_robusto_ok
+matrice_con_robusto = p.calcola_matrice(dati_con_estremo_norm, confermate_estremo)
+matrice_con_max = p.calcola_matrice(dati_con_estremo_norm, base_estremo_norm)
+quasi_uguali(matrice_con_robusto["matrice"][0][1], 1 / 3)
+quasi_uguali(matrice_con_max["matrice"][0][1], 1 / 40)
+quasi_uguali(matrice_con_robusto["matrice"][0][4], 1)
+assert len(matrice_con_robusto["etichette"]) == 5
+assert matrice_con_robusto["normalizzazioneFinale"]["coppieSaturate"] > 0
+assert matrice_con_robusto["diagnosticaFinale"]["avvisi"]
+
+# Vari percorsi: solo il blocco indicato dall'utente riceve scala robusta.
+risposte_blocchi_norm = {
+    **risposte_blocchi_eterogenei,
+    "normalizzazioniPercorsi": {"percorso-3": "robusta"},
+    "righeAnomaleNormalizzazione": {"percorso-3": "4"},
+}
+piano_blocchi_norm = p.crea_piano_confronto(
+    dati_blocchi_eterogenei, risposte_blocchi_norm
+)
+assert piano_blocchi_norm["completo"], piano_blocchi_norm
+assert [
+    v["normalizzazione"]["metodo"] for v in piano_blocchi_norm["percorsi"]
+] == ["campionaria", "teorica", "robusta"]
+composita_norm = p.calcola_matrice(dati_blocchi_eterogenei, risposte_blocchi_norm)
+verifica_matrice_finale(composita_norm, 5)
+assert [c["diagnosticaNormalizzazione"]["metodo"] for c in composita_norm["contributi"]] == [
+    "campionaria", "teorica", "robusta"
+]
+
 print("Tutti i test Python di preprocessing sono stati superati.")
