@@ -481,11 +481,19 @@ assert matrice_presenze["matrice"][0][2] == 1
 dati_misti_estremi = p.prepara_tabella(
     p.leggi_csv("a,categoria\n10,x\n12,y\n11,x\n9,z\n13,y\n10,x\n12,z\n80,y")
 )
-matrice_robusta = p.calcola_matrice_gower(
+matrice_classica_default = p.calcola_matrice_gower(
     dati_misti_estremi,
     {"riga": "oggetto", "significatoEstremi": "reali", "colonne": {}},
 )
+assert matrice_classica_default["metodo"] == "Dissimilarità di Gower classica"
+risposte_robuste = {
+    "riga": "oggetto", "significatoEstremi": "reali", "colonne": {},
+    "tipoGowerNumeriche": "robusta", "righeOutlierGower": {"a": "8"},
+}
+matrice_robusta = p.calcola_matrice_gower(dati_misti_estremi, risposte_robuste)
 assert matrice_robusta["metodo"] == "Dissimilarità di Gower robusta"
+assert matrice_robusta["matrice"][0][1] > matrice_classica_default["matrice"][0][1]
+quasi_uguali(matrice_robusta["matrice"][0][1], .75)
 assert all(
     valore is None or 0 <= valore <= 1
     for riga in matrice_robusta["matrice"] for valore in riga
@@ -1103,12 +1111,22 @@ base_misto_due = {
 piano_misto_classico = p.crea_piano_confronto(
     misti_con_due_quantita, {**base_misto_due, "tipoGowerNumeriche": "classica"}
 )
-piano_misto_robusto = p.crea_piano_confronto(
+piano_misto_robusto_senza_scalatura = p.crea_piano_confronto(
     misti_con_due_quantita, {**base_misto_due, "tipoGowerNumeriche": "robusta"}
+)
+assert not piano_misto_robusto_senza_scalatura["completo"]
+assert "righe anomale" in " ".join(piano_misto_robusto_senza_scalatura["percorsi"][0]["avvisi"])
+piano_misto_robusto = p.crea_piano_confronto(
+    misti_con_due_quantita,
+    {**base_misto_due, "tipoGowerNumeriche": "robusta", "righeOutlierGower": {"b": "4"}},
 )
 assert piano_misto_classico["percorsi"][0]["metodo"] == "Dissimilarità di Gower classica"
 assert piano_misto_robusto["percorsi"][0]["metodo"] == "Dissimilarità di Gower robusta"
 assert piano_misto_robusto["percorsi"][0]["calcolo"]["disponibile"] is True
+assert not p.crea_piano_confronto(
+    misti_con_due_quantita,
+    {**base_misto_due, "tipoGowerNumeriche": "robusta", "righeOutlierGower": {"b": "0"}},
+)["completo"]
 
 
 # Sono riconosciute anche le colonne sì/no, senza imporre un codice 0/1.
