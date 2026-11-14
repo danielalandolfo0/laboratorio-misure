@@ -2984,6 +2984,7 @@ def _limite_teorico_percorso(percorso: dict[str, Any]) -> float | None:
     if misura in {
         "Dissimilarità di Kendall τ-b",
         "Distanza di Hellinger", "Distanza di Jensen–Shannon",
+        "Dissimilarità LCSS normalizzata",
     }:
         return 1.0
     return None
