@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Laboratorio interattivo per preparare dati tabellari e comprendere misure tra vettori, dati binari e stringhe.">
   <title>Laboratorio delle misure</title>
-  <link rel="stylesheet" href="css/stile.css?v=20261114-fase7-distribuzione1">
+  <link rel="stylesheet" href="css/stile.css?v=20261114-fase7-problemi1">
   <script>
     if ("scrollRestoration" in history) history.scrollRestoration = "manual";
     window.addEventListener("pageshow", () => {
@@ -187,6 +187,10 @@
             </table>
           </div>
           <div class="plan-warnings" id="comparison-plan-warnings"></div>
+          <section class="plan-warnings" id="comparison-calculation-problems" aria-label="Problemi riscontrati nel calcolo" hidden>
+            <div id="comparison-calculation-problems-body"></div>
+            <button class="secondary-action" id="download-uncovered-pairs" type="button" hidden>Scarica tutte le coppie non confrontabili (CSV)</button>
+          </section>
           <div class="gower-actions" id="gower-actions" hidden>
             <button class="action" id="calculate-gower" type="button">Calcola la matrice finale</button>
             <button class="secondary-action" id="download-gower" type="button" disabled>Scarica la matrice in CSV</button>
@@ -333,8 +337,8 @@
 
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
-  <script defer src="js/preprocessing-python.js?v=20261114-fase7-distribuzione1"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261114-fase7-distribuzione1"></script>
+  <script defer src="js/preprocessing-python.js?v=20261114-fase7-problemi1"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261114-fase7-problemi1"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>
