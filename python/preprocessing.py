@@ -2038,9 +2038,9 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
             continue
         try:
             metadati = _metadati_gower(risultato, interpretazione, percorso)
-            esclusi = [nome for nome in percorso["colonne"]
-                       if nome not in {v["nome"] for v in metadati}]
-            percorso["colonneEscluseGower"] = esclusi
+            costanti = [v["nome"] for v in metadati if v["costante"]]
+            percorso["colonneCostantiGower"] = costanti
+            percorso["colonneEscluseGower"] = []
             percorso["pesiGower"] = {v["nome"]: v["peso"] for v in metadati}
             mancanti_risolti = {v["nome"]: v["politicaMancanti"] for v in metadati
                                 if analisi_per_nome[v["nome"]]["mancanti"] > 0}
@@ -2060,10 +2060,10 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
                         for nome, politica in mancanti_risolti.items()
                     ) + ". Le coppie senza alcun contributo disponibile restano non definite."
                 )
-            if esclusi:
+            if costanti:
                 percorso.setdefault("avvisi", []).append(
-                    "Colonne non informative escluse dal denominatore: " +
-                    ", ".join(esclusi) + "."
+                    "Colonne costanti mantenute con contributo zero e peso positivo: " +
+                    ", ".join(costanti) + "."
                 )
         except ValueError as errore:
             percorso["stato"] = "da_completare"
@@ -2279,7 +2279,7 @@ def _metadati_gower(
     interpretazione: dict[str, Any],
     percorso: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Prepara i soli contributi informativi, con pesi e valori mancanti coerenti."""
+    """Prepara tutti i contributi, incluse le colonne costanti con peso positivo."""
     tabella = risultato["originale"]
     analisi_per_nome = {colonna["nome"]: colonna for colonna in risultato["colonne"]}
     profili = {profilo["nome"]: profilo for profilo in risultato["questionario"]["colonne"]}
@@ -2305,11 +2305,6 @@ def _metadati_gower(
         politica = _politica_mancanti_gower(
             nome, ruolo, any(mancante(v) for v in grezzi), interpretazione
         )
-        # Se i soli valori osservati sono tutti uguali e i mancanti vengono
-        # esclusi, l'eventuale polarità binaria è irrilevante.
-        osservati_grezzi = {str(v).strip() for v in grezzi if not mancante(v)}
-        if ruolo in {"presenza", "binaria"} and politica == "escludi" and len(osservati_grezzi) <= 1:
-            continue
         asimmetrica = ruolo == "presenza" and (
             (interpretazione.get("zeriCondivisiPerColonna") or {}).get(
                 nome, interpretazione.get("zeriCondivisi")
@@ -2395,22 +2390,19 @@ def _metadati_gower(
             ]
             tipo, scala, limita = "nominale", None, False
 
-        # Una variabile senza variabilità osservabile non deve diluire il
-        # contributo delle altre variabili nel denominatore.
+        # Decisioni 7 e 19: una colonna costante resta nel denominatore
+        # per ogni coppia in cui e' effettivamente osservata, con distanza zero.
+        # Una colonna interamente mancante NON e' una costante osservata.
         distinti = {v for v in valori if v is not None}
-        if len(distinti) <= 1:
-            continue
         metadati.append({
             "nome": nome, "tipo": tipo, "valori": valori, "scala": scala,
             "limita": limita, "asimmetrica": asimmetrica, "peso": peso,
+            "costante": len(distinti) == 1,
             "politicaMancanti": politica,
         })
 
     if not metadati:
-        raise ValueError(
-            "Tutte le colonne utilizzabili da Gower sono costanti o non osservate: "
-            "non è disponibile alcuna caratteristica discriminante."
-        )
+        raise ValueError("Nessuna caratteristica e' stata inclusa nel confronto Gower.")
     return metadati
 
 
@@ -2435,7 +2427,11 @@ def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, 
                 b = variabile["valori"][k]
                 if a is None or b is None:
                     continue
-                if variabile["tipo"] == "nominale":
+                if variabile.get("costante"):
+                    # Perfino una presenza sempre assente e' un blocco costante
+                    # confermato: il suo contributo e' nullo ma il peso rimane.
+                    contributo = 0.0
+                elif variabile["tipo"] == "nominale":
                     if variabile.get("asimmetrica") and float(a) == 0 and float(b) == 0:
                         continue
                     contributo = 0.0 if a == b else 1.0
@@ -2458,9 +2454,9 @@ def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, 
         if percorso["metodo"] == "Dissimilarità di Gower robusta"
         else "Per le quantità, Gower classica divide lo scarto per l’intervallo osservato."
     )
-    escluse = [nome for nome in percorso["colonne"] if nome not in {v["nome"] for v in metadati}]
-    if escluse:
-        nota += " Colonne prive di variabilità escluse dal denominatore: " + ", ".join(escluse) + "."
+    costanti = [v["nome"] for v in metadati if v["costante"]]
+    if costanti:
+        nota += " Colonne costanti mantenute con peso positivo e dissimilarita' zero: " + ", ".join(costanti) + "."
     nota += " I pesi positivi sono applicati sia al numeratore sia al denominatore."
     return {
         "metodo": percorso["metodo"], "colonne": percorso["colonne"],
