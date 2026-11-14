@@ -1127,7 +1127,81 @@ async function testRapportoCompletoEConcorrenza() {
   assert.equal(h.element("download-report").disabled, true);
 }
 
+async function testDiagnosticaSensibilitaPesi() {
+  const h = createHarness();
+  h.fire("load-example-csv", "click");
+  await flush();
+  h.fire("row-meaning", "change", {value: "oggetto"});
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  const matrix = h.makeMatrix();
+  matrix.diagnosticaFinale.sensibilitaPesi = {
+    numeroBlocchi: 2, coppieTotali: 1, tolleranzaZero: 1e-12,
+    perBlocco: [
+      {
+        titolo: 'Blocco <nominale>', pesoOriginale: 2, coppieDefinite: 1,
+        fattoreMezzo: {variazioneMassimaAssoluta: .1},
+        fattoreDoppio: {variazioneMassimaAssoluta: .2},
+        senzaBlocco: {
+          coppieConfrontabili: 1, coppieSenzaAltroContributo: 0,
+          variazioneMassimaAssoluta: .3,
+        },
+      },
+      {
+        titolo: "Blocco costante", pesoOriginale: 1, coppieDefinite: 1,
+        fattoreMezzo: {variazioneMassimaAssoluta: .05},
+        fattoreDoppio: {variazioneMassimaAssoluta: .1},
+        senzaBlocco: {
+          coppieConfrontabili: 0, coppieSenzaAltroContributo: 1,
+          variazioneMassimaAssoluta: null,
+        },
+      }
+    ],
+    blocchiSempreNulli: [{
+      idPercorso: "p2", titolo: "Blocco costante", peso: 1,
+      coppieDefinite: 1, coppieNonDisponibili: 0,
+      coppieConAltriBlocchi: 0,
+      attenuazioneMassimaRimuovendolo: null,
+    }],
+  };
+  h.observations.matrixIntercept = () => Promise.resolve(matrix);
+  h.fire("calculate-gower", "click");
+  await flush();
+  const diag = h.element("gower-diagnostics");
+  assert.equal(diag.hidden, false);
+  assert.match(diag.innerHTML, /Influenza dei pesi e dei blocchi/);
+  assert.match(diag.innerHTML, /peso ×0,5/);
+  assert.match(diag.innerHTML, /peso ×2/);
+  assert.match(diag.innerHTML, /non confrontabili senza blocco/);
+  assert.match(diag.innerHTML, /Non definibile/);
+  assert.match(diag.innerHTML, /Attenzione ai blocchi con distanza nulla/);
+  assert.match(diag.innerHTML, /&lt;nominale&gt;/);
+  assert.doesNotMatch(diag.innerHTML, /Blocco <nominale>/);
+  assert.equal(h.element("download-report").disabled, false);
+  assert.equal(h.element("download-gower").disabled, false);
+
+  const one = {...matrix, diagnosticaFinale: {
+    avvisi: [], sensibilitaPesi: {...matrix.diagnosticaFinale.sensibilitaPesi,
+      numeroBlocchi: 1, perBlocco: matrix.diagnosticaFinale.sensibilitaPesi.perBlocco.slice(0, 1),
+      blocchiSempreNulli: []
+    }
+  }};
+  h.observations.matrixIntercept = () => Promise.resolve(one);
+  h.fire("calculate-gower", "click");
+  await flush();
+  assert.match(h.element("gower-diagnostics").innerHTML, /unico blocco/);
+  assert.doesNotMatch(h.element("gower-diagnostics").innerHTML, /final-diagnostics-table/);
+
+  const legacy = {...matrix, diagnosticaFinale: {avvisi: []}};
+  h.observations.matrixIntercept = () => Promise.resolve(legacy);
+  h.fire("calculate-gower", "click");
+  await flush();
+  assert.equal(h.element("gower-diagnostics").hidden, true);
+  assert.equal(h.element("gower-diagnostics").innerHTML, "");
+}
+
 (async () => {
+  await testDiagnosticaSensibilitaPesi();
   await testRapportoCompletoEConcorrenza();
   await testModalitaPesiGlobali();
   await testLogaritmoStrettamentePositivo();
