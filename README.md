@@ -99,6 +99,24 @@ finale contengono soltanto le righe effettivamente utilizzate. Mahalanobis con
 imputazione non viene abilitata automaticamente, perché richiede una nuova
 verifica della covarianza dopo il completamento dei dati.
 
+## Quantità numeriche in un CSV misto
+
+Quando almeno due colonne quantitative indipendenti convivono con categorie,
+livelli, presenze o date, il questionario **chiede esplicitamente** come
+organizzarle. Non sceglie la geometria sulla base del solo tipo CSV:
+
+- **Gower su tutte le colonne**: ciascuna quantità contribuisce come scarto
+  normalizzato, insieme ai contributi delle altre caratteristiche.
+- **Blocco numerico distinto**: le quantità vengono confrontate insieme con
+  una misura numerica selezionabile (anche pesata), mentre le altre
+  caratteristiche standard formano un blocco Gower. Si possono confermare
+  trasformazioni diverse delle colonne e pesi positivi per i due blocchi.
+
+In entrambi i casi i blocchi sono disgiunti e il risultato finale resta
+**una sola matrice** in [0,1], ottenuta aggregando le contribuzioni disponibili.
+Se la scelta della struttura manca, il piano non è completo e non calcola.
+La normalizzazione e i pesi dei percorsi sono presentati nel piano.
+
 ## Gruppi numerici con misure differenti
 
 Una tabella anche interamente numerica puo' essere organizzata in blocchi
