@@ -957,11 +957,19 @@
     $("comparison-plan-warnings").innerHTML = avvisi.length
       ? `<p><strong>Che cosa controllare prima del calcolo:</strong></p><ul>${avvisi.map(avviso => `<li>${escapeHtml(avviso)}</li>`).join("")}</ul>`
       : "";
-    $("comparison-plan-intro").textContent = !piano.completo
+    const semantica = piano.diagnosticaMancantiSemantici;
+    const totaliMancanti = semantica?.attiva
+      ? (" Marcatori confermati: " +
+        "sconosciuti " + (semantica.totali?.sconosciuto || 0) +
+        ", non applicabili " + (semantica.totali?.non_applicabile || 0) +
+        ", assenze reali " + (semantica.totali?.assenza || 0) +
+        ". Gli ultimi sono osservati soltanto nei blocchi compatibili.")
+      : "";
+    $("comparison-plan-intro").textContent = (!piano.completo
       ? "Il piano è stato preparato, ma alcune informazioni devono ancora essere completate."
       : piano.conteggioPercorsi === 1
         ? "È stato individuato un unico percorso di confronto."
-        : `Sono stati individuati ${piano.conteggioPercorsi} percorsi. Il sito li renderà confrontabili e produrrà una sola matrice complessiva usando le importanze indicate.`;
+        : `Sono stati individuati ${piano.conteggioPercorsi} percorsi. Il sito li renderà confrontabili e produrrà una sola matrice complessiva usando le importanze indicate.`) + totaliMancanti;
     const percorsiCalcolabili = piano.percorsi.filter(percorso => percorso.calcolo.disponibile);
     $("gower-actions").hidden = !(
       piano.completo && piano.conteggioPercorsi > 0
@@ -985,7 +993,11 @@
     </tr>`).join("");
     $("gower-result-title").textContent = risposta.metodo;
     const avvisiFinali = risposta.diagnosticaFinale?.avvisi || [];
-    $("gower-result-caption").textContent = `${risposta.etichette.length} × ${risposta.etichette.length}. ${risposta.nota}${limite < risposta.etichette.length ? ` Anteprima delle prime ${limite} righe.` : ""}${avvisiFinali.length ? " Diagnostica (non bloccante): " + avvisiFinali.join(" ") : ""}`;
+    const stati = risposta.diagnosticaMancantiSemantici;
+    const diagnosticaMista = stati?.attiva
+      ? ` Marcatori nel CSV: ${stati.totali?.sconosciuto || 0} sconosciuti, ${stati.totali?.non_applicabile || 0} non applicabili, ${stati.totali?.assenza || 0} assenze realmente osservate confermate.`
+      : "";
+    $("gower-result-caption").textContent = `${risposta.etichette.length} × ${risposta.etichette.length}. ${risposta.nota}${limite < risposta.etichette.length ? ` Anteprima delle prime ${limite} righe.` : ""}${diagnosticaMista}${avvisiFinali.length ? " Diagnostica (non bloccante): " + avvisiFinali.join(" ") : ""}`;
     $("download-gower").disabled = false;
     $("gower-result").hidden = false;
     aggiornaGuida();
@@ -1224,7 +1236,8 @@
         escapeHtml(nome) + '" type="text" value="' + escapeHtml(peso) +
         '" placeholder="1"></label>';
 
-      if (risultato.colonne.find(c => c.nome === nome)?.mancanti > 0) {
+      if (risultato.colonne.find(c => c.nome === nome)?.mancanti > 0
+          && rispostaMancanti !== "misto") {
         const opzioni = [["", "Segui la risposta generale sulle caselle vuote"],
           ["escludi", "Valore non disponibile: ignora questa colonna per la coppia"]];
         if (["categoria", "binaria", "presenza"].includes(ruolo))
@@ -1263,7 +1276,9 @@
       if (ruolo === "categoria") {
         const politica = interpretazione.mancantiPerColonna?.[nome] || "";
         const comeAssenza = (risultato.colonne.find(c => c.nome === nome)?.mancanti > 0) &&
-          (politica === "assenza" || (!politica && rispostaMancanti === "assenza"));
+          (rispostaMancanti === "misto"
+              ? Object.values(interpretazione.statiMancantiPerColonna?.[nome] || {}).includes("assenza")
+              : politica === "assenza" || (!politica && rispostaMancanti === "assenza"));
         const livelli = [...distinti].sort();
         if (comeAssenza) livelli.push(null);
         elementi += configuraNominali(nome, livelli);
@@ -1277,7 +1292,9 @@
         if (ordinale === "no") {
           const politica = interpretazione.mancantiPerColonna?.[nome] || "";
           const comeAssenza = (risultato.colonne.find(c => c.nome === nome)?.mancanti > 0) &&
-            (politica === "assenza" || (!politica && rispostaMancanti === "assenza"));
+            (rispostaMancanti === "misto"
+              ? Object.values(interpretazione.statiMancantiPerColonna?.[nome] || {}).includes("assenza")
+              : politica === "assenza" || (!politica && rispostaMancanti === "assenza"));
           const livelliNominali = [...distinti].sort();
           if (comeAssenza) livelliNominali.push(null);
           elementi += configuraNominali(nome, livelliNominali);
@@ -1399,6 +1416,49 @@
       "Un valore sconosciuto viene escluso per la coppia; una vera assenza, se confermata per la colonna, viene trattata come uno stato osservato.",
       [["sconosciuto", "Il valore non è conosciuto"], ["non_applicabile", "La domanda non si applica"], ["assenza", "Indica assenza"], ["misto", "Dipende dalla colonna"], ["ignoto", "Non lo so"]]
     ));
+    if (valoreRisposta("significatoMancanti") === "misto") {
+      domande.push('<div class="question-item"><strong>Significato dei simboli mancanti</strong>' +
+        '<p>Per ogni colonna conferma che cosa rappresentano i simboli effettivamente presenti. ' +
+        'Per esempio ? può indicare sconosciuto, N/A non applicabile e NA assenza, ' +
+        'ma non assumiamo mai questi significati automaticamente. ' +
+        'Lo stesso simbolo nella stessa colonna può avere un solo significato: ' +
+        'se ne servono due, correggi prima la codifica nel CSV.</p>' +
+        '<p>L’assenza confermata è uno stato osservato per categorie e variabili binarie. ' +
+        'Non è automaticamente uno zero per quantità e timestamp.</p></div>');
+      const marcatoriAmmessi = new Set(["", "na", "n/a", "null", "?"]);
+      for (const profilo of profiliInclusi) {
+        const nome = profilo.nome;
+        const indice = risultato.originale.intestazioni.indexOf(nome);
+        const conteggi = new Map();
+        for (const riga of risultato.originale.righe) {
+          const simbolo = String(riga[indice] ?? "").trim().toLocaleLowerCase();
+          if (marcatoriAmmessi.has(simbolo)) {
+            conteggi.set(simbolo, (conteggi.get(simbolo) || 0) + 1);
+          }
+        }
+        if (!conteggi.size) continue;
+        const righe = [...conteggi].map(([marcatore, numero]) => {
+          const scelta = interpretazione.statiMancantiPerColonna?.[nome]?.[marcatore] || "";
+          const nomeSimbolo = marcatore === "" ? "Cella vuota" : marcatore.toUpperCase();
+          const opzioni = [
+            ["", "Scegli il significato"],
+            ["sconosciuto", "Valore non conosciuto: non osservato"],
+            ["non_applicabile", "Non applicabile: non osservato"],
+            ["assenza", "Assenza reale: stato osservato (categorie/binarie)"]
+          ];
+          return '<label>' + escapeHtml(nomeSimbolo) + ' — ' + numero +
+            ' occorrenz' + (numero === 1 ? 'a' : 'e') +
+            '<select class="missing-marker-setting" data-missing-column="' +
+            escapeHtml(nome) + '" data-missing-marker="' + escapeHtml(marcatore) + '">' +
+            opzioni.map(([id, txt]) =>
+              '<option value="' + id + '"' + (scelta === id ? ' selected' : '') +
+              '>' + escapeHtml(txt) + '</option>').join("") +
+            '</select></label>';
+        });
+        domande.push('<div class="question-item"><strong>Colonna “' +
+          escapeHtml(nome) + '”</strong>' + righe.join("") + '</div>');
+      }
+    }
     if (colonneIncluse.some(colonna => colonna.statistiche?.estremi > 0)) domande.push(domandaAdattiva(
       "significatoEstremi", "Alcuni valori sono molto lontani dagli altri: sono corretti?",
       "Il sito li ha individuati automaticamente. Indica se rappresentano situazioni reali o possibili errori.",
@@ -2347,6 +2407,21 @@
     disegnaQuestionario();
   });
   $("adaptive-questions").addEventListener("change", evento => {
+    if (evento.target.matches(".missing-marker-setting")) {
+      if (!interpretazione.statiMancantiPerColonna) {
+        interpretazione.statiMancantiPerColonna = {};
+      }
+      const nome = evento.target.dataset.missingColumn;
+      const marcatore = evento.target.dataset.missingMarker;
+      if (!interpretazione.statiMancantiPerColonna[nome]) {
+        interpretazione.statiMancantiPerColonna[nome] = {};
+      }
+      interpretazione.statiMancantiPerColonna[nome][marcatore] =
+        evento.target.value;
+      annullaScelteNormalizzazione();
+      disegnaQuestionario();
+      return;
+    }
     if (evento.target.matches(".temporal-parameter")) {
       const key = evento.target.dataset.temporalKey;
       const id = evento.target.dataset.groupId;
