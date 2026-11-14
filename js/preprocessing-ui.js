@@ -410,6 +410,7 @@
               '<option value="ripetute">Coordinate di un profilo da confrontare per forma o direzione</option>' +
               '<option value="coordinate">Coordinate quantitative da confrontare insieme</option>' +
               '<option value="parti">Parti dello stesso totale</option>' +
+              '<option value="distribuzione">Bin di una distribuzione o di un istogramma</option>' +
             '</select></label>' +
             '<button type="button" class="secondary-action apply-group-proposal" ' +
             'data-proposal-index="' + indice + '">Crea questo gruppo</button></div>'
@@ -948,7 +949,10 @@
     $("group-config-list").innerHTML = interpretazione.gruppi.map(gruppo => {
       const membri = incluse.filter(profilo => interpretazione.assegnazioni[profilo.nome] === gruppo.id).map(profilo => profilo.nome);
       const tipi = membri.map(nome => risultato.colonne.find(colonna => colonna.nome === nome)?.tipo);
-      const tutteNumeriche = tipi.length >= 2 && tipi.every(tipo => tipo === "numerica" || tipo === "numerica_costante");
+      const tutteNumeriche = tipi.length >= 2 && tipi.every(tipo =>
+        tipo === "numerica" || tipo === "numerica_costante" ||
+        (gruppo.tipo === "distribuzione" && tipo === "binaria")
+      );
       const tutteQuantitative = tutteNumeriche && membri.every(nome => interpretazione.colonne[nome]?.ruolo === "quantita");
       const nota = membri.length < 2
         ? "Assegna almeno due colonne a questo gruppo."
@@ -962,7 +966,8 @@
           <option value="ripetute"${gruppo.tipo === "ripetute" ? " selected" : ""}>Misurazioni dello stesso profilo</option>
           <option value="coordinate"${gruppo.tipo === "coordinate" ? " selected" : ""}>Coordinate quantitative da confrontare insieme</option>
           <option value="tempo"${gruppo.tipo === "tempo" ? " selected" : ""}>Osservazioni successive nel tempo</option>
-          <option value="parti"${gruppo.tipo === "parti" ? " selected" : ""}>Parti dello stesso totale</option>
+          <option value="parti"${gruppo.tipo === "parti" ? " selected" : ""}>Parti dello stesso totale (Aitchison)</option>
+          <option value="distribuzione"${gruppo.tipo === "distribuzione" ? " selected" : ""}>Distribuzione di probabilità o istogramma</option>
         </select></label>
         <p>${escapeHtml(nota)}</p>
         <button class="remove-group" type="button">Rimuovi gruppo</button>
@@ -1276,7 +1281,9 @@
       const membri = profili.filter(profilo => interpretazione.colonne[profilo.nome]?.usa && interpretazione.assegnazioni[profilo.nome] === gruppo.id);
       const tipi = membri.map(profilo => risultato.colonne.find(colonna => colonna.nome === profilo.nome)?.tipo);
       const valido = membri.length >= 2 && membri.every((profilo, indice) =>
-        ["numerica", "numerica_costante"].includes(tipi[indice]) && interpretazione.colonne[profilo.nome]?.ruolo === "quantita");
+        (["numerica", "numerica_costante"].includes(tipi[indice]) ||
+          (gruppo.tipo === "distribuzione" && tipi[indice] === "binaria")) &&
+          interpretazione.colonne[profilo.nome]?.ruolo === "quantita");
       if (!valido) return;
       if (gruppo.tipo === "ripetute") domande.push(domandaAdattiva(
         `somiglianza-${gruppo.id}`, `Nel gruppo “${escapeHtml(gruppo.nome)}”, quando due righe devono essere considerate simili?`,
@@ -1313,6 +1320,32 @@
           `ritardo-${gruppo.id}`, `Nel gruppo “${escapeHtml(gruppo.nome)}”, un andamento simile può avvenire con un piccolo ritardo?`,
           "Per esempio, lo stesso picco può comparire in momenti leggermente diversi nelle due righe.",
           [["si", "Sì, il ritardo non deve renderle diverse"], ["no", "No, gli stessi eventi devono avvenire negli stessi momenti"], ["ignoto", "Non lo so"]]
+        ));
+      }
+      if (gruppo.tipo === "distribuzione") {
+        domande.push(domandaAdattiva(
+          `naturaDistribuzione-${gruppo.id}`,
+          `Che cosa rappresentano i valori del gruppo “${escapeHtml(gruppo.nome)}”?`,
+          "Ogni colonna rappresenta la stessa categoria o intervallo (bin) " +
+          "in tutte le righe. Sono ammessi zeri reali; non sono ammessi valori negativi " +
+          "o righe con totale zero. A differenza di Aitchison, le due misure " +
+          "non richiedono componenti strettamente positive.",
+          [
+            ["probabilita", "Probabilità: ogni riga deve già sommare a 1"],
+            ["masse", "Conteggi, percentuali o frequenze: normalizza ogni riga per il suo totale"]
+          ]
+        ));
+        domande.push(domandaAdattiva(
+          `misuraDistribuzione-${gruppo.id}`,
+          `Come confrontare le distribuzioni del gruppo “${escapeHtml(gruppo.nome)}”?`,
+          "Hellinger confronta le radici quadrate delle probabilità. " +
+          "Jensen–Shannon confronta le informazioni contenute nelle due " +
+          "distribuzioni e usa la radice della divergenza normalizzata. " +
+          "Entrambe sono distanze tra 0 e 1 e ammettono probabilità nulle.",
+          [
+            ["hellinger", "Hellinger: scarti fra radici delle probabilità"],
+            ["jensen_shannon", "Jensen–Shannon: informazione distribuita diversamente"]
+          ]
         ));
       }
       if (gruppo.tipo === "parti") domande.push(domandaAdattiva(
@@ -1406,7 +1439,12 @@
         risultato.colonne.find(colonna => colonna.nome === profilo.nome)
       );
       if (colonneGruppo.some(colonna => colonna?.mancanti > 0)) {
-        const opzioni = gruppo.tipo === "tempo"
+        const opzioni = gruppo.tipo === "distribuzione"
+          ? [
+              ["escludi_percorso", "Non usare questo gruppo per le righe che hanno valori mancanti"],
+              ["zero", "Confermo che ogni vuoto corrisponde esattamente a massa zero"]
+            ]
+          : gruppo.tipo === "tempo"
           ? [
               ["escludi_percorso", "Non usare questo gruppo per le righe con vuoti"],
               ["interpola_lineare", "Ricostruisci soltanto i vuoti interni con una linea retta"],
@@ -1426,6 +1464,8 @@
           `Nel gruppo “${escapeHtml(gruppo.nome)}”, come trattiamo le caselle vuote?`,
           gruppo.tipo === "tempo"
             ? "L’interpolazione usa soltanto valori osservati prima e dopo il vuoto; non inventa gli estremi della serie."
+            : gruppo.tipo === "distribuzione"
+              ? "Non si imputano media o mediana nelle distribuzioni. Puoi omettere il blocco per le righe con vuoti, oppure dichiarare che i vuoti sono autentiche frequenze nulle; ogni riga usata deve mantenere massa totale positiva."
             : "La scelta vale soltanto per questo gruppo e viene dichiarata nel risultato. " +
               "Se scegli il confronto pairwise, le distanze di Minkowski sono medie pesate " +
               "degli scarti sulle coordinate comuni, senza sostituire i vuoti.",
@@ -1717,11 +1757,11 @@
       interpretazione[evento.target.dataset.answer] = evento.target.value;
       if (evento.target.matches(".semantic-answer")) {
         const chiave = evento.target.dataset.answer || "";
-        if (/^(confrontoQuantitativo|aggregazioneScarti|dipendenzaCoordinate|importanzaCoordinate|somiglianza-|ritardo-|totale-|mancanti-gruppo-)/.test(chiave)) {
+        if (/^(confrontoQuantitativo|aggregazioneScarti|dipendenzaCoordinate|importanzaCoordinate|somiglianza-|ritardo-|totale-|mancanti-gruppo-|naturaDistribuzione-|misuraDistribuzione-)/.test(chiave)) {
           annullaScelteNormalizzazione();
         }
-        if (/^(somiglianza|ritardo|totale)-/.test(chiave)) {
-          const idGruppo = chiave.replace(/^(somiglianza|ritardo|totale)-/, "");
+        if (/^(somiglianza|ritardo|totale|naturaDistribuzione|misuraDistribuzione)-/.test(chiave)) {
+          const idGruppo = chiave.replace(/^(somiglianza|ritardo|totale|naturaDistribuzione|misuraDistribuzione)-/, "");
           if (interpretazione.misureGruppi) delete interpretazione.misureGruppi[idGruppo];
           annullaConfermeCompatibilita();
         }
@@ -1751,7 +1791,7 @@
     }
     const selezione = pulsante.closest(".question-item").querySelector(".group-proposal-type");
     const tipo = selezione?.value || "";
-    if (!["tempo", "ripetute", "coordinate", "parti"].includes(tipo)) {
+    if (!["tempo", "ripetute", "coordinate", "parti", "distribuzione"].includes(tipo)) {
       mostraErrore("Prima di creare il gruppo, conferma che cosa rappresentano le sue colonne.");
       return;
     }
