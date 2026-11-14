@@ -825,6 +825,16 @@
           elementi += '<p>Per questa colonna, «assenza» non è uno zero automatico: scegli esplicitamente come trattarla.</p>';
       }
 
+      if (ruolo === "quantita" && valoreRisposta("tipoGowerNumeriche") === "robusta") {
+        elementi += '<label>Quali righe del CSV consideri anomale in questa colonna? (numeri di riga dei dati, da 1)' +
+          '<input class="gower-setting" data-gower-key="righeOutlierGower" data-gower-column="' +
+          escapeHtml(nome) + '" type="text" value="' +
+          escapeHtml(interpretazione.righeOutlierGower?.[nome] || "") +
+          '" placeholder="es. 3; 8"></label>' +
+          '<p>Queste righe saranno escluse soltanto dalla stima della scala robusta, ' +
+          'non dal confronto finale. Lascia vuoto se questa colonna non ha valori anomali. ' +
+          'Per definire la scala servono almeno due valori distinti non anomali.</p>';
+      }
       if (ruolo === "presenza") {
         elementi += menu("zeriCondivisiPerColonna", nome, "Le assenze condivise contano?",
           [["", "Segui la risposta generale"],
@@ -1010,7 +1020,7 @@
         "Quando si confrontano differenze in proporzione, valori molto piccoli possono avere un peso elevato.",
         [["no", "No, accade raramente"], ["si", "Sì, e questi valori sono significativi"], ["ignoto", "Non lo so — mostrami un avviso nel risultato"]]
       ));
-    } else if (quantitativeIndipendenti.length >= 2 && indipendentiStandard.some(profilo =>
+    } else if (quantitativeIndipendenti.length >= 1 && indipendentiStandard.some(profilo =>
       interpretazione.colonne[profilo.nome]?.ruolo !== "quantita")) {
       domande.push(notaAutomatica(
         "Caratteristiche quantitative nel percorso misto",
@@ -1018,9 +1028,9 @@
       ));
       domande.push(domandaAdattiva(
         "tipoGowerNumeriche", "Come vuoi normalizzare le differenze tra le quantità all'interno di Gower?",
-        "La scelta riguarda solo i contributi quantitativi. Gower classica usa l'intervallo osservato; la variante robusta usa 7 volte l'IQR (se positivo) e limita ogni contributo a 1.",
-        [["automatico", "Usa il criterio consigliato"], ["classica", "Usa l'intervallo osservato (Gower classica)"], ["robusta", "Limita l'influenza dei valori estremi sulla scala (Gower robusta)"]],
-        "automatico"
+        "Per impostazione predefinita si usa il massimo scarto osservato. Se scegli la variante robusta, devi indicare quali righe NON usare per stimare la scala di ogni colonna quantitativa: restano comunque presenti nella matrice finale.",
+        [["classica", "Usa il massimo scarto osservato (predefinito)"], ["robusta", "Scala robusta: scelgo quali osservazioni sono anomale"]],
+        "classica"
       ));
     }
     if (!percorsoNumerico && indipendentiStandard.length) {
@@ -1281,7 +1291,8 @@
       const chiave = evento.target.dataset.gowerKey;
       const colonna = evento.target.dataset.gowerColumn;
       if (!["pesiGower", "mancantiPerColonna", "zeriCondivisiPerColonna",
-            "presenzaPositivaPerColonna", "ordinePerColonna", "ordiniLivelliGower"].includes(chiave)) return;
+            "presenzaPositivaPerColonna", "ordinePerColonna", "ordiniLivelliGower",
+            "righeOutlierGower"].includes(chiave)) return;
       if (!interpretazione[chiave]) interpretazione[chiave] = {};
       interpretazione[chiave][colonna] = evento.target.value;
       disegnaQuestionario();
