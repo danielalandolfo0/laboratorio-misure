@@ -1445,10 +1445,18 @@
   }
 
   function opzioniGruppo(selezionato) {
+    const assegnazioneObsoleta = selezionato &&
+      !interpretazione.gruppi.some(gruppo => gruppo.id === selezionato);
+    const opzioneObsoleta = assegnazioneObsoleta
+      ? '<option value="' + escapeHtml(selezionato) + '" selected disabled>' +
+        'Assegnazione non valida: gruppo “' + escapeHtml(selezionato) +
+        '” non trovato. Scegli nuovamente.</option>'
+      : "";
     const gruppi = interpretazione.gruppi.map(gruppo =>
-      `<option value="${gruppo.id}"${selezionato === gruppo.id ? " selected" : ""}>${escapeHtml(gruppo.nome)}</option>`
+      `<option value="${escapeHtml(gruppo.id)}"${selezionato === gruppo.id ? " selected" : ""}>${escapeHtml(gruppo.nome)}</option>`
     ).join("");
-    return `<option value=""${!selezionato ? " selected" : ""}>Caratteristica indipendente</option>${gruppi}<option value="__nuovo__">+ Crea un nuovo gruppo</option>`;
+    return opzioneObsoleta +
+      `<option value=""${!selezionato ? " selected" : ""}>Caratteristica indipendente</option>${gruppi}<option value="__nuovo__">+ Crea un nuovo gruppo</option>`;
   }
 
   function disegnaGruppi() {
@@ -1458,6 +1466,11 @@
       delete interpretazione.assegnazioni[profilo.nome];
     });
     const indipendenti = incluse.filter(profilo => !interpretazione.assegnazioni[profilo.nome]);
+    const idGruppiEsistenti = new Set(interpretazione.gruppi.map(gruppo => gruppo.id));
+    const assegnazioniDaCorreggere = incluse.filter(profilo =>
+      interpretazione.assegnazioni[profilo.nome] &&
+      !idGruppiEsistenti.has(interpretazione.assegnazioni[profilo.nome])
+    );
     const gruppiAttivi = interpretazione.gruppi.map(gruppo => ({
       gruppo,
       membri: incluse.filter(profilo => interpretazione.assegnazioni[profilo.nome] === gruppo.id)
@@ -1466,7 +1479,15 @@
       `<p><strong>Caratteristiche indipendenti (${indipendenti.length}):</strong> ${indipendenti.length ? indipendenti.map(p => escapeHtml(p.nome)).join(", ") : "nessuna"}.</p>` +
       (gruppiAttivi.length
         ? `<p><strong>Gruppi strutturati (${gruppiAttivi.length}):</strong> ${gruppiAttivi.map(({ gruppo, membri }) => escapeHtml(gruppo.nome) + " (" + membri.map(p => escapeHtml(p.nome)).join(", ") + ")").join("; ")}.</p>`
-        : "<p>Nessuna colonna assegnata a un gruppo. Puoi crearne più di uno, lasciando le altre colonne indipendenti.</p>");
+        : "<p>Nessuna colonna assegnata a un gruppo valido. Puoi crearne più di uno, lasciando le altre colonne indipendenti.</p>") +
+      (assegnazioniDaCorreggere.length
+        ? '<p><strong>Assegnazioni da correggere prima del calcolo:</strong> ' +
+          assegnazioniDaCorreggere.map(profilo =>
+            escapeHtml(profilo.nome) + ' → ' +
+            escapeHtml(interpretazione.assegnazioni[profilo.nome])
+          ).join("; ") +
+          '. Per ciascuna scegli un gruppo esistente o conferma la caratteristica indipendente.</p>'
+        : "");
     $("group-assignment-body").innerHTML = incluse.length ? incluse.map(profilo => `<tr>
       <th scope="row">${escapeHtml(profilo.nome)}</th>
       <td><select class="column-choice group-assignment" data-group-column="${escapeHtml(profilo.nome)}" aria-label="Gruppo della colonna ${escapeHtml(profilo.nome)}">${opzioniGruppo(interpretazione.assegnazioni[profilo.nome] || "")}</select></td>
