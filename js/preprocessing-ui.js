@@ -14,6 +14,13 @@
   let versioneDiagnosi = 0;
   let proposteGruppiCorrenti = [];
   let riscalamentoConfermato = false;
+  // Revisione incrementata a ogni modifica che invalida il piano.
+  // Le risposte asincrone obsolete non devono mostrare un piano o una
+  // matrice riferiti a scelte non più correnti.
+  let versioneDati = 0;
+  let versionePreparazioneColonne = 0;
+  let versionePiano = 0;
+  let versioneMatrice = 0;
 
   function escapeHtml(valore) {
     return String(valore).replace(/[&<>"']/g, carattere => ({
@@ -92,24 +99,34 @@
     const indice = Number(elemento.dataset.column);
     const chiave = elemento.dataset.choice;
     const precedente = { ...scelte[indice] };
+    const versione = ++versionePreparazioneColonne;
+    const versioneFile = versioneDati;
     scelte[indice][chiave] = elemento.value;
     if (chiave === "tipo" && (elemento.value === "binaria" || elemento.value === "non_numerica")) scelte[indice].metodo = "auto";
+    // Il piano corrente diventa invalido appena l'utente cambia la scelta.
+    nascondiPiano();
+    annullaScelteNormalizzazione();
+    annullaConfermeCompatibilita();
+    riscalamentoConfermato = false;
+    interpretazione.riscalamentoConfermato = false;
     try {
-      risultato = await P.preparaTabella(testoOriginale, scelte);
-      const tipoEffettivo = risultato.colonne[indice].tipo;
+      let nuoveScelte = scelte.map(scelta => ({ ...scelta }));
+      let nuovaTabella = await P.preparaTabella(testoOriginale, nuoveScelte);
+      if (versione !== versionePreparazioneColonne || versioneFile !== versioneDati) return;
+      const tipoEffettivo = nuovaTabella.colonne[indice].tipo;
       if ((tipoEffettivo === "binaria" || tipoEffettivo === "non_numerica") && scelte[indice].metodo !== "auto") {
         scelte[indice].metodo = "auto";
-        risultato = await P.preparaTabella(testoOriginale, scelte);
+        nuoveScelte = scelte.map(scelta => ({ ...scelta }));
+        nuovaTabella = await P.preparaTabella(testoOriginale, nuoveScelte);
+        if (versione !== versionePreparazioneColonne || versioneFile !== versioneDati) return;
       }
+      risultato = nuovaTabella;
       nascondiErrore();
-      annullaScelteNormalizzazione();
-      annullaConfermeCompatibilita();
-      riscalamentoConfermato = false;
-      interpretazione.riscalamentoConfermato = false;
       disegnaMetodi();
       disegnaTabella();
       disegnaQuestionario();
     } catch (errore) {
+      if (versione !== versionePreparazioneColonne || versioneFile !== versioneDati) return;
       scelte[indice] = precedente;
       mostraErrore(errore.message);
       disegnaMetodi();
@@ -211,6 +228,8 @@
   }
 
   function nascondiPiano() {
+    ++versionePiano;
+    ++versioneMatrice;
     $("comparison-plan").hidden = true;
     $("gower-actions").hidden = true;
     $("gower-result").hidden = true;
@@ -863,22 +882,37 @@
 
   async function calcolaMatrice() {
     if (!pianoCorrente) return;
+    const versione = ++versioneMatrice;
+    const versioneFile = versioneDati;
+    const versioneConfigurazione = versionePiano;
     const pulsante = $("calculate-gower");
     const testo = pulsante.textContent;
     pulsante.disabled = true;
     pulsante.textContent = "Calcolo…";
     try {
-      matriceCorrente = await P.calcolaMatrice(testoOriginale, scelte, interpretazione);
+      const risposta = await P.calcolaMatrice(
+        testoOriginale, scelte.map(scelta => ({ ...scelta })),
+        JSON.parse(JSON.stringify(interpretazione))
+      );
+      if (versione !== versioneMatrice ||
+          versioneConfigurazione !== versionePiano ||
+          versioneFile !== versioneDati) return;
+      matriceCorrente = risposta;
       nascondiErrore();
-      disegnaMatrice(matriceCorrente);
+      disegnaMatrice(risposta);
     } catch (errore) {
+      if (versione !== versioneMatrice ||
+          versioneConfigurazione !== versionePiano ||
+          versioneFile !== versioneDati) return;
       matriceCorrente = null;
       $("gower-result").hidden = true;
       $("download-gower").disabled = true;
       mostraErrore(errore.message);
     } finally {
-      pulsante.disabled = false;
-      pulsante.textContent = testo;
+      if (versione === versioneMatrice) {
+        pulsante.disabled = false;
+        pulsante.textContent = testo;
+      }
     }
   }
 
@@ -895,19 +929,29 @@
   }
 
   async function preparaPiano() {
+    nascondiPiano();
+    const versione = ++versionePiano;
+    const versioneFile = versioneDati;
     const pulsante = $("prepare-comparison-plan");
     const testo = pulsante.textContent;
     pulsante.disabled = true;
     pulsante.textContent = "Preparazione…";
     try {
-      const piano = await P.creaPiano(testoOriginale, scelte, interpretazione);
+      const piano = await P.creaPiano(
+        testoOriginale, scelte.map(scelta => ({ ...scelta })),
+        JSON.parse(JSON.stringify(interpretazione))
+      );
+      if (versione !== versionePiano || versioneFile !== versioneDati) return;
       nascondiErrore();
       disegnaPiano(piano);
     } catch (errore) {
+      if (versione !== versionePiano || versioneFile !== versioneDati) return;
       mostraErrore(errore.message);
     } finally {
-      pulsante.disabled = false;
-      pulsante.textContent = testo;
+      if (versione === versionePiano) {
+        pulsante.disabled = false;
+        pulsante.textContent = testo;
+      }
     }
   }
 
@@ -1604,17 +1648,24 @@
   }
 
   async function elaboraTesto(testo, nomeFile) {
+    const versione = ++versioneDati;
+    ++versionePreparazioneColonne;
+    nascondiPiano();
     nascondiErrore();
+    $("csv-output").hidden = true;
     try {
+      const nuovaTabella = await P.preparaTabella(testo, []);
+      if (versione !== versioneDati) return;
       interpretazione = { colonne: {}, gruppi: [], assegnazioni: {}, prossimoGruppo: 1 };
       riscalamentoConfermato = false;
       $("row-meaning").value = "";
       testoOriginale = testo;
-      risultato = await P.preparaTabella(testo, []);
-      tabellaOriginale = risultato.originale;
+      risultato = nuovaTabella;
+      tabellaOriginale = nuovaTabella.originale;
       scelte = tabellaOriginale.intestazioni.map(() => ({ tipo: "auto", metodo: "auto" }));
       mostraRisultato(nomeFile);
     } catch (errore) {
+      if (versione !== versioneDati) return;
       risultato = null;
       $("csv-output").hidden = true;
       mostraErrore(errore.message);
@@ -1623,12 +1674,23 @@
 
   async function elaboraFile(file) {
     if (!file) return;
+    // La lettura del file può finire dopo un secondo caricamento.
+    const versione = ++versioneDati;
+    ++versionePreparazioneColonne;
+    nascondiPiano();
+    $("csv-output").hidden = true;
     if (file.size > 15 * 1024 * 1024) { mostraErrore("Il file supera il limite iniziale di 15 MB."); return; }
     if (!/\.csv$/i.test(file.name) && file.type !== "text/csv" && file.type !== "text/plain") {
       mostraErrore("Seleziona un file CSV."); return;
     }
-    try { await elaboraTesto(await file.text(), file.name); }
-    catch (_) { mostraErrore("Non è stato possibile leggere il file selezionato."); }
+    try {
+      const testo = await file.text();
+      if (versione !== versioneDati) return;
+      await elaboraTesto(testo, file.name);
+    } catch (_) {
+      if (versione !== versioneDati) return;
+      mostraErrore("Non è stato possibile leggere il file selezionato.");
+    }
   }
 
   async function scaricaTabella() {
