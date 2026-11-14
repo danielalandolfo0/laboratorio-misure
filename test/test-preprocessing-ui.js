@@ -888,7 +888,56 @@ async function testMarcatoriMancantiMisti() {
     /data-gower-key="mancantiPerColonna"/);
 }
 
+async function testLogaritmoStrettamentePositivo() {
+  const h = createHarness();
+  h.fire("csv-file", "change", {target: {files: [{
+    name: "logaritmo-positivo.csv", type: "text/csv", size: 91,
+    text: async () =>
+      "a,b,id\n0.5,3,A\n1,8,B\n2,6,C\n4,4,D"
+  }]}});
+  await flush();
+  assert.match(h.element("scaling-body").innerHTML,
+    /value="log"[^>]*>Confronta rapporti: log\(x\)/);
+  assert.match(h.element("scaling-body").innerHTML,
+    /value="log1p"[^>]*>Comprimi le differenze grandi: log\(1\+x\)/);
+  assert.doesNotMatch(h.element("scaling-body").innerHTML,
+    /value="log"[^>]* disabled/);
+  h.fire("scaling-body", "change", {target: h.customTarget(
+    ".column-choice", {column: "0", choice: "metodo"}, "log"
+  )});
+  await flush();
+  assert.match(h.element("scaling-body").innerHTML, /value="log" selected/);
+  assert.match(h.element("scaling-body").innerHTML, /rapporti \|log\(x\/y\)\|/);
+  h.fire("confirm-numeric-scaling", "click");
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  const ultimoPiano = h.observations.planCalls.at(-1);
+  assert.equal(ultimoPiano.choices[0].metodo, "log");
+  assert.equal(ultimoPiano.interpretazione.riscalamentoConfermato, true);
+
+  const h0 = createHarness();
+  h0.fire("csv-file", "change", {target: {files: [{
+    name: "zero.csv", type: "text/csv", size: 80,
+    text: async () => "a,b,id\n0,3,A\n1,8,B\n2,6,C\n4,4,D"
+  }]}});
+  await flush();
+  assert.match(h0.element("scaling-body").innerHTML,
+    /value="log" disabled/);
+  assert.doesNotMatch(h0.element("scaling-body").innerHTML,
+    /value="log1p" disabled/);
+
+  const hn = createHarness();
+  hn.fire("csv-file", "change", {target: {files: [{
+    name: "negativi.csv", type: "text/csv", size: 80,
+    text: async () => "a,b,id\n-1,3,A\n1,8,B\n2,6,C\n4,4,D"
+  }]}});
+  await flush();
+  assert.match(hn.element("scaling-body").innerHTML, /value="log" disabled/);
+  assert.match(hn.element("scaling-body").innerHTML, /value="log1p" disabled/);
+}
+
 (async () => {
+  await testLogaritmoStrettamentePositivo();
   await testMarcatoriMancantiMisti();
   await testMancantiBinariPairwise();
   await testSerieTemporaliPerRiga();
