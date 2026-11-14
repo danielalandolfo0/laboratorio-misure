@@ -362,6 +362,42 @@ semantica di probabilita' o frequenza. Il resto della tabella puo'
 essere confrontato mediante altri percorsi, poi aggregati con la
 consueta media pesata delle dissimilarita' disponibili.
 
+### Dissimilarità categoriali e ordinali personalizzate in Gower
+
+Per le **categorie nominali** (o livelli che l'utente dichiara privi di
+ordine) resta disponibile il confronto classico \(d(a,b)=\mathbf 1_{a\ne b}\).
+In alternativa l'utente puo' confermare le dissimilarita' di tutte le
+coppie di stati osservati, fra 0 e 1. L'editor mostra ogni coppia una
+sola volta; **la simmetria e la diagonale nulla sono definite dalla
+costruzione**, non inserite due volte. Se un valore mancante e' stato
+esplicitamente interpretato come *assenza*, costituisce uno stato
+distinto da confrontare anch'esso con tutte le categorie osservate.
+La configurazione include l'elenco delle categorie: se cambia, viene
+rifiutata anziche' riusare valori in un ordine differente. L'editor
+gestisce fino a 16 stati per colonna; per cardinalita' superiori e'
+disponibile la scelta classica o una revisione motivata delle categorie.
+
+Per una variabile **ordinale** con livelli
+\(\ell_1<\ldots<\ell_m\), l'utente puo' conservare intervalli
+equidistanti oppure assegnare esplicitamente ampiezze positive
+\(g_1,\ldots,g_{m-1}\). La coordinata del livello \(\ell_k\) e'
+\[
+u(\ell_k)=\frac{\sum_{h=1}^{k-1}g_h}{\sum_{h=1}^{m-1}g_h},
+\qquad d(\ell_i,\ell_j)=|u(\ell_i)-u(\ell_j)|.
+\]
+La scala rimane in \([0,1]\) e non dipende dai valori dei codici
+numerici originali. Se un livello e' l'unico osservato, il contributo
+e' sempre zero. Per livelli testuali bisogna prima dichiararne l'ordine.
+
+Queste scelte estendono i contributi interni di Gower, **non modificano
+la definizione di Gower nominale classica**. Le dissimilarita' nominali
+personalizzate sono simmetriche, non negative e limitate da 1, ma
+potrebbero non soddisfare la disuguaglianza triangolare; non sono
+pertanto automaticamente metriche. Gli intervalli ordinali positivi
+inducono invece la distanza assoluta sulla coordinata cumulativa.
+Le impostazioni incompatibili o incomplete bloccano il piano prima
+della generazione della matrice finale.
+
 ## Matrice complessiva con più percorsi
 
 Ogni percorso produce prima la propria matrice. Gower, i confronti 0/1 e le

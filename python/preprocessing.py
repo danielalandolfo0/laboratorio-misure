@@ -2530,6 +2530,20 @@ def _crea_percorsi(
             else:
                 metodo = "Dissimilarità di Gower classica"
                 motivo = "Combina quantità, categorie, livelli e variabili binarie con contributi confrontabili."
+            personalizzati = any(
+                (ruoli[n] in {"categoria", "livello"}
+                 and (interpretazione.get("modalitaCategorieGower") or {}).get(n) == "personalizzata")
+                or (ruoli[n] == "livello"
+                    and (interpretazione.get("modalitaIntervalliGower") or {}).get(n) == "personalizzati")
+                for n in standard
+            )
+            if personalizzati:
+                metodo += " con contributi personalizzati"
+                motivo += (
+                    " Le dissimilarità nominali e gli intervalli ordinali "
+                    "sono quelli confermati dall'utente; questa è un'estensione "
+                    "di Gower, non la formulazione nominale classica."
+                )
             percorsi.append({
                 "tipo": "gower", "titolo": "Caratteristiche indipendenti di tipo misto",
                 "colonne": standard, "metodo": metodo,
@@ -3080,6 +3094,143 @@ def _valori_binari_gower(
     ]
 
 
+
+def _categorie_nominali_gower(
+    nome: str,
+    valori: list[Any],
+    interpretazione: dict[str, Any],
+) -> dict[frozenset[Any], float] | None:
+    """Contributi simmetrici personalizzati, diagonale implicitamente nulla.
+
+    Le coppie sono indicate una sola volta (triangolo superiore), in
+    ordine alfabetico delle etichette osservate; l'assenza confermata
+    compare dopo le categorie effettive, come sentinella distinta.
+    Non si impone la disuguaglianza triangolare a una dissimilarita'.
+    """
+    modi = interpretazione.get("modalitaCategorieGower") or {}
+    if not isinstance(modi, dict):
+        raise ValueError("Le modalità di confronto delle categorie non sono valide.")
+    modalita = modi.get(nome, "semplice")
+    if modalita == "semplice":
+        return None
+    if modalita != "personalizzata":
+        raise ValueError(f"Per “{nome}” scegli confronto uguale/diverso o dissimilarità personalizzate.")
+    categorie = sorted({
+        str(v) for v in valori if v is not None and v is not ASSENZA_GOWER
+    })
+    if any(v is ASSENZA_GOWER for v in valori):
+        categorie.append(ASSENZA_GOWER)
+    if len(categorie) > 16:
+        raise ValueError(
+            f"Per “{nome}” sono presenti {len(categorie)} categorie. "
+            "L'editor personalizzato supporta fino a 16 stati; "
+            "riduci gli stati o usa il confronto uguale/diverso."
+        )
+    configurazioni = interpretazione.get("dissimilaritaCategorieGower") or {}
+    if not isinstance(configurazioni, dict):
+        raise ValueError("La configurazione delle dissimilarità categoriali non è valida.")
+    configurazione = configurazioni.get(nome)
+    etichette = [None if v is ASSENZA_GOWER else v for v in categorie]
+    if not isinstance(configurazione, dict) or configurazione.get("livelli") != etichette:
+        raise ValueError(
+            f"Per “{nome}” completa la tabella delle dissimilarità fra "
+            "tutte le categorie osservate, compresa l'eventuale assenza confermata."
+        )
+    coppie = configurazione.get("coppie")
+    if not isinstance(coppie, dict):
+        raise ValueError(f"Per “{nome}” manca la tabella delle dissimilarità.")
+    richieste = {
+        f"{i}:{j}" for i in range(len(categorie))
+        for j in range(i + 1, len(categorie))
+    }
+    if set(coppie) != richieste:
+        raise ValueError(
+            f"Per “{nome}” assegna una dissimilarità a ogni coppia distinta "
+            "di categorie, senza valori mancanti o aggiuntivi."
+        )
+    risultato: dict[frozenset[Any], float] = {}
+    for i in range(len(categorie)):
+        for j in range(i + 1, len(categorie)):
+            chiave = f"{i}:{j}"
+            testo = coppie[chiave]
+            try:
+                valore = float(str(testo).strip().replace(",", "."))
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"Per “{nome}” il confronto {etichette[i]}–{etichette[j]} "
+                    "deve essere un numero compreso tra 0 e 1."
+                ) from None
+            if not math.isfinite(valore) or not 0 <= valore <= 1:
+                raise ValueError(
+                    f"Per “{nome}” il confronto {etichette[i]}–{etichette[j]} "
+                    "deve essere finito e compreso tra 0 e 1."
+                )
+            risultato[frozenset((categorie[i], categorie[j]))] = valore
+    return risultato
+
+
+def _posizioni_ordinali_gower(
+    nome: str,
+    livelli: list[Any],
+    interpretazione: dict[str, Any],
+) -> dict[Any, float]:
+    """Scala cumulativa con incrementi positivi, sempre in [0,1]."""
+    modi = interpretazione.get("modalitaIntervalliGower") or {}
+    if not isinstance(modi, dict):
+        raise ValueError("Le modalità dei livelli ordinali non sono valide.")
+    modalita = modi.get(nome, "equidistanti")
+    if modalita == "equidistanti":
+        return {
+            livello: i / max(1, len(livelli) - 1)
+            for i, livello in enumerate(livelli)
+        }
+    if modalita != "personalizzati":
+        raise ValueError(
+            f"Per “{nome}” scegli livelli equidistanti oppure intervalli personalizzati."
+        )
+    if len(livelli) <= 1:
+        return {livello: 0.0 for livello in livelli}
+    grezzi = interpretazione.get("passiOrdinaliGower") or {}
+    if not isinstance(grezzi, dict):
+        raise ValueError("Gli intervalli ordinali non sono configurati correttamente.")
+    testo = grezzi.get(nome, "")
+    if not isinstance(testo, str) or not testo.strip():
+        raise ValueError(
+            f"Per “{nome}” indica {len(livelli) - 1} ampiezze positive, "
+            "una per ogni intervallo tra livelli consecutivi, separate da ';'."
+        )
+    parti = [v.strip() for v in testo.split(";")]
+    if len(parti) != len(livelli) - 1:
+        raise ValueError(
+            f"Per “{nome}” servono esattamente {len(livelli) - 1} "
+            "ampiezze positive, separate da punto e virgola."
+        )
+    try:
+        incrementi = [float(v.replace(",", ".")) for v in parti]
+    except ValueError:
+        raise ValueError(
+            f"Per “{nome}” le ampiezze devono essere numeri positivi."
+        ) from None
+    if any(not math.isfinite(v) or v <= 0 for v in incrementi):
+        raise ValueError(
+            f"Per “{nome}” gli intervalli tra livelli consecutivi "
+            "devono essere finiti e strettamente positivi."
+        )
+    totale = math.fsum(incrementi)
+    if not math.isfinite(totale) or totale <= 0:
+        raise ValueError(
+            f"Per “{nome}” la somma delle ampiezze non è finita e positiva."
+        )
+    posizioni = {livelli[0]: 0.0}
+    accumulato = 0.0
+    for i, passo in enumerate(incrementi, start=1):
+        accumulato += passo
+        posizioni[livelli[i]] = (
+            1.0 if i == len(livelli) - 1 else accumulato / totale
+        )
+    return posizioni
+
+
 def _metadati_gower(
     risultato: dict[str, Any],
     interpretazione: dict[str, Any],
@@ -3090,7 +3241,7 @@ def _metadati_gower(
     analisi_per_nome = {colonna["nome"]: colonna for colonna in risultato["colonne"]}
     profili = {profilo["nome"]: profilo for profilo in risultato["questionario"]["colonne"]}
     risposte = interpretazione.get("colonne", {})
-    robusta = percorso["metodo"] == "Dissimilarità di Gower robusta"
+    robusta = percorso["metodo"].startswith("Dissimilarità di Gower robusta")
     righe_outlier = interpretazione.get("righeOutlierGower") or {}
     if not isinstance(righe_outlier, dict):
         raise ValueError("La selezione delle righe anomale per Gower non e' valida.")
@@ -3201,8 +3352,7 @@ def _metadati_gower(
                 numeri = [leggi_numero(v, tabella["separatore"]) for v in osservati]
                 if all(v is not INVALIDO and v is not None for v in numeri):
                     livelli = sorted({float(v) for v in numeri})
-                    mappa = {val: i / max(1, len(livelli) - 1)
-                             for i, val in enumerate(livelli)}
+                    mappa = _posizioni_ordinali_gower(nome, livelli, interpretazione)
                     valori = [
                         None if mancante(v) else mappa[float(leggi_numero(v, tabella["separatore"]))]
                         for v in grezzi
@@ -3215,8 +3365,7 @@ def _metadati_gower(
                             f"Specifica per “{nome}” tutti e soli i livelli in ordine, "
                             "separati da punto e virgola."
                         )
-                    mappa = {val: i / max(1, len(livelli) - 1)
-                             for i, val in enumerate(livelli)}
+                    mappa = _posizioni_ordinali_gower(nome, livelli, interpretazione)
                     valori = [None if mancante(v) else mappa[str(v).strip()] for v in grezzi]
                 tipo, scala, limita = "numerica", 1.0, False
         else:
@@ -3227,6 +3376,12 @@ def _metadati_gower(
             ]
             tipo, scala, limita = "nominale", None, False
 
+        distanze_nominali = (
+            _categorie_nominali_gower(nome, valori, interpretazione)
+            if tipo == "nominale" and ruolo in {"categoria", "livello"}
+            else None
+        )
+
         # Decisioni 7 e 19: una colonna costante resta nel denominatore
         # per ogni coppia in cui e' effettivamente osservata, con distanza zero.
         # Una colonna interamente mancante NON e' una costante osservata.
@@ -3236,6 +3391,7 @@ def _metadati_gower(
             "limita": limita, "asimmetrica": asimmetrica, "peso": peso,
             "costante": len(distinti) == 1,
             "politicaMancanti": politica,
+            "distanzeNominali": distanze_nominali,
         })
 
     if robusta and not numero_zeri_esclusi:
@@ -3283,7 +3439,12 @@ def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, 
                         # attribuisce distanza zero, non valore mancante.
                         assenze_condivise_osservate = True
                         continue
-                    contributo = 0.0 if a == b else 1.0
+                    if a == b:
+                        contributo = 0.0
+                    elif variabile.get("distanzeNominali") is not None:
+                        contributo = variabile["distanzeNominali"][frozenset((a, b))]
+                    else:
+                        contributo = 1.0
                 else:
                     scala = variabile["scala"]
                     contributo = 0.0 if scala == 0 else abs(float(a) - float(b)) / scala
@@ -3304,12 +3465,33 @@ def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, 
         "Per le quantita', Gower robusta usa il massimo scarto tra i valori "
         "confermati non anomali, con contributi limitati a 1; le righe anomale "
         "rimangono nella matrice."
-        if percorso["metodo"] == "Dissimilarità di Gower robusta"
+        if percorso["metodo"].startswith("Dissimilarità di Gower robusta")
         else "Per le quantità, Gower classica divide lo scarto per l’intervallo osservato."
     )
     costanti = [v["nome"] for v in metadati if v["costante"]]
     if costanti:
         nota += " Colonne costanti mantenute con peso positivo e dissimilarita' zero: " + ", ".join(costanti) + "."
+    personalizzate = [
+        v["nome"] for v in metadati if v.get("distanzeNominali") is not None
+    ]
+    if personalizzate:
+        nota += (
+            " Categorie con dissimilarità personalizzate: "
+            + ", ".join(personalizzate)
+            + ". Dati simmetrici in [0,1], diagonale nulla; "
+            "non è garantita la disuguaglianza triangolare."
+        )
+    ordinali_personalizzati = [
+        v["nome"] for v in metadati
+        if (interpretazione.get("modalitaIntervalliGower") or {}).get(v["nome"])
+        == "personalizzati"
+    ]
+    if ordinali_personalizzati:
+        nota += (
+            " Livelli ordinali con intervalli personalizzati: "
+            + ", ".join(ordinali_personalizzati)
+            + ". Gli scarti sono differenze di posizioni cumulative normalizzate."
+        )
     nota += " I pesi positivi sono applicati sia al numeratore sia al denominatore."
     return {
         "metodo": percorso["metodo"], "colonne": percorso["colonne"],

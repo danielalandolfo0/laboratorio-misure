@@ -2346,4 +2346,147 @@ assert not p.crea_piano_confronto(
     {**r_mancanti_dist, "mancanti-gruppo-dis": "imputa_media"}
 )["completo"]
 
+
+# Dissimilarita' nominali e intervalli ordinali personalizzati in Gower.
+csv_nominale_ordinale = (
+    "livello,categoria,id\n"
+    "basso,rosso,A\n"
+    "medio,blu,B\n"
+    "alto,verde,C\n"
+    "basso,blu,D\n"
+    "alto,rosso,E\n"
+)
+dati_nominale_ordinale = p.prepara_tabella(p.leggi_csv(csv_nominale_ordinale))
+base_nominale_ordinale = {
+    "riga": "oggetto",
+    "ordineLivelli": "si",
+    "ordiniLivelliGower": {"livello": "basso; medio; alto"},
+    "colonne": {
+        "livello": {"ruolo": "livello", "usa": True},
+        "categoria": {"ruolo": "categoria", "usa": True},
+        "id": {"ruolo": "identificativo", "usa": False},
+    },
+}
+conf_personalizzata = {
+    **base_nominale_ordinale,
+    "modalitaIntervalliGower": {"livello": "personalizzati"},
+    "passiOrdinaliGower": {"livello": "1; 3"},
+    "modalitaCategorieGower": {"categoria": "personalizzata"},
+    # Ordinamento alfabetico: blu, rosso, verde.
+    "dissimilaritaCategorieGower": {
+        "categoria": {
+            "livelli": ["blu", "rosso", "verde"],
+            "coppie": {"0:1": "0,4", "0:2": "0,8", "1:2": "0,6"},
+        },
+    },
+}
+piano_personalizzato = p.crea_piano_confronto(
+    dati_nominale_ordinale, conf_personalizzata
+)
+assert piano_personalizzato["completo"], piano_personalizzato
+assert "contributi personalizzati" in piano_personalizzato["percorsi"][0]["metodo"]
+matrice_personalizzata = p.calcola_matrice(
+    dati_nominale_ordinale, conf_personalizzata
+)
+verifica_matrice_finale(matrice_personalizzata, 5)
+quasi_uguali(matrice_personalizzata["matrice"][0][1], (.25 + .4) / 2)
+quasi_uguali(matrice_personalizzata["matrice"][1][2], (.75 + .8) / 2)
+quasi_uguali(matrice_personalizzata["matrice"][0][3], .4 / 2)
+assert "contributi personalizzati" in matrice_personalizzata["contributi"][0]["metodo"]
+assert "intervalli personalizzati" in matrice_personalizzata["contributi"][0]["nota"].lower()
+matrice_default = p.calcola_matrice(
+    dati_nominale_ordinale, base_nominale_ordinale
+)
+quasi_uguali(matrice_default["matrice"][0][1], (.5 + 1) / 2)
+assert matrice_default["matrice"] != matrice_personalizzata["matrice"]
+assert matrice_default["metodo"] == "Dissimilarità di Gower classica"
+
+# Gli intervalli personalizzati devono essere finiti, positivi, e
+# uno per ciascuna coppia di livelli consecutivi.
+for distanze_errate in ("", "1", "1; 0", "-1; 2", "inf; 1", "1; testo"):
+    incompleto = p.crea_piano_confronto(
+        dati_nominale_ordinale,
+        {**conf_personalizzata,
+         "passiOrdinaliGower": {"livello": distanze_errate}},
+    )
+    assert not incompleto["completo"], distanze_errate
+    assert any("livello" in m for m in incompleto["percorsi"][0]["avvisi"])
+
+# Per la dissimilarita' nominale si richiedono tutte e sole le coppie;
+# non si forza la disuguaglianza triangolare, essendo una dissimilarita'.
+for coppie_errate in (
+    {"0:1": "0,4", "0:2": "0,8"},
+    {"0:1": "0,4", "0:2": "1,4", "1:2": "0,6"},
+    {"0:1": "0,4", "0:2": "NaN", "1:2": "0,6"},
+    {"0:1": "0,4", "0:2": "abc", "1:2": "0,6"},
+    {"0:1": "0,4", "0:2": "0,8", "1:2": "0,6", "2:3": "0,1"},
+):
+    piano_errato = p.crea_piano_confronto(
+        dati_nominale_ordinale,
+        {**conf_personalizzata,
+         "dissimilaritaCategorieGower": {"categoria": {
+             "livelli": ["blu", "rosso", "verde"], "coppie": coppie_errate
+         }}},
+    )
+    assert not piano_errato["completo"], coppie_errate
+
+# Non cambiare automaticamente il set/ordine delle categorie:
+# eventuali configurazioni precedenti devono essere riconfermate.
+piano_ordine_errato = p.crea_piano_confronto(
+    dati_nominale_ordinale,
+    {**conf_personalizzata,
+     "dissimilaritaCategorieGower": {"categoria": {
+         "livelli": ["rosso", "blu", "verde"],
+         "coppie": {"0:1": ".4", "0:2": ".8", "1:2": ".6"}
+     }}},
+)
+assert not piano_ordine_errato["completo"]
+
+# Un livello numerico ordinato non comporta differenze proporzionali
+# ai codici (1,2,8): contano gli intervalli scelti.
+csv_livelli_num = "livello,categoria\n1,A\n2,B\n8,A\n1,B"
+dati_livelli_num = p.prepara_tabella(p.leggi_csv(csv_livelli_num))
+risposte_livelli_num = {
+    "riga": "oggetto",
+    "ordineLivelli": "si",
+    "modalitaIntervalliGower": {"livello": "personalizzati"},
+    "passiOrdinaliGower": {"livello": "1; 3"},
+    "colonne": {
+        "livello": {"ruolo": "livello", "usa": True},
+        "categoria": {"ruolo": "categoria", "usa": True},
+    },
+}
+piano_livelli_num = p.crea_piano_confronto(dati_livelli_num, risposte_livelli_num)
+assert piano_livelli_num["completo"], piano_livelli_num
+quasi_uguali(
+    p.calcola_matrice(dati_livelli_num, risposte_livelli_num)["matrice"][0][1],
+    (.25 + 1) / 2,
+)
+
+# L'assenza confermata e' uno stato nominale reale, distinto da uno
+# sconosciuto: richiede la distanza verso tutte le categorie presenti.
+dati_assente = p.prepara_tabella(p.leggi_csv(
+    "categoria,livello\nblu,basso\nrosso,medio\nNA,alto\nblu,medio"
+))
+base_assente = {
+    "riga": "oggetto",
+    "ordineLivelli": "si",
+    "ordiniLivelliGower": {"livello": "basso; medio; alto"},
+    "significatoMancanti": "assenza",
+    "colonne": {
+        "categoria": {"ruolo": "categoria", "usa": True},
+        "livello": {"ruolo": "livello", "usa": True},
+    },
+    "modalitaCategorieGower": {"categoria": "personalizzata"},
+    "dissimilaritaCategorieGower": {"categoria": {
+        "livelli": ["blu", "rosso", None],
+        "coppie": {"0:1": "0.4", "0:2": "0.9", "1:2": "0.6"},
+    }},
+}
+piano_assente = p.crea_piano_confronto(dati_assente, base_assente)
+assert piano_assente["completo"], piano_assente
+matrice_assente = p.calcola_matrice(dati_assente, base_assente)
+verifica_matrice_finale(matrice_assente, 4)
+quasi_uguali(matrice_assente["matrice"][0][2], (0.9 + 1) / 2)
+
 print("Tutti i test Python di preprocessing sono stati superati.")
