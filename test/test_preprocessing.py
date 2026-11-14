@@ -912,22 +912,37 @@ piano_tempo_interpolato = p.crea_piano_confronto(
     dati_tempo_mancanti, risposte_tempo_interpolate
 )
 assert piano_tempo_interpolato["completo"] is True, piano_tempo_interpolato
-matrice_tempo_interpolata = p.calcola_matrice(
-    dati_tempo_mancanti, risposte_tempo_interpolate
+matrice_tempo_interpolata = p._calcola_matrice_specializzata(
+    dati_tempo_mancanti, risposte_tempo_interpolate,
+    piano_tempo_interpolato["percorsi"][0],
 )
 assert matrice_tempo_interpolata["matrice"][0][1] is not None
 assert matrice_tempo_interpolata["matrice"][0][3] is None
 assert "interpolati linearmente" in matrice_tempo_interpolata["nota"]
+try:
+    p.calcola_matrice(dati_tempo_mancanti, risposte_tempo_interpolate)
+    assert False, "La matrice incompleta deve bloccare il risultato finale."
+except ValueError as errore:
+    assert "coppie non hanno alcun contributo valido" in str(errore)
 
 risposte_tempo_esclusione = {
     **risposte_tempo_mancanti,
     "mancanti-gruppo-tempo": "escludi_percorso",
 }
-matrice_tempo_esclusione = p.calcola_matrice(
+piano_tempo_esclusione = p.crea_piano_confronto(
     dati_tempo_mancanti, risposte_tempo_esclusione
+)
+matrice_tempo_esclusione = p._calcola_matrice_specializzata(
+    dati_tempo_mancanti, risposte_tempo_esclusione,
+    piano_tempo_esclusione["percorsi"][0],
 )
 assert matrice_tempo_esclusione["matrice"][1][2] is not None
 assert matrice_tempo_esclusione["matrice"][0][1] is None
+try:
+    p.calcola_matrice(dati_tempo_mancanti, risposte_tempo_esclusione)
+    assert False, "La matrice incompleta deve bloccare il risultato finale."
+except ValueError as errore:
+    assert "coppie non hanno alcun contributo valido" in str(errore)
 
 risposte_profilo_mancanti = {
     **risposte_tempo_mancanti,
@@ -956,11 +971,23 @@ risposte_testo_mancante = {
 assert p.crea_piano_confronto(
     dati_testo_mancante, risposte_testo_mancante
 )["completo"] is False
-matrice_testo_esclusione = p.calcola_matrice(
-    dati_testo_mancante,
-    {**risposte_testo_mancante, "mancantiSpecializzatiPerColonna": {"testo": "escludi_percorso"}},
+risposte_testo_esclusione = {
+    **risposte_testo_mancante,
+    "mancantiSpecializzatiPerColonna": {"testo": "escludi_percorso"},
+}
+piano_testo_esclusione = p.crea_piano_confronto(
+    dati_testo_mancante, risposte_testo_esclusione
+)
+matrice_testo_esclusione = p._calcola_matrice_specializzata(
+    dati_testo_mancante, risposte_testo_esclusione,
+    piano_testo_esclusione["percorsi"][0],
 )
 assert matrice_testo_esclusione["matrice"][0][1] is None
+try:
+    p.calcola_matrice(dati_testo_mancante, risposte_testo_esclusione)
+    assert False, "La matrice incompleta deve bloccare il risultato finale."
+except ValueError as errore:
+    assert "coppie non hanno alcun contributo valido" in str(errore)
 matrice_testo_vuoto = p.calcola_matrice(
     dati_testo_mancante,
     {**risposte_testo_mancante, "mancantiSpecializzatiPerColonna": {"testo": "stringa_vuota"}},
@@ -1234,4 +1261,21 @@ assert all(
 )
 assert "Normalizzazione finale" in matrice_singolo_finale["nota"]
 
+# Le anomalie diagnostiche non impediscono il calcolo; gli errori si' (decisione 45).
+diagnostica_zero = p._valida_matrice_finale(
+    [[0, 0], [0, 0]], ["A", "B"]
+)
+assert diagnostica_zero["coppieZeroDistinte"] == 1
+assert diagnostica_zero["avvisi"]
+for matrice_errata in (
+    [[0, None], [None, 0]],
+    [[0, float("nan")], [float("nan"), 0]],
+    [[0, .5], [.4, 0]],
+    [[0, 1.1], [1.1, 0]],
+):
+    try:
+        p._valida_matrice_finale(matrice_errata, ["A", "B"])
+        assert False, "Il validatore deve bloccare matrici non valide."
+    except ValueError:
+        pass
 print("Tutti i test Python di preprocessing sono stati superati.")
