@@ -3595,7 +3595,7 @@ assert diag_stati["totali"] == {
 assert diag_stati["perColonna"]["presenza"]["marcatori"] == {
     "?": 1, "n/a": 1, "na": 1
 }
-assert piano_stati["percorsi"][0]["mancanti"]["strategia"] == "esclusione_pairwise"
+assert piano_stati["percorsi"][0]["mancanti"]["strategia"] == "configurazione_per_colonna"
 assert piano_stati["percorsi"][0]["pesiGower"]
 mat_stati = p.calcola_matrice(csv_stati_misti, stati_base)
 verifica_matrice_finale(mat_stati, 5)
