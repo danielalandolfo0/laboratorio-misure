@@ -1974,6 +1974,10 @@ def _completa_specifica_percorso(
     calcolabile = (
         tipo in {"gower", "numerico"}
         or percorso.get("metodo") in MISURE_SPECIALIZZATE_CALCOLABILI
+        or (
+            tipo == "gruppo" and percorso.get("idMisura")
+            in {"euclidean", "manhattan", "chebyshev", "minkowski", "weighted_minkowski"}
+        )
     ) and percorso["stato"] != "da_completare"
     percorso["calcolo"] = {
         "disponibile": calcolabile,
