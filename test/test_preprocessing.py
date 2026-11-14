@@ -1603,6 +1603,7 @@ csv_pair = (
 dati_pair = p.prepara_tabella(p.leggi_csv(csv_pair))
 risposte_pair = {
     "riga": "oggetto",
+    "gestioneDipendenzaLineare": "mantieni",
     "confrontoQuantitativo": "assoluto",
     "misuraNumericaManuale": "weighted_minkowski",
     "ordineMisuraManuale": "2",
