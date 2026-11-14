@@ -34,6 +34,44 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 - confronto simbolo per simbolo e matrici di programmazione dinamica per le stringhe;
 - controlli sulla validità degli input numerici e binari.
 
+## Collaudo trasversale dei casi limite e convenzione Bray–Curtis
+
+Il test aggiuntivo `test/test_casi_limite.py` è incluso in `npm test`
+e quindi nel workflow GitHub Actions. Controlla con risultati analitici
+i casi limite delle famiglie numeriche (anche pesate e pairwise), binarie,
+testuali, insiemistiche, cicliche, distribuzionali e dei profili.
+Per la DTW a costo medio minimo, un oracolo indipendente enumera tutti
+i cammini ammissibili su piccole sequenze, includendo il costo quadratico
+e le finestre. Vengono inoltre verificate le proprietà della matrice
+finale e l'impossibilità di sostituire distanze non definite con zeri.
+
+Un caso particolarmente importante è Bray–Curtis, per la quale
+
+\[
+ d_{\mathrm{BC}}(x,y)=\frac{\sum_\ell |x_\ell-y_\ell|}
+                              {\sum_\ell(x_\ell+y_\ell)}.
+\]
+
+Quando **entrambe** le righe sono vettori interamente nulli, si
+ottiene \(0/0\), non una distanza definita. Dopo aver applicato
+l'eventuale trattamento dei mancanti approvato, il piano conta
+le righe effettivamente nulle e le relative coppie. Se almeno
+due righe sono nulle, il sito chiede **esplicitamente** una scelta:
+- **Dissimilarità zero**: si adotta la convenzione
+  \(d_{\mathrm{BC}}(0,0)=0\), che costituisce un contributo valido.
+- **Confronto non definito**: il blocco non contribuisce a quelle coppie;
+  occorrono altri blocchi validi per ottenere una matrice completa.
+
+Il sistema non impone una delle due possibilità e documenta la risposta
+nel piano e nel calcolo. Se la scelta manca, il piano è incompleto;
+se si mantiene la non definizione e una coppia rimane senza contributi,
+la matrice finale non viene generata. Nessun altro denominatore nullo
+o valore mancante è interpretato implicitamente come zero.
+
+Il collaudo copre diversi casi limite matematici, ma **non dimostra**
+la correttezza di ogni possibile configurazione: resta necessario
+ampliare progressivamente test semantici e del questionario.
+
 ## Fase 7: rapporto cumulativo dei problemi
 
 Il piano preliminare espone un campo strutturato
