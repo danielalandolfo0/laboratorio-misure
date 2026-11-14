@@ -2164,4 +2164,186 @@ assert p._distanza_specializzata(
     [4, 4, 4], [1, 2, 3], "Dissimilarità di Kendall τ-b"
 ) is None
 
+
+# Distribuzioni e istogrammi: Hellinger e Jensen-Shannon su probabilita'
+# non negative, con scala teorica e nessun pseudoconteggio per gli zeri.
+quasi_uguali(
+    p._distanza_distribuzioni([1, 0, 0], [0, 1, 0], "hellinger", "probabilita"), 1
+)
+quasi_uguali(
+    p._distanza_distribuzioni([1, 0, 0], [0, 1, 0], "jensen_shannon", "probabilita"), 1
+)
+quasi_uguali(
+    p._distanza_distribuzioni([.2, .3, .5], [.2, .3, .5], "hellinger", "probabilita"), 0
+)
+quasi_uguali(
+    p._distanza_distribuzioni([.2, .3, .5], [.2, .3, .5], "jensen_shannon", "probabilita"), 0
+)
+quasi_uguali(
+    p._distanza_distribuzioni([100, 0], [0, 3], "hellinger", "masse"), 1
+)
+quasi_uguali(
+    p._distanza_distribuzioni([100, 0], [0, 3], "jensen_shannon", "masse"), 1
+)
+quasi_uguali(
+    p._distanza_distribuzioni([10, 20], [20, 40], "hellinger", "masse"), 0
+)
+for misura in ("hellinger", "jensen_shannon"):
+    try:
+        p._distanza_distribuzioni([0, 0], [1, 2], misura, "masse")
+        assert False, "Una distribuzione di massa zero non deve essere utilizzata."
+    except ValueError:
+        pass
+    try:
+        p._distanza_distribuzioni([1, -.2], [1, 2], misura, "masse")
+        assert False, "Masse negative devono essere rifiutate."
+    except ValueError:
+        pass
+    try:
+        p._distanza_distribuzioni([3, 7], [1, 2], misura, "probabilita")
+        assert False, "Probabilita' non normalizzate non valide."
+    except ValueError:
+        pass
+
+csv_dist = (
+    "p1,p2,p3,codice,id\n"
+    "1,0,0,AAA,A\n"
+    "0,1,0,BBB,B\n"
+    "0,0,1,CCC,C\n"
+    "0.5,0.5,0,AAB,D\n"
+    "0.3333333333,0.3333333333,0.3333333334,ABB,E\n"
+)
+dati_dist = p.prepara_tabella(p.leggi_csv(csv_dist))
+base_dist = {
+    "riga": "oggetto",
+    "significatoEstremi": "reali",
+    "colonne": {
+        **{nome: {"ruolo": "quantita", "usa": True}
+           for nome in ("p1", "p2", "p3")},
+        "codice": {"ruolo": "testo", "usa": True},
+        "id": {"ruolo": "identificativo", "usa": False},
+    },
+    "gruppi": [{"id": "dis", "nome": "Distribuzione", "tipo": "distribuzione"}],
+    "assegnazioni": {nome: "dis" for nome in ("p1", "p2", "p3")},
+    "naturaDistribuzione-dis": "probabilita",
+    "misuraDistribuzione-dis": "hellinger",
+    "misureTestualiPerColonna": {"codice": "hamming"},
+}
+piano_dist = p.crea_piano_confronto(dati_dist, base_dist)
+assert piano_dist["completo"], piano_dist
+assert piano_dist["conteggioPercorsi"] == 2
+percorso_dist = next(v for v in piano_dist["percorsi"] if v["tipo"] == "gruppo")
+assert percorso_dist["metodo"] == "Distanza di Hellinger"
+assert percorso_dist["idMisura"] == "hellinger"
+assert percorso_dist["normalizzazione"]["limiteTeorico"] == 1
+assert percorso_dist["preelaborazione"]["usaTabellaTrasformata"] is False
+assert percorso_dist["righeDistribuzioneValide"] == 5
+matrice_dist = p.calcola_matrice(dati_dist, base_dist)
+verifica_matrice_finale(matrice_dist, 5)
+assert len(matrice_dist["contributi"]) == 2
+quasi_uguali(matrice_dist["matrice"][0][1], 1)
+atteso_h = math.sqrt(1 - 1 / math.sqrt(2))
+quasi_uguali(matrice_dist["matrice"][0][3], (atteso_h + 1/3) / 2)
+
+risposte_js = {**base_dist, "misuraDistribuzione-dis": "jensen_shannon"}
+piano_js = p.crea_piano_confronto(dati_dist, risposte_js)
+assert piano_js["completo"], piano_js
+assert next(v for v in piano_js["percorsi"] if v["tipo"] == "gruppo")["metodo"] == (
+    "Distanza di Jensen–Shannon"
+)
+matrice_js = p.calcola_matrice(dati_dist, risposte_js)
+verifica_matrice_finale(matrice_js, 5)
+assert matrice_js["matrice"] != matrice_dist["matrice"]
+assert matrice_js["contributi"][0]["diagnosticaNormalizzazione"]["metodo"] == "teorica"
+
+# Richiesta di misura/natura, righe non normalizzate e massa totale nulla
+# devono essere riconosciute nel piano, prima del calcolo.
+assert not p.crea_piano_confronto(
+    dati_dist, {k: v for k, v in base_dist.items()
+                if k != "misuraDistribuzione-dis"}
+)["completo"]
+assert not p.crea_piano_confronto(
+    dati_dist, {k: v for k, v in base_dist.items()
+                if k != "naturaDistribuzione-dis"}
+)["completo"]
+assert not p.crea_piano_confronto(
+    dati_dist, {**base_dist, "misuraDistribuzione-dis": "mahalanobis"}
+)["completo"]
+assert not p.crea_piano_confronto(
+    dati_dist, {**base_dist,
+                "normalizzazioniPercorsi": {"percorso-1": "robusta"}}
+)["completo"]
+
+csv_masse = (
+    "p1,p2,p3,id\n"
+    "10,0,0,A\n"
+    "0,20,0,B\n"
+    "5,5,10,C\n"
+    "1,2,3,D\n"
+)
+dati_masse = p.prepara_tabella(p.leggi_csv(csv_masse))
+risposte_masse = {
+    **base_dist,
+    "colonne": {nome: {"ruolo": "quantita", "usa": True} for nome in ("p1", "p2", "p3")},
+    "naturaDistribuzione-dis": "masse",
+}
+piano_masse = p.crea_piano_confronto(dati_masse, risposte_masse)
+assert piano_masse["completo"], piano_masse
+verifica_matrice_finale(p.calcola_matrice(dati_masse, risposte_masse), 4)
+assert not p.crea_piano_confronto(
+    dati_masse, {**risposte_masse, "naturaDistribuzione-dis": "probabilita"}
+)["completo"]
+
+dati_somma_zero = p.prepara_tabella(p.leggi_csv(
+    "p1,p2,p3,id\n0,0,0,A\n0,1,0,B\n1,0,0,C"
+))
+piano_somma_zero = p.crea_piano_confronto(
+    dati_somma_zero, {**risposte_masse, "colonne": {
+        nome: {"ruolo": "quantita", "usa": True} for nome in ("p1", "p2", "p3")
+    }}
+)
+assert not piano_somma_zero["completo"]
+assert any("massa totale" in avviso for v in piano_somma_zero["percorsi"]
+           for avviso in v.get("avvisi", []))
+dati_neg = p.prepara_tabella(p.leggi_csv(
+    "p1,p2,p3,id\n-1,2,0,A\n2,0,0,B\n0,3,0,C"
+))
+assert not p.crea_piano_confronto(dati_neg, risposte_masse)["completo"]
+
+# Il bin che contiene soltanto 0 e 1 e' spesso classificato come
+# binario automaticamente, ma resta utilizzabile nel gruppo distribuzione.
+dati_bin = p.prepara_tabella(p.leggi_csv(
+    "p1,p2,p3,id\n1,0,0,A\n0,1,0,B\n0,0,1,C"
+))
+piano_bin = p.crea_piano_confronto(
+    dati_bin, {**risposte_masse, "naturaDistribuzione-dis": "probabilita"}
+)
+assert piano_bin["completo"], piano_bin
+verifica_matrice_finale(
+    p.calcola_matrice(
+        dati_bin, {**risposte_masse, "naturaDistribuzione-dis": "probabilita"}
+    ), 3
+)
+
+# Mancanti: esclusione dell'intero gruppo o zero confermato, mai
+# imputazione automatica della media/mediana.
+dati_mancanti_dist = p.prepara_tabella(p.leggi_csv(
+    "p1,p2,p3,id\n1,NA,0,A\n0,1,0,B\n0,0,1,C"
+))
+r_mancanti_dist = {
+    **risposte_masse,
+    "naturaDistribuzione-dis": "probabilita",
+    "significatoMancanti": "sconosciuto",
+    "mancanti-gruppo-dis": "zero",
+}
+piano_mancanti_dist = p.crea_piano_confronto(dati_mancanti_dist, r_mancanti_dist)
+assert piano_mancanti_dist["completo"], piano_mancanti_dist
+verifica_matrice_finale(
+    p.calcola_matrice(dati_mancanti_dist, r_mancanti_dist), 3
+)
+assert not p.crea_piano_confronto(
+    dati_mancanti_dist,
+    {**r_mancanti_dist, "mancanti-gruppo-dis": "imputa_media"}
+)["completo"]
+
 print("Tutti i test Python di preprocessing sono stati superati.")

@@ -321,6 +321,47 @@ La scelta di Kendall in un blocco di profili o di Hamming in una
 colonna testuale non cambia le misure degli altri percorsi; la matrice
 finale aggrega i contributi disponibili con i pesi confermati.
 
+### Distribuzioni di probabilita' e istogrammi
+
+Un gruppo di colonne puo' essere interpretato esplicitamente come **bin
+di una distribuzione** (stesse categorie/intervalli per tutte le righe),
+distinto dalle *parti di un totale* confrontate con Aitchison.
+
+Il sito chiede due decisioni separate: il **significato dei valori**
+e la **misura da applicare**. Quando le righe contengono probabilita',
+la somma deve essere 1 (tolleranza numerica \`1e-6\` relativa); quando
+contengono conteggi, percentuali, frequenze o masse non negative, il
+sito calcola invece \(p_k=x_k/\sum_\ell x_\ell\) per ogni riga.
+Sono ammessi zeri effettivi; non sono ammessi componenti negative
+o totali di riga nulli. Gli eventuali mancanti si possono escludere
+dal percorso, oppure sostituire con **zero soltanto se l'utente ne
+conferma esplicitamente il significato**. Non si imputano media
+o mediana per queste distribuzioni.
+
+La **distanza di Hellinger**, in \([0,1]\), e'
+\[
+H(p,q)=\left(\frac12\sum_k(\sqrt{p_k}-\sqrt{q_k})^2\right)^{1/2}.
+\]
+La **distanza di Jensen--Shannon** (radice della divergenza
+normalizzata, con logaritmi naturali) e'
+\[
+d_{JS}(p,q)=\sqrt{\frac{D_{KL}(p\|m)+D_{KL}(q\|m)}
+{2\ln 2}},\qquad m=\frac{p+q}{2},
+\]
+dove i termini \(0\log(0/m)\) valgono zero per continuita',
+senza pseudoconteggi. Per entrambe il massimo teorico e' \(1\);
+non si impone una normalizzazione campionaria o robusta successiva.
+Si tratta di misure fra distribuzioni, non della geometria dei
+log-rapporti composizionali propria di Aitchison.
+
+La verifica preventiva riguarda ciascuna riga utilizzata nel
+percorso. Una riga invalida blocca il piano e indica il suo numero nel
+CSV, senza correzioni automatiche. I gruppi con una colonna che assume
+soltanto 0/1 restano utilizzabili quando l'utente ne conferma la
+semantica di probabilita' o frequenza. Il resto della tabella puo'
+essere confrontato mediante altri percorsi, poi aggregati con la
+consueta media pesata delle dissimilarita' disponibili.
+
 ## Matrice complessiva con più percorsi
 
 Ogni percorso produce prima la propria matrice. Gower, i confronti 0/1 e le

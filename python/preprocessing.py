@@ -694,6 +694,7 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
     stato = "pronto"
     etichetta = {"ripetute": "Misurazioni dello stesso profilo", "tempo": "Osservazioni successive nel tempo",
                  "parti": "Parti dello stesso totale", "coordinate": "Coordinate quantitative da confrontare insieme",
+                 "distribuzione": "Distribuzioni di probabilità o istogrammi",
                  "altro": "Gruppo di caratteristiche"}.get(tipo_gruppo, "Gruppo di caratteristiche")
     id_gruppo = str(gruppo.get("id", ""))
     id_misura: str | None = None
@@ -706,8 +707,17 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
     else:
         tipi = {analisi_per_nome[m]["tipo"] for m in membri if m in analisi_per_nome}
         numerico = bool(tipi) and tipi <= {"numerica", "numerica_costante"}
-        quantitativo = numerico and all(ruoli.get(m) == "quantita" for m in membri)
-        if tipo_gruppo in {"ripetute", "tempo", "parti", "coordinate"} and not quantitativo:
+        # Masse con soli 0 e 1 sono frequenti negli istogrammi; il
+        # riconoscimento automatico come binaria non deve impedire la
+        # successiva interpretazione esplicita come probabilità.
+        numerico_distribuzione = bool(tipi) and tipi <= {
+            "numerica", "numerica_costante", "binaria"
+        }
+        quantitativo = (
+            (numerico_distribuzione if tipo_gruppo == "distribuzione" else numerico)
+            and all(ruoli.get(m) == "quantita" for m in membri)
+        )
+        if tipo_gruppo in {"ripetute", "tempo", "parti", "coordinate", "distribuzione"} and not quantitativo:
             misura, motivo = "Da decidere", "Questa struttura richiede quantità numeriche, non codici o livelli ordinali."
             avvisi.append("Controlla il significato e il tipo delle colonne del gruppo.")
             stato = "da_completare"
@@ -745,6 +755,36 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
                 misura, motivo = "Da decidere", "Occorre sapere se piccoli ritardi temporali debbano essere tollerati."
                 avvisi.append(f"Rispondi alla domanda sul ritardo nel gruppo “{nome}”.")
                 stato = "da_completare"
+        elif tipo_gruppo == "distribuzione":
+            natura = interpretazione.get(f"naturaDistribuzione-{id_gruppo}", "")
+            scelta_distribuzione = interpretazione.get(f"misuraDistribuzione-{id_gruppo}", "")
+            titoli = {
+                "hellinger": "Distanza di Hellinger",
+                "jensen_shannon": "Distanza di Jensen–Shannon",
+            }
+            misura = titoli.get(scelta_distribuzione, "Da decidere")
+            motivo = (
+                "Confronta le masse delle stesse categorie o intervalli "
+                "con un'unica distribuzione per riga. Non confronta i rapporti "
+                "tra parti secondo la geometria di Aitchison."
+            )
+            if natura not in {"probabilita", "masse"}:
+                avvisi.append(
+                    "Indica se le righe contengono probabilità con somma 1 "
+                    "oppure frequenze o masse da dividere per il totale della riga."
+                )
+                stato = "da_completare"
+            if scelta_distribuzione not in titoli:
+                avvisi.append("Scegli Hellinger oppure Jensen–Shannon per il gruppo.")
+                stato = "da_completare"
+            if stato == "pronto":
+                id_misura = scelta_distribuzione
+                parametri = {"natura": natura}
+                motivo += (
+                    " Le righe sono controllate come probabilità già normalizzate."
+                    if natura == "probabilita" else
+                    " Ogni riga è normalizzata per la propria massa totale."
+                )
         elif tipo_gruppo == "parti":
             risposta = interpretazione.get(f"totale-{gruppo.get('id')}", "")
             if risposta == "si":
@@ -926,6 +966,8 @@ MISURE_SPECIALIZZATE_CALCOLABILI = {
     "Dynamic Time Warping",
     "Distanza punto per punto",
     "Distanza composizionale di Aitchison",
+    "Distanza di Hellinger",
+    "Distanza di Jensen–Shannon",
 }
 
 ETICHETTE_TRASFORMAZIONE = {
@@ -2034,6 +2076,8 @@ def _politica_mancanti(
         ammesse = {"escludi_percorso", "zero"}
         if tipo_gruppo == "tempo":
             ammesse.add("interpola_lineare")
+        # Per probabilità e istogrammi non si imputano media o mediana:
+        # altererebbero la massa senza una giustificazione semantica.
         elif tipo_gruppo in {"ripetute", "parti", "coordinate"}:
             ammesse.update({"imputa_mediana", "imputa_media"})
             if percorso.get("idMisura") in {"euclidean", "manhattan", "chebyshev", "minkowski",
@@ -2543,7 +2587,10 @@ def _limite_teorico_percorso(percorso: dict[str, Any]) -> float | None:
         "Dissimilarità di Spearman",
     }:
         return 2.0
-    if misura == "Dissimilarità di Kendall τ-b":
+    if misura in {
+        "Dissimilarità di Kendall τ-b",
+        "Distanza di Hellinger", "Distanza di Jensen–Shannon",
+    }:
         return 1.0
     return None
 
@@ -2615,6 +2662,89 @@ def _prepara_normalizzazione_percorso(
     }
 
 
+
+
+def _verifica_distribuzione_percorso(
+    percorso: dict[str, Any],
+    risultato: dict[str, Any],
+) -> None:
+    """Controlla le distribuzioni PRIMA di autorizzare il calcolo.
+
+    Una colonna classificata binaria può essere un bin con masse 0/1,
+    ma la validità va verificata sulle righe nel loro insieme.
+    """
+    if percorso.get("tipoGruppo") != "distribuzione":
+        return
+    if percorso["stato"] == "da_completare" and (
+        percorso.get("idMisura") not in {"hellinger", "jensen_shannon"}
+    ):
+        return
+    natura = percorso.get("parametri", {}).get("natura")
+    if natura not in {"probabilita", "masse"}:
+        return
+    tabella = risultato["originale"]
+    posizioni = [tabella["intestazioni"].index(nome) for nome in percorso["colonne"]]
+    strategia = percorso["mancanti"].get("strategia")
+    errori = []
+    valide = 0
+    for numero_riga, riga in enumerate(tabella["righe"], start=1):
+        raw = [leggi_numero(riga[k], tabella["separatore"]) for k in posizioni]
+        if any(v is INVALIDO for v in raw):
+            errori.append(f"Riga {numero_riga}: sono presenti valori non numerici.")
+            continue
+        if any(v is None for v in raw):
+            if strategia == "escludi_percorso":
+                continue
+            if strategia == "zero":
+                raw = [0.0 if v is None else v for v in raw]
+            else:
+                # La politica dei mancanti segnala già una scelta da completare.
+                continue
+        valori = [float(v) for v in raw]
+        if any(not math.isfinite(v) or v < 0 for v in valori):
+            errori.append(
+                f"Riga {numero_riga}: Hellinger e Jensen–Shannon "
+                "richiedono componenti finite e non negative."
+            )
+            continue
+        totale = math.fsum(valori)
+        if not math.isfinite(totale) or totale <= 0:
+            errori.append(
+                f"Riga {numero_riga}: la massa totale deve essere positiva. "
+                "Una riga tutta nulla non definisce una distribuzione."
+            )
+            continue
+        if natura == "probabilita" and not math.isclose(
+            totale, 1.0, rel_tol=1e-6, abs_tol=1e-9
+        ):
+            errori.append(
+                f"Riga {numero_riga}: somma {format(totale, '.9g')} diversa da 1. "
+                "Se sono frequenze o percentuali, dichiarale come masse "
+                "da normalizzare anziché probabilità già normalizzate."
+            )
+            continue
+        valide += 1
+    if errori:
+        percorso["stato"] = "da_completare"
+        percorso["calcolo"]["disponibile"] = False
+        percorso["calcolo"]["descrizione"] = (
+            "Correggi la distribuzione o la sua interpretazione prima del calcolo."
+        )
+        percorso.setdefault("avvisi", []).extend(errori[:6])
+        if len(errori) > 6:
+            percorso["avvisi"].append(
+                f"Altre {len(errori) - 6} righe non valide."
+            )
+    elif valide < 2:
+        percorso["stato"] = "da_completare"
+        percorso["calcolo"]["disponibile"] = False
+        percorso.setdefault("avvisi", []).append(
+            "Restano meno di due distribuzioni valide e confrontabili."
+        )
+    else:
+        percorso["righeDistribuzioneValide"] = valide
+
+
 def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, Any]) -> dict[str, Any]:
     """Costruisce un piano verificabile senza calcolare ancora le distanze."""
     if not isinstance(interpretazione, dict):
@@ -2667,6 +2797,8 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
         raise ValueError("Una colonna non puo' appartenere a due percorsi di confronto.")
     for indice, percorso in enumerate(percorsi, start=1):
         percorso["idPercorso"] = f"percorso-{indice}"
+    for percorso in percorsi:
+        _verifica_distribuzione_percorso(percorso, risultato)
     # Hamming richiede che tutte le sequenze confrontabili abbiano una
     # lunghezza comune. Il controllo precede il calcolo; non si converte
     # implicitamente a Levenshtein se le lunghezze sono differenti.
@@ -3638,12 +3770,66 @@ def _interpola_vuoti_interni(valori: list[float | None]) -> list[float] | None:
     return [float(valore) for valore in risultato]
 
 
+def _normalizza_masse_distribuzione(
+    valori: list[float], natura: str
+) -> list[float]:
+    if not valori or any(not math.isfinite(v) or v < 0 for v in valori):
+        raise ValueError("Una distribuzione richiede masse finite e non negative.")
+    totale = math.fsum(valori)
+    if not math.isfinite(totale) or totale <= 0:
+        raise ValueError("La massa totale deve essere strettamente positiva.")
+    if natura == "probabilita":
+        if not math.isclose(totale, 1.0, rel_tol=1e-6, abs_tol=1e-9):
+            raise ValueError(
+                "Le probabilità devono avere somma 1. "
+                "Dichiara masse se desideri la normalizzazione per riga."
+            )
+    elif natura != "masse":
+        raise ValueError("Conferma se si tratta di probabilità oppure di masse.")
+    # Anche nel caso probabilità eliminiamo il solo errore di arrotondamento.
+    return [valore / totale for valore in valori]
+
+
+def _distanza_distribuzioni(
+    x: list[float], y: list[float],
+    id_misura: str, natura: str,
+) -> float:
+    """Hellinger e radice della divergenza Jensen–Shannon / ln(2).
+
+    Entrambe sono distanze in [0,1] sul simplesso di probabilità.
+    I termini 0 log(0/m) sono 0 per continuità, senza pseudoconteggi.
+    """
+    if len(x) != len(y) or not x:
+        raise ValueError("Le distribuzioni devono avere gli stessi bin.")
+    p = _normalizza_masse_distribuzione(x, natura)
+    q = _normalizza_masse_distribuzione(y, natura)
+    if id_misura == "hellinger":
+        quadrato = math.fsum(
+            (math.sqrt(a) - math.sqrt(b)) ** 2 for a, b in zip(p, q)
+        ) / 2.0
+        return math.sqrt(max(0.0, min(1.0, quadrato)))
+    if id_misura == "jensen_shannon":
+        divergenza = 0.0
+        for a, b in zip(p, q):
+            media = (a + b) / 2.0
+            if a > 0:
+                divergenza += a * math.log(a / media) / 2.0
+            if b > 0:
+                divergenza += b * math.log(b / media) / 2.0
+        return math.sqrt(max(0.0, min(1.0, divergenza / math.log(2.0))))
+    raise ValueError("Misura di confronto fra distribuzioni non riconosciuta.")
+
+
 def _distanza_specializzata(
     x: list[float], y: list[float], metodo: str,
     id_misura: str | None = None, parametri: dict[str, Any] | None = None,
 ) -> float | None:
     if id_misura in {"euclidean", "manhattan", "chebyshev", "minkowski", "weighted_minkowski"}:
         return _distanza_numerica(x, y, id_misura, parametri or {})
+    if id_misura in {"hellinger", "jensen_shannon"}:
+        return _distanza_distribuzioni(
+            x, y, id_misura, (parametri or {}).get("natura", "")
+        )
     if metodo in {"Distanza tra coordinate", "Distanza punto per punto"}:
         return math.sqrt(sum((a - b) ** 2 for a, b in zip(x, y)))
     if metodo == "Dissimilarità coseno":
@@ -3835,7 +4021,10 @@ def _calcola_matrice_specializzata(
         limite = (
             2.0 if metodo in {
                 "Dissimilarità coseno", "Dissimilarità di Pearson", "Dissimilarità di Spearman"
-            } else 1.0 if metodo == "Dissimilarità di Kendall τ-b" else None
+            } else 1.0 if metodo in {
+                "Dissimilarità di Kendall τ-b", "Distanza di Hellinger",
+                "Distanza di Jensen–Shannon"
+            } else None
         )
 
     etichette = _etichette_righe(risultato, interpretazione)
@@ -3845,6 +4034,15 @@ def _calcola_matrice_specializzata(
         + ("le trasformazioni numeriche confermate." if percorso["preelaborazione"]["usaTabellaTrasformata"]
            else "i valori originali.")
     )
+    if percorso.get("tipoGruppo") == "distribuzione":
+        natura = percorso.get("parametri", {}).get("natura")
+        nota += (
+            " Probabilità già normalizzate: ogni somma di riga verificata pari a 1 "
+            "(salvo tolleranza numerica); nessun pseudoconteggio applicato."
+            if natura == "probabilita" else
+            " Frequenze o masse non negative normalizzate alla somma di ogni "
+            "riga; nessun pseudoconteggio applicato."
+        )
     if percorso.get("tipoGruppo") == "tempo":
         nota += (
             " Ordine temporale confermato: "
