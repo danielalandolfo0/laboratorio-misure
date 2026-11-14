@@ -1233,6 +1233,22 @@
     if (!percorsoNumerico && indipendentiStandard.length) {
       domande.push(domandeConfigurazioneGower(indipendentiStandard));
     }
+    profiliInclusi.filter(profilo =>
+      !interpretazione.assegnazioni[profilo.nome] &&
+      interpretazione.colonne[profilo.nome]?.ruolo === "testo"
+    ).forEach(profilo => {
+      const scelta = interpretazione.misureTestualiPerColonna?.[profilo.nome] || "levenshtein";
+      domande.push('<div class="question-item"><label><strong>Come confrontare i testi nella colonna “' +
+        escapeHtml(profilo.nome) + '”?</strong><select class="text-measure-setting" ' +
+        'data-text-measure-column="' + escapeHtml(profilo.nome) + '">' +
+        '<option value="levenshtein"' + (scelta === "levenshtein" ? " selected" : "") +
+        '>Levenshtein: consenti inserimenti, cancellazioni e sostituzioni</option>' +
+        '<option value="hamming"' + (scelta === "hamming" ? " selected" : "") +
+        '>Hamming: conta le posizioni diverse nelle sequenze allineate</option>' +
+        '</select></label><p>Hamming richiede che tutte le sequenze confrontate abbiano ' +
+        'la stessa lunghezza; la dissimilarità è il numero di posizioni discordanti ' +
+        'diviso per tale lunghezza. Se le lunghezze differiscono, usa Levenshtein.</p></div>');
+    });
     profiliInclusi.filter(profilo => {
       const ruolo = interpretazione.colonne[profilo.nome]?.ruolo;
       const colonna = risultato.colonne.find(elemento => elemento.nome === profilo.nome);
@@ -1265,7 +1281,7 @@
       if (gruppo.tipo === "ripetute") domande.push(domandaAdattiva(
         `somiglianza-${gruppo.id}`, `Nel gruppo “${escapeHtml(gruppo.nome)}”, quando due righe devono essere considerate simili?`,
         "Le colonne formano un unico profilo: scegli quale aspetto deve contare.",
-        [["valori_vicini", "Quando hanno valori vicini"], ["proporzioni", "Quando mantengono proporzioni simili"], ["andamento", "Quando crescono e diminuiscono nello stesso modo"], ["ordine", "Quando ordinano le caratteristiche nello stesso modo"], ["ignoto", "Non lo so"]]
+        [["valori_vicini", "Quando hanno valori vicini"], ["proporzioni", "Quando mantengono proporzioni simili"], ["andamento", "Quando crescono e diminuiscono nello stesso modo"], ["ordine", "Quando ordinano le caratteristiche nello stesso modo (Spearman)"], ["ordine_coppie", "Quando concordano nell’ordine delle coppie di caratteristiche, anche con pari merito (Kendall τ-b)"], ["ignoto", "Non lo so"]]
       ));
       if (gruppo.tipo === "tempo") {
         const ordine = interpretazione.ordiniTemporaliGruppi?.[gruppo.id] || "";
@@ -1624,6 +1640,14 @@
     disegnaQuestionario();
   });
   $("adaptive-questions").addEventListener("change", evento => {
+    if (evento.target.matches(".text-measure-setting")) {
+      if (!interpretazione.misureTestualiPerColonna) interpretazione.misureTestualiPerColonna = {};
+      interpretazione.misureTestualiPerColonna[evento.target.dataset.textMeasureColumn] =
+        evento.target.value;
+      annullaScelteNormalizzazione();
+      disegnaQuestionario();
+      return;
+    }
     if (evento.target.matches(".specialized-missing-setting")) {
       if (!interpretazione.mancantiSpecializzatiPerColonna) {
         interpretazione.mancantiSpecializzatiPerColonna = {};

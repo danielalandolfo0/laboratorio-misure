@@ -647,8 +647,27 @@ def _blocco_indipendente(nome: str, ruolo: str, analisi: dict[str, Any], interpr
             avvisi.append("Rispondi alla domanda sull’uso delle date.")
             stato = "da_completare"
     elif ruolo == "testo":
-        misura = "Distanza di Levenshtein normalizzata"
-        motivo = "Confronta quante modifiche servono per trasformare un testo nell’altro, tenendo conto della lunghezza."
+        preferenze = interpretazione.get("misureTestualiPerColonna") or {}
+        if not isinstance(preferenze, dict):
+            raise ValueError("La scelta delle misure testuali non e' valida.")
+        scelta = preferenze.get(nome, "levenshtein")
+        if scelta == "levenshtein":
+            misura = "Distanza di Levenshtein normalizzata"
+            motivo = (
+                "Confronta inserimenti, cancellazioni e sostituzioni, "
+                "anche tra sequenze di lunghezze differenti."
+            )
+        elif scelta == "hamming":
+            misura = "Distanza di Hamming normalizzata"
+            motivo = (
+                "Conta le posizioni con simboli differenti, divise per la "
+                "lunghezza comune. Richiede sequenze allineate ed equidimensionali."
+            )
+        else:
+            misura = "Da decidere"
+            motivo = "La misura testuale indicata non e' riconosciuta."
+            avvisi.append("Scegli Levenshtein oppure Hamming per questa colonna.")
+            stato = "da_completare"
     elif ruolo == "risultato":
         misura = "Da decidere"
         motivo = "Un risultato da spiegare o prevedere normalmente non deve definire la somiglianza tra le righe."
@@ -704,6 +723,11 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
                 "proporzioni": ("Dissimilarità coseno", "Confronta la direzione dei profili, riducendo l’effetto della loro grandezza complessiva."),
                 "andamento": ("Dissimilarità di Pearson", "Confronta come i valori crescono e diminuiscono rispetto al livello medio del profilo."),
                 "ordine": ("Dissimilarità di Spearman", "Confronta l’ordinamento interno delle coordinate dei due profili."),
+                "ordine_coppie": (
+                    "Dissimilarità di Kendall τ-b",
+                    "Confronta la concordanza dell'ordine di ogni coppia di caratteristiche, "
+                    "tenendo conto dei pari merito con Kendall τ-b."
+                ),
             }
             if risposta in scelte:
                 misura, motivo = scelte[risposta]
@@ -893,10 +917,12 @@ RUOLI_GOWER = {"quantita", "livello", "presenza", "binaria", "categoria", "data"
 MISURE_SPECIALIZZATE_CALCOLABILI = {
     "Uguale o diverso",
     "Distanza di Levenshtein normalizzata",
+    "Distanza di Hamming normalizzata",
     "Distanza tra coordinate",
     "Dissimilarità coseno",
     "Dissimilarità di Pearson",
     "Dissimilarità di Spearman",
+    "Dissimilarità di Kendall τ-b",
     "Dynamic Time Warping",
     "Distanza punto per punto",
     "Distanza composizionale di Aitchison",
@@ -2509,13 +2535,16 @@ def _limite_teorico_percorso(percorso: dict[str, Any]) -> float | None:
             return float(len(percorso["colonne"]))
         return None
     if tipo == "separato":
-        if misura in {"Uguale o diverso", "Distanza di Levenshtein normalizzata"}:
+        if misura in {"Uguale o diverso", "Distanza di Levenshtein normalizzata",
+                      "Distanza di Hamming normalizzata"}:
             return 1.0
     if misura in {
         "Dissimilarità coseno", "Dissimilarità di Pearson",
         "Dissimilarità di Spearman",
     }:
         return 2.0
+    if misura == "Dissimilarità di Kendall τ-b":
+        return 1.0
     return None
 
 
@@ -2638,6 +2667,34 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
         raise ValueError("Una colonna non puo' appartenere a due percorsi di confronto.")
     for indice, percorso in enumerate(percorsi, start=1):
         percorso["idPercorso"] = f"percorso-{indice}"
+    # Hamming richiede che tutte le sequenze confrontabili abbiano una
+    # lunghezza comune. Il controllo precede il calcolo; non si converte
+    # implicitamente a Levenshtein se le lunghezze sono differenti.
+    for percorso in percorsi:
+        if percorso["tipo"] != "separato" or percorso["metodo"] != "Distanza di Hamming normalizzata":
+            continue
+        nome = percorso["colonne"][0]
+        indice = risultato["originale"]["intestazioni"].index(nome)
+        strategia = percorso["mancanti"].get("strategia")
+        stringhe = [
+            "" if mancante(riga[indice]) else str(riga[indice]).strip()
+            for riga in risultato["originale"]["righe"]
+            if not mancante(riga[indice]) or strategia == "stringa_vuota"
+        ]
+        lunghezze = {len(valore) for valore in stringhe}
+        if len(lunghezze) > 1:
+            percorso["stato"] = "da_completare"
+            percorso["calcolo"]["disponibile"] = False
+            percorso["calcolo"]["descrizione"] = "Hamming richiede uguale lunghezza per le sequenze confrontate."
+            percorso.setdefault("avvisi", []).append(
+                f"La colonna “{nome}” presenta sequenze di lunghezza differente "
+                f"({', '.join(map(str, sorted(lunghezze)))} caratteri). "
+                "Per Hamming devono avere tutte uguale lunghezza: "
+                "se interessano inserimenti o cancellazioni, seleziona Levenshtein."
+            )
+        elif stringhe:
+            percorso["lunghezzaSequenzeHamming"] = len(stringhe[0])
+
     # La configurazione completa di Gower viene verificata prima di
     # dichiarare il piano pronto, non soltanto quando si avvia il calcolo.
     for percorso in percorsi:
@@ -3470,6 +3527,50 @@ def _levenshtein_normalizzata(a: str, b: str) -> float:
     return precedente[-1] / max(len(a), len(b))
 
 
+def _hamming_normalizzata(a: str, b: str) -> float:
+    """Quota delle posizioni discordanti in sequenze di lunghezza identica."""
+    if len(a) != len(b):
+        raise ValueError(
+            "La distanza di Hamming richiede sequenze con uguale numero "
+            "di caratteri. Se la lunghezza differisce, scegli Levenshtein."
+        )
+    if not a:
+        return 0.0
+    return sum(x != y for x, y in zip(a, b)) / len(a)
+
+
+def _kendall_tau_b(x: list[float], y: list[float]) -> float | None:
+    """Kendall tau-b con conteggi di concordanze, discordanze e pari merito.
+
+    Le coppie in parita' su entrambe le serie non contribuiscono.
+    Denominatore nullo: correlazione matematicamente non definita.
+    """
+    if len(x) != len(y) or len(x) < 2:
+        return None
+    concordanti = discordanti = pari_solo_x = pari_solo_y = 0
+    for i in range(len(x)):
+        for j in range(i + 1, len(x)):
+            dx = x[i] - x[j]
+            dy = y[i] - y[j]
+            if dx == 0 and dy == 0:
+                continue
+            if dx == 0:
+                pari_solo_x += 1
+            elif dy == 0:
+                pari_solo_y += 1
+            elif dx * dy > 0:
+                concordanti += 1
+            else:
+                discordanti += 1
+    denominatore = math.sqrt(
+        (concordanti + discordanti + pari_solo_x)
+        * (concordanti + discordanti + pari_solo_y)
+    )
+    if denominatore == 0:
+        return None
+    return max(-1.0, min(1.0, (concordanti - discordanti) / denominatore))
+
+
 def _distanza_dtw(x: list[float], y: list[float]) -> float:
     """Minimo ESATTO del costo medio per passo, non costo totale diviso per la lunghezza.
 
@@ -3558,6 +3659,9 @@ def _distanza_specializzata(
     if metodo == "Dissimilarità di Spearman":
         correlazione = _correlazione_pearson(_ranghi_medi(x), _ranghi_medi(y))
         return None if correlazione is None else 1.0 - correlazione
+    if metodo == "Dissimilarità di Kendall τ-b":
+        correlazione = _kendall_tau_b(x, y)
+        return None if correlazione is None else (1.0 - correlazione) / 2.0
     if metodo == "Dynamic Time Warping":
         return _distanza_dtw(x, y)
     if metodo == "Distanza composizionale di Aitchison":
@@ -3603,6 +3707,10 @@ def _calcola_matrice_specializzata(
                     distanza = 0.0 if str(valori[i]).strip() == str(valori[k]).strip() else 1.0
                 elif metodo == "Distanza di Levenshtein normalizzata":
                     distanza = _levenshtein_normalizzata(
+                        str(valori[i]).strip(), str(valori[k]).strip()
+                    )
+                elif metodo == "Distanza di Hamming normalizzata":
+                    distanza = _hamming_normalizzata(
                         str(valori[i]).strip(), str(valori[k]).strip()
                     )
                 else:
@@ -3724,9 +3832,11 @@ def _calcola_matrice_specializzata(
                 )
                 matrice[i][k] = distanza
                 matrice[k][i] = distanza
-        limite = 2.0 if metodo in {
-            "Dissimilarità coseno", "Dissimilarità di Pearson", "Dissimilarità di Spearman"
-        } else None
+        limite = (
+            2.0 if metodo in {
+                "Dissimilarità coseno", "Dissimilarità di Pearson", "Dissimilarità di Spearman"
+            } else 1.0 if metodo == "Dissimilarità di Kendall τ-b" else None
+        )
 
     etichette = _etichette_righe(risultato, interpretazione)
     righe_csv = [[etichetta, *riga] for etichetta, riga in zip(etichette, matrice)]
