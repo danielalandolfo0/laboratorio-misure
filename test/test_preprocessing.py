@@ -3555,4 +3555,161 @@ locale_zero = p._calcola_matrice_specializzata(
 )
 quasi_uguali(locale_zero["matrice"][0][3], 1)
 
+
+# Fase 5: marcatori diversi nella STESSA colonna: nessuna semantica
+# presunta da "NA", "N/A", "?", NULL e dalla cella vuota.
+csv_stati_misti = p.prepara_tabella(p.leggi_csv(
+    "id,presenza,categoria,quantita\n"
+    "A,1,rosso,1\n"
+    "B,?,N/A,2\n"
+    "C,N/A,NA,3\n"
+    "D,NA,blu,4\n"
+    "E,0,rosso,5"
+))
+stati_base = {
+    "riga": "oggetto",
+    "significatoMancanti": "misto",
+    "zeriCondivisi": "si",
+    "colonne": {
+        "id": {"ruolo": "identificativo", "usa": False},
+        "presenza": {"ruolo": "presenza", "usa": True},
+        "categoria": {"ruolo": "categoria", "usa": True},
+        "quantita": {"ruolo": "quantita", "usa": True},
+    },
+    "statiMancantiPerColonna": {
+        "presenza": {
+            "?": "sconosciuto",
+            "n/a": "non_applicabile",
+            "na": "assenza",
+        },
+        "categoria": {"n/a": "non_applicabile", "na": "assenza"},
+    },
+}
+piano_stati = p.crea_piano_confronto(csv_stati_misti, stati_base)
+assert piano_stati["completo"], piano_stati
+diag_stati = piano_stati["diagnosticaMancantiSemantici"]
+assert diag_stati["attiva"]
+assert diag_stati["totali"] == {
+    "assenza": 2, "non_applicabile": 2, "sconosciuto": 1
+}
+assert diag_stati["perColonna"]["presenza"]["marcatori"] == {
+    "?": 1, "n/a": 1, "na": 1
+}
+assert piano_stati["percorsi"][0]["mancanti"]["strategia"] == "esclusione_pairwise"
+assert piano_stati["percorsi"][0]["pesiGower"]
+mat_stati = p.calcola_matrice(csv_stati_misti, stati_base)
+verifica_matrice_finale(mat_stati, 5)
+assert mat_stati["diagnosticaMancantiSemantici"]["totali"] == diag_stati["totali"]
+# B–C: le prime due colonne non contribuiscono; rimane solo la quantita'.
+quasi_uguali(mat_stati["matrice"][1][2], 1/4)
+# C–D: categoria assente osservata vs blu, distanza categoriale 1;
+# la colonna presenza è non applicabile solo nella riga C.
+quasi_uguali(mat_stati["matrice"][2][3], (1 + 1/4) / 2)
+# D–E: l'assenza NA diventa lo zero osservato, uguale allo 0 della riga E.
+quasi_uguali(mat_stati["matrice"][3][4], (1/4 + 1) / 3)
+# A–D: presenza 1 vs assenza realmente osservata, categoria e quantita'.
+quasi_uguali(mat_stati["matrice"][0][3], (1 + 1 + 3/4) / 3)
+# B–E: entrambi i marcatori mancanti non producono uno zero fittizio.
+quasi_uguali(mat_stati["matrice"][1][4], 3/4)
+
+# Nessuna mappatura semantica dei marcatori rimane ammissibile in modalità
+# "misto": non si può decidere automaticamente cosa significhi N/A.
+for configurazione in (
+    {},
+    {"presenza": {"?": "sconosciuto", "n/a": "non_applicabile"}},
+    {"presenza": {"?": "inventato", "na": "assenza", "n/a": "non_applicabile"}},
+):
+    parziale = {**stati_base, "statiMancantiPerColonna": configurazione}
+    piano = p.crea_piano_confronto(csv_stati_misti, parziale)
+    assert not piano["completo"], piano
+    assert any("specifica il significato" in testo
+               for testo in piano["avvisi"] + [
+                   a for percorso in piano["percorsi"]
+                   for a in percorso.get("avvisi", [])
+               ]), piano
+
+# Uno stesso simbolo ha significato stabilito per COLONNA; in una colonna
+# numerica l'assenza non può essere inserita automaticamente come zero.
+numerici_con_assenza = p.prepara_tabella(p.leggi_csv(
+    "x,y\n1,3\nNA,4\n3,5"
+))
+scelta_assente_numerica = {
+    "riga": "oggetto", "significatoMancanti": "misto",
+    "colonne": {
+        "x": {"ruolo": "quantita", "usa": True},
+        "y": {"ruolo": "quantita", "usa": True}
+    },
+    "statiMancantiPerColonna": {"x": {"na": "assenza"}},
+    "mancantiNumericiPerColonna": {"x": "pairwise"},
+}
+piano_numerico_assenza = p.crea_piano_confronto(
+    numerici_con_assenza, scelta_assente_numerica
+)
+assert not piano_numerico_assenza["completo"]
+assert any("l'assenza" in v.lower() for v in piano_numerico_assenza["avvisi"])
+# Non-applicabilità non è un dato numerico da imputare con media.
+scelta_nonapp_numerica = {
+    **scelta_assente_numerica,
+    "statiMancantiPerColonna": {"x": {"na": "non_applicabile"}},
+    "mancantiNumericiPerColonna": {"x": "imputa_media"},
+}
+piano_nonapp_numerica = p.crea_piano_confronto(
+    numerici_con_assenza, scelta_nonapp_numerica
+)
+assert not piano_nonapp_numerica["completo"]
+assert any("non imputare automaticamente" in testo
+           for testo in piano_nonapp_numerica["avvisi"])
+
+# Gruppo binario: codifica mista, stato assenza osservato, pairwise sulle
+# coordinate sconosciute e non applicabili.
+csv_gruppo_misto = p.prepara_tabella(p.leggi_csv(
+    "id,flag1,flag2,categoria\n"
+    "A,1,NA,x\n"
+    "B,1,0,x\n"
+    "C,?,1,y\n"
+    "D,N/A,0,x"
+))
+gruppo_misto = {
+    "riga": "oggetto",
+    "significatoMancanti": "misto",
+    "colonne": {
+        "id": {"ruolo": "identificativo", "usa": False},
+        "flag1": {"ruolo": "presenza", "usa": True},
+        "flag2": {"ruolo": "binaria", "usa": True},
+        "categoria": {"ruolo": "categoria", "usa": True},
+    },
+    "gruppi": [{"id": "flags", "nome": "Presenze", "tipo": "vettore_binario"}],
+    "assegnazioni": {"flag1": "flags", "flag2": "flags"},
+    "zeriCondivisi": "si",
+    "misuraBinaria-flags": "jaccard",
+    "mancanti-gruppo-flags": "pairwise",
+    "statiMancantiPerColonna": {
+        "flag1": {"?": "sconosciuto", "n/a": "non_applicabile"},
+        "flag2": {"na": "assenza"},
+    },
+}
+piano_gruppo_misto = p.crea_piano_confronto(csv_gruppo_misto, gruppo_misto)
+assert piano_gruppo_misto["completo"], piano_gruppo_misto
+mat_gruppo_misto = p.calcola_matrice(csv_gruppo_misto, gruppo_misto)
+verifica_matrice_finale(mat_gruppo_misto, 4)
+assert len(mat_gruppo_misto["contributi"]) == 2
+quasi_uguali(mat_gruppo_misto["matrice"][0][1], 0)
+quasi_uguali(mat_gruppo_misto["matrice"][0][2], 1)
+quasi_uguali(mat_gruppo_misto["matrice"][1][3], 0)
+quasi_uguali(mat_gruppo_misto["matrice"][2][3], 1)
+# Il "zero" generico invece cancellerebbe la distinzione fra
+# sconosciuto e non applicabile, e deve essere respinto.
+piano_azzeramento = p.crea_piano_confronto(
+    csv_gruppo_misto, {**gruppo_misto, "mancanti-gruppo-flags": "zero"}
+)
+assert not piano_azzeramento["completo"]
+assert any("convertirebbe un valore" in v
+           for v in piano_azzeramento["avvisi"])
+
+# Codifiche non miste in uso da tempo restano retrocompatibili.
+assert p.crea_piano_confronto(
+    dati_binari_vuoti, {**base_vuoti,
+                        "mancanti-gruppo-flags": "pairwise"}
+)["completo"]
+
 print("Tutti i test Python di preprocessing sono stati superati.")
