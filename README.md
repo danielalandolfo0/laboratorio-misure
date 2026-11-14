@@ -103,9 +103,9 @@ verifica della covarianza dopo il completamento dei dati.
 
 Ogni percorso produce prima la propria matrice. Gower, i confronti 0/1 e le
 dissimilarità già limitate conservano la loro scala teorica; le distanze non
-limitate vengono divise per il 95º percentile delle distanze positive del
-percorso e troncate a 1. In questo modo un percorso non prevale soltanto perché
-la sua misura usa valori numericamente più grandi.
+limitate vengono divise per il massimo campionario del percorso (se positivo).
+La stessa regola vale anche quando e' presente un unico percorso: la matrice
+finale contiene sempre dissimilarita' nell'intervallo [0,1].
 
 La matrice complessiva usa, per ogni coppia di righe, la media pesata dei soli
 contributi disponibili:
@@ -118,7 +118,9 @@ D(i,j)=\frac{\sum_b w_b\,\delta_{ij}^{(b)}\,\widetilde D^{(b)}(i,j)}
 I pesi dei percorsi sono strettamente positivi e valgono 1 per impostazione
 predefinita. Se un percorso non può confrontare una coppia, non partecipa né al
 numeratore né al denominatore di quella coppia. Se nessun percorso è
-disponibile, la dissimilarità resta non definita.
+disponibile, il calcolo finale viene bloccato e il sito indica le coppie di
+righe prive di un contributo valido. Non viene mai esportata una matrice finale
+contenente celle vuote o valori non numerici.
 
 Nei gruppi temporali, l’interpolazione lineare è applicata soltanto ai vuoti
 interni compresi tra due osservazioni; una serie priva del primo o dell’ultimo
@@ -144,9 +146,10 @@ i ranghi normalizzati. I pesi delle caratteristiche sono strettamente positivi
 (valore predefinito 1) e partecipano sia al numeratore sia al denominatore.
 I dati numerici vengono letti dai valori originali, non dall'anteprima riscalata.
 
-- Le colonne che non variano fra i valori interpretati non entrano nel
-  denominatore; il piano le elenca. Se tutte le colonne sono prive di
-  variabilità, il confronto viene segnalato come non disponibile.
+- Le colonne osservate ma costanti restano nel denominatore con peso
+  strettamente positivo e contributo zero; il piano le segnala. Se tutte le
+  colonne sono costanti e osservate, la matrice di Gower e' interamente nulla.
+  Una colonna interamente mancante, invece, non fornisce contributi.
 - Un valore **sconosciuto** o **non applicabile** viene omesso nel confronto
   a coppie. Se un mancante indica **assenza**, l'utente lo conferma per
   colonne binarie o nominali; per quantità numeriche lo zero deve essere
@@ -158,10 +161,18 @@ I dati numerici vengono letti dai valori originali, non dall'anteprima riscalata
 - I livelli ordinali testuali richiedono l'ordine esplicito delle etichette,
   con livelli separati da punto e virgola. I livelli numerici, dopo conferma
   del significato ordinale, vengono ordinati numericamente.
-- Se nessun contributo è disponibile per una coppia, la dissimilarità è
-  **non definita** e viene indicata come cella vuota nel CSV; sulla diagonale
-  compare 0 per convenzione. Con valori mancanti e assenze asimmetriche
-  non si garantiscono le proprietà di una metrica.
+- Per la **variante robusta** occorre scegliere esplicitamente, per ogni
+  colonna quantitativa, quali righe anomale escludere **soltanto dalla stima
+  della scala**. Si utilizza il massimo scarto fra i valori non anomali,
+  saturando i contributi a 1. La regola 7 volte IQR non e' piu' utilizzata
+  automaticamente. Le righe anomale restano nella matrice.
+- Se nessun contributo e' disponibile per una coppia, quella dissimilarita'
+  intermedia resta non definita. Il controllo finale, pero', blocca il
+  risultato e indica le coppie da risolvere. Vengono inoltre verificati
+  simmetria, diagonale nulla, finitezza e intervallo [0,1]. Le eventuali
+  dissimilarita' nulle tra righe distinte sono segnalate senza bloccare il
+  calcolo. Con mancanti e assenze asimmetriche non si richiede la proprieta'
+  triangolare.
 
-Queste regole valgono nel percorso Gower; non trasformano automaticamente i
-percorsi specializzati in un'unica matrice globale.
+I percorsi distinti (numerici, misti, testuali e gruppi temporali) vengono
+aggregati in una sola matrice quando le coppie risultano tutte confrontabili.
