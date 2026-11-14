@@ -1,0 +1,35 @@
+name: Collaudo Chromium reale
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Installa Playwright Chromium
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Avvia sito HTTP
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/laboratorio-http.log 2>&1 &
+          echo $! > /tmp/laboratorio-http.pid
+      - name: Esegui le interazioni in Chromium
+        run: node test/test-browser-e2e.cjs
+      - name: Salva schermate e diagnostica
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: collaudo-browser
+          path: test-results/browser/
+          if-no-files-found: ignore
+          retention-days: 14

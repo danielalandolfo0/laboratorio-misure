@@ -439,6 +439,29 @@ percorsi possono ancora fornire una matrice globale completa.
 Questo test non dimostra la correttezza di ogni combinazione possibile:
 è una regressione riproducibile di un percorso trasversale complesso.
 
+### Collaudo end-to-end in Chromium reale
+
+La suite automatica comprende un job distinto **Collaudo Chromium reale**
+(\`.github/workflows/browser-e2e.yml\`), eseguito su ogni pull request e
+su \`main\`. A differenza dei test DOM simulati, apre davvero il sito
+servito via HTTP e carica il motore Python tramite **Pyodide**.
+
+Il file \`test/test-browser-e2e.cjs\` verifica:
+- un CSV categorico, le scelte dei ruoli, Gower classica, la matrice
+  \(4\times 4\) e l'esportazione CSV;
+- la modifica di una dissimilarità nominale tramite l'editor reale e
+  il conseguente cambiamento della matrice calcolata;
+- su viewport da 390 px: l'intero percorso numerico, la scelta manuale
+  \(\log(1+x)\), il piano, la misura euclidea e il download finale;
+- lo scorrimento orizzontale globale e le etichette accessibili dei
+  controlli visibili.
+
+Le schermate, i CSV e le informazioni diagnostiche sono disponibili come
+**artifact del workflow** per 14 giorni. Il test usa Chromium headless
+e non implica automaticamente compatibilità con tutti i browser,
+usabilità per qualsiasi pubblico o conformità WCAG: queste richiedono
+ulteriori verifiche manuali e tecniche.
+
 ## Matrice complessiva con più percorsi
 
 Ogni percorso produce prima la propria matrice. Gower, i confronti 0/1 e le
