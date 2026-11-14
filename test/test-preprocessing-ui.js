@@ -480,6 +480,7 @@ async function testMahalanobisAvanzata() {
   h.fire("comparison-plan-paths", "change", {target: selezione});
   await flush();
   assert.match(h.element("comparison-plan-paths").innerHTML, /id="numeric-measure-lambda"/);
+  h.element("numeric-measure-choice").value = "mahalanobis_ridge";
   h.element("numeric-measure-lambda").value = "0.5";
   h.fire("comparison-plan-paths", "click", {target: {id:"apply-numeric-measure"}});
   await flush();
@@ -489,6 +490,7 @@ async function testMahalanobisAvanzata() {
   h.fire("comparison-plan-paths", "change", {target: pinv});
   await flush();
   assert.match(h.element("comparison-plan-paths").innerHTML, /id="numeric-measure-tolerance"/);
+  h.element("numeric-measure-choice").value = "mahalanobis_pinv";
   h.element("numeric-measure-tolerance").value = "1e-10";
   h.fire("comparison-plan-paths", "click", {target: {id:"apply-numeric-measure"}});
   await flush();
