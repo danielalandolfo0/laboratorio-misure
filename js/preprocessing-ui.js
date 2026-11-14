@@ -661,7 +661,8 @@
       ${riga.slice(0, limite).map(valore => `<td>${valore === null ? "—" : escapeHtml(formatoNumero(valore))}</td>`).join("")}
     </tr>`).join("");
     $("gower-result-title").textContent = risposta.metodo;
-    $("gower-result-caption").textContent = `${risposta.etichette.length} × ${risposta.etichette.length}. ${risposta.nota}${limite < risposta.etichette.length ? ` Anteprima delle prime ${limite} righe.` : ""}`;
+    const avvisiFinali = risposta.diagnosticaFinale?.avvisi || [];
+    $("gower-result-caption").textContent = `${risposta.etichette.length} × ${risposta.etichette.length}. ${risposta.nota}${limite < risposta.etichette.length ? ` Anteprima delle prime ${limite} righe.` : ""}${avvisiFinali.length ? " Diagnostica (non bloccante): " + avvisiFinali.join(" ") : ""}`;
     $("download-gower").disabled = false;
     $("gower-result").hidden = false;
   }
@@ -677,6 +678,9 @@
       nascondiErrore();
       disegnaMatrice(matriceCorrente);
     } catch (errore) {
+      matriceCorrente = null;
+      $("gower-result").hidden = true;
+      $("download-gower").disabled = true;
       mostraErrore(errore.message);
     } finally {
       pulsante.disabled = false;
