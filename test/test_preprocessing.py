@@ -4261,4 +4261,86 @@ assert rapporto_diag["risultato"]["diagnosticaFinale"]["distribuzioneDissimilari
 )
 assert singolo_sens["diagnosticaFinale"]["distribuzioneDissimilarita"]["numeroCoppie"] == 3
 
+# Fase 7: rapporti cumulativi, senza trasformare errori in dissimilarità.
+piano_con_conflitti = p.crea_piano_confronto(
+    solo_binari_pairwise, {**solo_binari_risposte,
+                          "riga": "", "mancanti-gruppo-bin": ""}
+)
+rapporto_piano = piano_con_conflitti["rapportoProblemi"]
+assert not piano_con_conflitti["completo"]
+assert rapporto_piano["fase"] == "piano"
+assert rapporto_piano["calcoloConsentito"] is False
+assert rapporto_piano["numeroBloccanti"] >= 2
+assert len(rapporto_piano["bloccanti"]) == rapporto_piano["numeroBloccanti"]
+assert any(x["ambito"] == "generale" for x in rapporto_piano["bloccanti"])
+assert any(x["ambito"] == "percorso" for x in rapporto_piano["bloccanti"])
+assert all(x["decisioniPossibili"] for x in rapporto_piano["bloccanti"])
+
+rapporto_piano_pronto = piano_zeri_confermati["rapportoProblemi"]
+assert rapporto_piano_pronto["fase"] == "piano"
+assert rapporto_piano_pronto["calcoloConsentito"] is True
+assert rapporto_piano_pronto["numeroBloccanti"] == 0
+assert rapporto_piano_pronto["numeroAvvisi"] == len(
+    rapporto_piano_pronto["nonBloccanti"]
+)
+
+# Matrice con 3 coppie senza contributi (non limitate ai primi 6 esempi).
+matrice_incompleta_rapporto = [
+    [0, None, .1, None],
+    [None, 0, .2, .3],
+    [.1, .2, 0, None],
+    [None, .3, None, 0],
+]
+prima_del_controllo = [r[:] for r in matrice_incompleta_rapporto]
+try:
+    p._valida_matrice_finale(
+        matrice_incompleta_rapporto, ["A", "B", "C", "=D"]
+    )
+    assert False, "Non si può calcolare una matrice incompleta."
+except p.IncompatibilitaCalcolo as errore:
+    rep = errore.rapportoProblemi
+    assert rep["numeroBloccanti"] == 1
+    assert rep["numeroCoppieNonConfrontabili"] == 3
+    assert rep["coppieNonConfrontabili"] == [[1, 2], [1, 4], [3, 4]]
+    assert rep["etichette"] == ["A", "B", "C", "=D"]
+    assert "nessuna distanza verra' inventata" in str(errore)
+assert matrice_incompleta_rapporto == prima_del_controllo
+
+# Passaggio completo dal motore alla risposta JSON dell'API browser.
+json_coppie_assenti = json.loads(p.calcola_matrice_json(
+    "flag1,flag2\n1,NA\nNA,1\n1,1",
+    "[]",
+    json.dumps(solo_binari_risposte),
+))
+assert json_coppie_assenti["ok"] is False
+assert json_coppie_assenti["rapportoProblemi"]["numeroCoppieNonConfrontabili"] == 1
+assert json_coppie_assenti["rapportoProblemi"]["coppieNonConfrontabili"] == [[1, 2]]
+
+# Due blocchi indipendentemente incompatibili: entrambi vengono riportati.
+gower_prima = p.calcola_matrice_gower
+speciale_prima = p._calcola_matrice_specializzata
+def _fallisce_gower(*args):
+    raise ValueError("Mancanti non confrontabili per Gower")
+def _fallisce_speciale(*args):
+    raise ValueError("Normalizzazione impossibile nel gruppo")
+try:
+    p.calcola_matrice_gower = _fallisce_gower
+    p._calcola_matrice_specializzata = _fallisce_speciale
+    try:
+        p.calcola_matrice(misti_pairwise, {
+            **base_pairwise, "misuraBinaria-bin": "jaccard"
+        })
+        assert False, "Gli errori nei due blocchi devono essere aggregati."
+    except p.IncompatibilitaCalcolo as errore:
+        rep = errore.rapportoProblemi
+        assert rep["fase"] == "calcolo"
+        assert rep["numeroBloccanti"] == 2
+        assert {x["ambito"] for x in rep["bloccanti"]} == {"percorso"}
+        assert all(x["colonne"] for x in rep["bloccanti"])
+        assert "Mancanti non confrontabili" in rep["bloccanti"][0]["messaggio"]
+        assert "Normalizzazione impossibile" in rep["bloccanti"][1]["messaggio"]
+finally:
+    p.calcola_matrice_gower = gower_prima
+    p._calcola_matrice_specializzata = speciale_prima
+
 print("Tutti i test Python di preprocessing sono stati superati.")
