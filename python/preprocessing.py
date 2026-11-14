@@ -1945,15 +1945,13 @@ def _crea_percorsi(
                 metodo = "Gower dopo il controllo dei dati"
                 motivo = "Prima del calcolo occorre correggere o verificare i valori estremi segnalati."
                 stato = "da_completare"
-            elif scelta_gower == "robusta" or (scelta_gower in {"", "automatico"} and ha_estremi and risposta_estremi == "reali"):
+            elif scelta_gower == "robusta":
                 metodo = "Dissimilarità di Gower robusta"
-                motivo = "I contributi quantitativi sono calcolati con scala robusta quando definita e troncati a 1."
-            elif scelta_gower == "classica":
-                metodo = "Dissimilarità di Gower classica"
-                motivo = "I contributi quantitativi sono normalizzati tramite i rispettivi intervalli osservati."
-            elif ha_estremi and risposta_estremi == "reali":
-                metodo = "Dissimilarità di Gower robusta"
-                motivo = "Le caratteristiche sono di tipo diverso e gli outlier reali non devono comprimere tutte le altre differenze."
+                motivo = (
+                    "Ogni scarto numerico e' diviso per la massima distanza tra "
+                    "le osservazioni confermate non anomale nella rispettiva colonna, "
+                    "con saturazione a 1; le righe anomale restano nel confronto."
+                )
             else:
                 metodo = "Dissimilarità di Gower classica"
                 motivo = "Combina quantità, categorie, livelli e variabili binarie con contributi confrontabili."
@@ -2285,6 +2283,10 @@ def _metadati_gower(
     profili = {profilo["nome"]: profilo for profilo in risultato["questionario"]["colonne"]}
     risposte = interpretazione.get("colonne", {})
     robusta = percorso["metodo"] == "Dissimilarità di Gower robusta"
+    righe_outlier = interpretazione.get("righeOutlierGower") or {}
+    if not isinstance(righe_outlier, dict):
+        raise ValueError("La selezione delle righe anomale per Gower non e' valida.")
+    numero_zeri_esclusi = 0
     pesi_configurati = interpretazione.get("pesiGower") or {}
     if not isinstance(pesi_configurati, dict):
         raise ValueError("I pesi di Gower devono essere specificati per colonna.")
@@ -2333,10 +2335,37 @@ def _metadati_gower(
             ]
             osservati = [float(v) for v in valori if v is not None]
             intervallo = max(osservati) - min(osservati) if osservati else 0.0
-            if robusta and osservati:
-                ordinati = sorted(osservati)
-                iqr = quantile(ordinati, 0.75) - quantile(ordinati, 0.25)
-                scala = 7 * iqr if iqr > 0 else intervallo
+            if robusta:
+                # La decisione e' sempre esplicita e specifica per colonna.
+                # I numeri sono indici di riga nel CSV, a partire da 1,
+                # esclusi soltanto dalla STIMA della scala, non dalla matrice.
+                grezzo_esclusi = righe_outlier.get(nome, "")
+                if not isinstance(grezzo_esclusi, str):
+                    raise ValueError(
+                        f"Per la colonna “{nome}” indica i numeri delle righe "
+                        "anomale separati da punto e virgola."
+                    )
+                parti = [v for v in re.split(r"[;,\\s]+", grezzo_esclusi.strip()) if v]
+                if any(not v.isdigit() or int(v) < 1 or int(v) > len(grezzi) for v in parti):
+                    raise ValueError(
+                        f"Per “{nome}” le righe anomale devono essere numeri "
+                        f"interi compresi tra 1 e {len(grezzi)}."
+                    )
+                esclusi = {int(v) - 1 for v in parti}
+                non_anomali = [
+                    float(v) for indice, v in enumerate(valori)
+                    if v is not None and indice not in esclusi
+                ]
+                numero_zeri_esclusi += len(esclusi)
+                if intervallo > 0 and (
+                    len(non_anomali) < 2 or max(non_anomali) == min(non_anomali)
+                ):
+                    raise ValueError(
+                        f"Per “{nome}” la scala robusta non e' definibile: "
+                        "le righe non anomale devono includere almeno due "
+                        "valori distinti. Rivedi gli outlier oppure scegli Gower classica."
+                    )
+                scala = max(non_anomali) - min(non_anomali) if non_anomali else 0.0
             else:
                 scala = intervallo
             tipo, limita = "numerica", robusta
@@ -2401,6 +2430,12 @@ def _metadati_gower(
             "politicaMancanti": politica,
         })
 
+    if robusta and not numero_zeri_esclusi:
+        raise ValueError(
+            "Per Gower robusta seleziona esplicitamente le righe anomale "
+            "da escludere dalla stima della scala in almeno una colonna quantitativa; "
+            "in alternativa scegli Gower classica."
+        )
     if not metadati:
         raise ValueError("Nessuna caratteristica e' stata inclusa nel confronto Gower.")
     return metadati
@@ -2449,8 +2484,9 @@ def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, 
     etichette = _etichette_righe(risultato, interpretazione)
     righe_csv = [[etichetta, *riga] for etichetta, riga in zip(etichette, matrice)]
     nota = (
-        "Per le quantità, Gower robusta usa 7·IQR quando positivo, "
-        "con contributi limitati a 1."
+        "Per le quantita', Gower robusta usa il massimo scarto tra i valori "
+        "confermati non anomali, con contributi limitati a 1; le righe anomale "
+        "rimangono nella matrice."
         if percorso["metodo"] == "Dissimilarità di Gower robusta"
         else "Per le quantità, Gower classica divide lo scarto per l’intervallo osservato."
     )
