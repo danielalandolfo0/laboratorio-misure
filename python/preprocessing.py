@@ -476,6 +476,14 @@ def personalizza_colonna(
                 raise ValueError(
                     f"La feature “{nome}” contiene soltanto zeri: max-abs richiede un massimo assoluto positivo."
                 )
+            if metodo == "log" and stats["minimo"] <= 0:
+                raise ValueError(
+                    f"La trasformazione log(x) per “{nome}” richiede "
+                    "tutti i valori osservati strettamente positivi (x>0). "
+                    "Nessuno zero o numero negativo viene traslato automaticamente: "
+                    "scegli log(1+x) solo se semanticamente appropriato, "
+                    "oppure modifica la trasformazione."
+                )
             if metodo == "log1p" and stats["minimo"] < 0:
                 raise ValueError(
                     f"La trasformazione log(1+x) per “{nome}” e' disponibile "
@@ -487,6 +495,13 @@ def personalizza_colonna(
                 "robusto": descrivi_outlier(stats) if metodo_scelto == "auto" else "Viene ridotto il peso degli outlier.",
                 "maxabs": "Molti valori sono uguali a zero." if metodo_scelto == "auto" else "Gli zeri restano invariati.",
                 "minmax": "I valori vengono riportati tra 0 e 1.",
+                "log": (
+                    "Trasformazione log(x) scelta esplicitamente sui valori "
+                    "strettamente positivi: la differenza assoluta trasformata "
+                    "è |log(x/y)|, quindi confronta rapporti anziché scarti "
+                    "assoluti. Le unità di misura devono essere coerenti; "
+                    "non si aggiunge alcuna costante agli input."
+                ),
                 "log1p": (
                     "Trasformazione log(1+x) scelta esplicitamente: preserva zero "
                     "e comprime gli scarti grandi. Richiede valori non negativi "
@@ -1470,6 +1485,7 @@ ETICHETTE_TRASFORMAZIONE = {
     "robusto": "Scala robusta (mediana e IQR)",
     "minmax": "Min–max",
     "maxabs": "Max-abs",
+    "log": "Logaritmo log(x), per dati strettamente positivi",
     "log1p": "Logaritmo log(1+x), per dati non negativi",
     "costante": "Sostituzione con 0 (feature costante)",
     "nessuno": "Nessuna trasformazione",
@@ -3038,6 +3054,31 @@ def _completa_specifica_percorso(
     )
     if not mancanti["pronta"]:
         percorso["stato"] = "da_completare"
+    # Il logaritmo stretto non e' compatibile con l'imputazione zero:
+    # l'incompatibilita' deve apparire nel piano, non solo al calcolo.
+    colonne_log = {
+        passo["colonna"] for passo in preelaborazione.get("passi", [])
+        if passo["metodo"] == "log"
+    }
+    if (
+        preelaborazione.get("usaTabellaTrasformata")
+        and colonne_log
+        and any(nome in mancanti.get("colonne", []) for nome in colonne_log)
+        and (
+            (tipo == "numerico" and any(
+                mancanti.get("perColonna", {}).get(nome) == "zero"
+                for nome in colonne_log
+            ))
+            or (tipo == "gruppo" and mancanti.get("strategia") == "zero")
+        )
+    ):
+        percorso["stato"] = "da_completare"
+        percorso.setdefault("avvisi", []).append(
+            "Il log(x) non è definito nello zero: sostituire un mancante "
+            "con zero renderebbe impossibile la trasformazione. "
+            "Scegli esclusione, confronto sulle coordinate comuni quando "
+            "compatibile, oppure un'imputazione positiva giustificata."
+        )
     if (
         tipo == "numerico"
         and percorso.get("idMisura") in {
@@ -4533,7 +4574,9 @@ def _trasforma_per_percorso(
     stats = analisi.get("statistiche", {})
     if metodo in {"nessuno", "originale"}:
         return numero
-    if metodo == "costante" or stats.get("deviazione") == 0:
+    if metodo == "costante" or (
+        stats.get("deviazione") == 0 and metodo not in {"log", "log1p"}
+    ):
         return 0.0
     if metodo == "zscore":
         return (numero - stats["media"]) / stats["deviazione"]
@@ -4546,6 +4589,14 @@ def _trasforma_per_percorso(
         return 0.0 if ampiezza == 0 else (numero - stats["minimo"]) / ampiezza
     if metodo == "maxabs":
         return 0.0 if stats.get("massimoAssoluto", 0) == 0 else numero / stats["massimoAssoluto"]
+    if metodo == "log":
+        if numero <= 0:
+            raise ValueError(
+                f"La trasformazione log(x) richiede valori strettamente positivi "
+                f"(x>0) nella colonna “{analisi['nome']}”. "
+                "La trasformazione non aggiunge costanti implicite."
+            )
+        return math.log(numero)
     if metodo == "log1p":
         if numero < 0:
             raise ValueError(
