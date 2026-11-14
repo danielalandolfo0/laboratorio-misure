@@ -475,8 +475,12 @@ matrice_presenze = p.calcola_matrice_gower(
     solo_presenze,
     {"riga": "evento", "zeriCondivisi": "no", "colonne": {}},
 )
-assert matrice_presenze["matrice"][0][1] is None
+assert matrice_presenze["matrice"][0][1] == 0
 assert matrice_presenze["matrice"][0][2] == 1
+verifica_matrice_finale(p.calcola_matrice(
+    solo_presenze,
+    {"riga": "evento", "zeriCondivisi": "no", "colonne": {}},
+), 3)
 
 dati_misti_estremi = p.prepara_tabella(
     p.leggi_csv("a,categoria\n10,x\n12,y\n11,x\n9,z\n13,y\n10,x\n12,z\n80,y")
