@@ -2457,6 +2457,7 @@ def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, 
         for k in range(i + 1, n):
             somma = 0.0
             peso = 0.0
+            assenze_condivise_osservate = False
             for variabile in metadati:
                 a = variabile["valori"][i]
                 b = variabile["valori"][k]
@@ -2468,6 +2469,11 @@ def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, 
                     contributo = 0.0
                 elif variabile["tipo"] == "nominale":
                     if variabile.get("asimmetrica") and float(a) == 0 and float(b) == 0:
+                        # Nessun peso positivo per una co-assenza isolata in
+                        # Gower; ma se entrambi gli insiemi di presenze sono
+                        # vuoti, la convenzione Jaccard della decisione 36
+                        # attribuisce distanza zero, non valore mancante.
+                        assenze_condivise_osservate = True
                         continue
                     contributo = 0.0 if a == b else 1.0
                 else:
@@ -2477,7 +2483,10 @@ def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, 
                         contributo = min(contributo, 1.0)
                 somma += variabile["peso"] * contributo
                 peso += variabile["peso"]
-            distanza = None if peso == 0 else somma / peso
+            distanza = (
+                somma / peso if peso > 0
+                else 0.0 if assenze_condivise_osservate else None
+            )
             matrice[i][k] = distanza
             matrice[k][i] = distanza
 
