@@ -377,8 +377,9 @@
     riscalamentoConfermato = true;
     interpretazione.riscalamentoConfermato = true;
     vista = "lavoro";
-    nascondiPiano();
-    aggiornaFaseNumerica();
+    // Le nuove domande sulla compatibilita' sono visibili solo DOPO
+    // la conferma del riscalamento: rigenera subito il questionario.
+    disegnaQuestionario();
     nascondiErrore();
   }
 
