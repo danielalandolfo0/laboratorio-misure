@@ -102,6 +102,7 @@
         risultato = await P.preparaTabella(testoOriginale, scelte);
       }
       nascondiErrore();
+      annullaScelteNormalizzazione();
       annullaConfermeCompatibilita();
       riscalamentoConfermato = false;
       interpretazione.riscalamentoConfermato = false;
@@ -194,6 +195,13 @@
       <strong>${escapeHtml(titolo)}</strong>
       <p>${escapeHtml(testo)}</p>
     </div>`;
+  }
+
+  function annullaScelteNormalizzazione() {
+    // Gli ID dei percorsi dipendono dalla struttura corrente: non riutilizzare
+    // una vecchia scala robusta dopo cambi di colonne, gruppi o misure.
+    delete interpretazione.normalizzazioniPercorsi;
+    delete interpretazione.righeAnomaleNormalizzazione;
   }
 
   function annullaConfermeCompatibilita() {
@@ -1541,6 +1549,7 @@
   $("comparison-plan-paths").addEventListener("change", evento => {
     if (evento.target.id !== "numeric-measure-choice") return;
     interpretazione.misuraNumericaManuale = evento.target.value;
+    annullaScelteNormalizzazione();
     delete interpretazione.confermaValoriOriginaliNumerici;
     const nomi = pianoCorrente?.percorsi.find(p => p.tipo === "numerico")?.colonne || [];
     if (["weighted_minkowski", "weighted_chebyshev"].includes(evento.target.value) && !interpretazione.pesiMisuraManuale) {
@@ -1551,6 +1560,7 @@
   $("comparison-plan-paths").addEventListener("click", evento => {
     if (evento.target.id !== "apply-numeric-measure") return;
     interpretazione.misuraNumericaManuale = $("numeric-measure-choice").value;
+    annullaScelteNormalizzazione();
     delete interpretazione.confermaValoriOriginaliNumerici;
     const q = $("numeric-measure-q");
     const pesi = $("numeric-measure-weights");
@@ -1587,6 +1597,7 @@
       interpretazione.colonne[profilo.nome].usa = evento.target.checked;
       evento.target.nextElementSibling.textContent = evento.target.checked ? "Sì" : "No";
     }
+    annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
     riscalamentoConfermato = false;
     interpretazione.riscalamentoConfermato = false;
@@ -1596,6 +1607,7 @@
     if (!evento.target.matches(".temporal-order-input")) return;
     if (!interpretazione.ordiniTemporaliGruppi) interpretazione.ordiniTemporaliGruppi = {};
     interpretazione.ordiniTemporaliGruppi[evento.target.dataset.groupId] = evento.target.value;
+    annullaScelteNormalizzazione();
     nascondiPiano();
   });
   $("adaptive-questions").addEventListener("click", evento => {
@@ -1608,6 +1620,7 @@
     if (nomi.length < 2) return;
     if (!interpretazione.ordiniTemporaliGruppi) interpretazione.ordiniTemporaliGruppi = {};
     interpretazione.ordiniTemporaliGruppi[id] = nomi.join("; ");
+    annullaScelteNormalizzazione();
     disegnaQuestionario();
   });
   $("adaptive-questions").addEventListener("change", evento => {
@@ -1624,6 +1637,7 @@
     if (evento.target.matches(".temporal-spacing-select")) {
       if (!interpretazione.campionamentiTemporaliGruppi) interpretazione.campionamentiTemporaliGruppi = {};
       interpretazione.campionamentiTemporaliGruppi[evento.target.dataset.groupId] = evento.target.value;
+      annullaScelteNormalizzazione();
       disegnaQuestionario();
       return;
     }
@@ -1639,6 +1653,7 @@
     if (evento.target.matches(".group-measure-setting")) {
       if (!interpretazione.misureGruppi) interpretazione.misureGruppi = {};
       interpretazione.misureGruppi[evento.target.dataset.groupId] = evento.target.value;
+      annullaScelteNormalizzazione();
       annullaConfermeCompatibilita();
       disegnaQuestionario();
       return;
@@ -1648,6 +1663,7 @@
       const chiave = evento.target.dataset.parameter === "q" ? "ordiniGruppi" : "pesiGruppi";
       if (!interpretazione[chiave]) interpretazione[chiave] = {};
       interpretazione[chiave][id] = evento.target.value;
+      annullaScelteNormalizzazione();
       nascondiPiano();
       return;
     }
@@ -1658,6 +1674,7 @@
       interpretazione.mancantiNumericiPerColonna[
         evento.target.dataset.numericMissingColumn
       ] = evento.target.value;
+      annullaScelteNormalizzazione();
       disegnaQuestionario();
       return;
     }
@@ -1676,6 +1693,9 @@
       interpretazione[evento.target.dataset.answer] = evento.target.value;
       if (evento.target.matches(".semantic-answer")) {
         const chiave = evento.target.dataset.answer || "";
+        if (/^(confrontoQuantitativo|aggregazioneScarti|dipendenzaCoordinate|importanzaCoordinate|somiglianza-|ritardo-|totale-|mancanti-gruppo-)/.test(chiave)) {
+          annullaScelteNormalizzazione();
+        }
         if (/^(somiglianza|ritardo|totale)-/.test(chiave)) {
           const idGruppo = chiave.replace(/^(somiglianza|ritardo|totale)-/, "");
           if (interpretazione.misureGruppi) delete interpretazione.misureGruppi[idGruppo];
@@ -1717,6 +1737,7 @@
       disegnaQuestionario();
       return;
     }
+    annullaScelteNormalizzazione();
     const gruppo = creaGruppo();
     gruppo.nome = proposta.nome;
     gruppo.tipo = tipo;
@@ -1728,6 +1749,7 @@
   });
 
   $("add-column-group").addEventListener("click", () => {
+    annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
     riscalamentoConfermato = false;
     interpretazione.riscalamentoConfermato = false;
@@ -1751,6 +1773,7 @@
     }
     if (gruppoId) interpretazione.assegnazioni[nome] = gruppoId;
     else delete interpretazione.assegnazioni[nome];
+    annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
     riscalamentoConfermato = false;
     interpretazione.riscalamentoConfermato = false;
@@ -1766,6 +1789,7 @@
       if (gruppo.tipo !== evento.target.value) invalidaConfermaTemporale(gruppo.id);
       gruppo.tipo = evento.target.value;
       if (interpretazione.misureGruppi) delete interpretazione.misureGruppi[gruppo.id];
+      annullaScelteNormalizzazione();
       annullaConfermeCompatibilita();
     }
     riscalamentoConfermato = false;
@@ -1787,6 +1811,7 @@
     const gruppoId = pulsante.closest(".group-config").dataset.groupId;
     invalidaConfermaTemporale(gruppoId);
     interpretazione.gruppi = interpretazione.gruppi.filter(gruppo => gruppo.id !== gruppoId);
+    annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
     Object.keys(interpretazione.assegnazioni).forEach(nome => {
       if (interpretazione.assegnazioni[nome] === gruppoId) delete interpretazione.assegnazioni[nome];
