@@ -85,6 +85,13 @@ async function gower(browser){
     equal(rapporto.risultato.matrice[0][1],.5);
     assert.equal(rapporto.risultato.csvMatrice,csv.replace(/^\uFEFF/,""));
     assert.ok(rapporto.risultato.diagnosticaFinale);
+    const diagSingolo=rapporto.risultato.diagnosticaFinale.sensibilitaPesi;
+    assert.equal(diagSingolo.numeroBlocchi,1);
+    assert.equal(diagSingolo.coppieTotali,6);
+    assert.ok(diagSingolo.perBlocco[0].fattoreMezzo.variazioneMassimaAssoluta < 1e-12);
+    assert.ok(diagSingolo.perBlocco[0].fattoreDoppio.variazioneMassimaAssoluta < 1e-12);
+    assert.equal(await page.locator("#gower-diagnostics").isVisible(),true);
+    assert.match(await page.locator("#gower-diagnostics").innerText(),/unico blocco/);
     assert.match(rapporto.avvisoRiservatezza,/CSV/);
     fs.writeFileSync(path.join(OUT,"gower-rapporto.json"),rapportoJson);
 

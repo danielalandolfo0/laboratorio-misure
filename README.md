@@ -34,6 +34,75 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 - confronto simbolo per simbolo e matrici di programmazione dinamica per le stringhe;
 - controlli sulla validità degli input numerici e binari.
 
+## Fase 7: sensibilità ai pesi e blocchi sempre nulli
+
+Dopo il calcolo compare una **diagnostica non bloccante** che non
+modifica le misure, i pesi scelti, le normalizzazioni o la matrice
+finale. Per ogni blocco \(k\), il sito valuta due scenari di sensibilità
+in cui varia **solo il suo peso globale**:
+
+- \(w_k^{(1/2)}=w_k/2\), mentre tutti gli altri pesi restano invariati;
+- \(w_k^{(2)}=2w_k\), mentre tutti gli altri pesi restano invariati.
+
+Per ogni coppia di righe rimane valida la stessa maschera
+\(\omega_\ell(i,j)\) dei blocchi utilizzabili e lo stesso contributo
+normalizzato \(\delta_\ell(i,j)\). In ciascuno scenario si usa
+
+\[
+D_{ij}^{(k,\alpha)}
+ =\frac{S_{ij}+(\alpha-1)w_k\omega_k(i,j)\delta_k(i,j)}
+ {W_{ij}+(\alpha-1)w_k\omega_k(i,j)},
+\quad
+S_{ij}=\sum_{\ell}w_\ell\omega_\ell(i,j)\delta_\ell(i,j),
+\quad
+W_{ij}=\sum_{\ell}w_\ell\omega_\ell(i,j),
+\]
+
+con \(\alpha=1/2\) o \(\alpha=2\). I pesi restano quindi
+strettamente positivi. Le variazioni sono definite come
+\(|D_{ij}^{(k,\alpha)}-D_{ij}|\). Sono riportati i massimi per
+blocco nella pagina e, nel rapporto JSON, anche le medie su
+tutte le coppie distinte e i conteggi delle coppie modificate.
+Se il blocco non contribuisce a una coppia, cambiare il suo peso
+non influisce su quella coppia: la variazione è esattamente zero.
+Con **un solo blocco**, variare il peso globale non cambia la matrice.
+
+Come esperimento diagnostico aggiuntivo, viene calcolato il caso
+**ipotetico di rimozione** del singolo blocco, con peso zero soltanto
+nel controfattuale. Per le coppie rimaste confrontabili, si valuta
+
+\[
+D_{ij}^{(-k)}
+ =\frac{S_{ij}-w_k\omega_k(i,j)\delta_k(i,j)}
+ {W_{ij}-w_k\omega_k(i,j)}.
+\]
+
+Non si valuta questa formula quando il denominatore è nullo:
+il rapporto indica quante coppie **perderebbero ogni contributo**
+se quel blocco venisse rimosso. Le medie del confronto
+senza blocco usano solo le coppie per cui la rimozione produce
+una distanza definita; non sostituiscono un valore non definito
+con zero. **Non** è una modifica effettiva dei pesi della matrice
+principale.
+
+Il sito segnala inoltre i blocchi con tutte le
+**dissimilarità locali definite nulle** (tolleranza \(10^{-12}\)),
+specificando quante coppie locali sono definite e quante no.
+Lo zero osservato **rimane nel denominatore** con peso positivo:
+per questo un blocco costantemente nullo può attenuare le
+dissimilarità degli altri blocchi. Viene presentato lo
+scostamento massimo ipotetico per rimozione quando esistono
+confronti alternativi validi.
+
+Questa è **un'analisi di sensibilità locale ai pesi globali**,
+non un test statistico di robustezza, non un'indagine sugli
+effetti di variare i pesi *interni* o di cambiare le
+normalizzazioni, né una prescrizione di eliminare blocchi.
+Le misure possono avere significati diversi anche dopo la
+normalizzazione su \([0,1]\). La diagnostica completa è
+esportata automaticamente nel campo
+\`risultato.diagnosticaFinale.sensibilitaPesi\` del rapporto JSON.
+
 ## Fase 7: rapporto completo riproducibile
 
 Dopo aver preparato un piano **completo** e calcolato la matrice finale,

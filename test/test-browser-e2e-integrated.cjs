@@ -251,6 +251,12 @@ async function main() {
     const expectedAB=(2*.3+1/3+3*coordinateAB+4*1)/10;
     approx(ab,expectedAB);
     approx(ae,19/21);
+    const dettagliPesi = page.locator("#gower-diagnostics");
+    assert.equal(await dettagliPesi.isVisible(), true);
+    assert.match(await dettagliPesi.innerText(), /Influenza dei pesi e dei blocchi/);
+    assert.equal(await dettagliPesi.locator("tbody tr").count(), 4);
+    assert.match(await dettagliPesi.innerText(), /peso ×0,5/i);
+    assert.match(await dettagliPesi.innerText(), /peso ×2/i);
     checkpoint("Matrice 6×6: A/B e A/E coincidono con le formule");
 
     const pending=page.waitForEvent("download");
@@ -295,6 +301,17 @@ async function main() {
     approx(report.risultato.matrice[0][4],19/21,1e-9);
     assert.equal(report.risultato.csvMatrice,csv.replace(/^\uFEFF/,""));
     assert.ok(report.risultato.diagnosticaFinale);
+    const sensitivity = report.risultato.diagnosticaFinale.sensibilitaPesi;
+    assert.equal(sensitivity.numeroBlocchi, 4);
+    assert.equal(sensitivity.perBlocco.length, 4);
+    assert.equal(sensitivity.coppieTotali, 15);
+    assert.deepEqual(sensitivity.perBlocco.map(x=>x.pesoOriginale),[2,1,3,4]);
+    assert.ok(sensitivity.perBlocco.every(x =>
+      x.fattoreMezzo.variazioneMassimaAssoluta >= 0 &&
+      x.fattoreDoppio.variazioneMassimaAssoluta >= 0 &&
+      x.senzaBlocco.coppieConfrontabili +
+        x.senzaBlocco.coppieSenzaAltroContributo === x.coppieDefinite
+    ));
     assert.ok(report.configurazione.risposteQuestionario);
     assert.ok(report.piano.percorsi.some(p=>p.normalizzazione.metodo==="robusta"));
     assert.ok(report.piano.percorsi.some(p=>p.metodo==="Dynamic Time Warping")===false);

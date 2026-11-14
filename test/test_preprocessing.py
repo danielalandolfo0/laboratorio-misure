@@ -4065,4 +4065,149 @@ for testo, scelte_errate, configurazione in (
     assert not risposta["ok"], risposta
     assert risposta["errore"]
 
+
+# Diagnostica finale Fase 7: variazioni dei pesi NORMALIZZATI
+# e blocchi con dissimilarità localmente nulla. La matrice originale
+# non viene mai modificata da queste analisi controfattuali.
+numerico_local = [
+    [0.0, .6, .8], [.6, 0.0, 1.0], [.8, 1.0, 0.0],
+]
+nominale_local = [
+    [0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [1.0, 1.0, 0.0],
+]
+def _blocco_diagnostico(id_blocco, matrice, peso=1.0):
+    return {
+        "percorso": {
+            "idPercorso": id_blocco,
+            "titolo": "Blocco " + id_blocco,
+            "pesoAggregazione": peso,
+        },
+        "matrice": matrice,
+        "posizioni": {0: 0, 1: 1, 2: 2},
+    }
+
+mat_base_diagnostica = [
+    [0.0, .3, .9], [.3, 0.0, 1.0], [.9, 1.0, 0.0]
+]
+diagnostica_sens = p._diagnostica_sensibilita_pesi(
+    [_blocco_diagnostico("num", numerico_local),
+     _blocco_diagnostico("cat", nominale_local)],
+    mat_base_diagnostica,
+)
+assert diagnostica_sens["numeroBlocchi"] == 2
+assert diagnostica_sens["coppieTotali"] == 3
+assert diagnostica_sens["blocchiSempreNulli"] == []
+assert diagnostica_sens["tolleranzaZero"] == 1e-12
+assert [x["coppieDefinite"] for x in diagnostica_sens["perBlocco"]] == [3, 3]
+assert [x["coppieLocaliNulle"] for x in diagnostica_sens["perBlocco"]] == [0, 1]
+for s in diagnostica_sens["perBlocco"]:
+    quasi_uguali(s["fattoreMezzo"]["variazioneMassimaAssoluta"], .1)
+    quasi_uguali(s["fattoreDoppio"]["variazioneMassimaAssoluta"], .1)
+    quasi_uguali(s["fattoreMezzo"]["variazioneMediaAssoluta"], 2/45)
+    quasi_uguali(s["senzaBlocco"]["variazioneMassimaAssoluta"], .3)
+    assert s["senzaBlocco"]["coppieConfrontabili"] == 3
+    assert s["senzaBlocco"]["coppieSenzaAltroContributo"] == 0
+
+# Sostituire un peso 1 con peso 0.5 modifica, ad esempio,
+# D(A,B)=(.6+0)/2=.3 in (0.5*.6+0)/1.5=.2: differenza 0.1.
+quasi_uguali(abs(.2 - mat_base_diagnostica[0][1]), .1)
+
+# Un blocco di zero VERAMENTE osservato attenua le dissimilarità;
+# viene contato nel denominatore e non trattato come mancante.
+zero_local = [[0.0] * 3 for _ in range(3)]
+mat_con_zero = [[0.0, .3, .4], [.3, 0.0, .5], [.4, .5, 0.0]]
+diag_zero = p._diagnostica_sensibilita_pesi(
+    [_blocco_diagnostico("num", numerico_local),
+     _blocco_diagnostico("zero", zero_local)],
+    mat_con_zero,
+)
+assert len(diag_zero["blocchiSempreNulli"]) == 1
+nullo = diag_zero["blocchiSempreNulli"][0]
+assert nullo["idPercorso"] == "zero"
+assert nullo["coppieDefinite"] == 3
+assert nullo["coppieNonDisponibili"] == 0
+quasi_uguali(nullo["attenuazioneMassimaRimuovendolo"], .5)
+assert diag_zero["perBlocco"][1]["coppieLocaliNulle"] == 3
+assert diag_zero["perBlocco"][1]["coppieLocaliPositive"] == 0
+quasi_uguali(
+    diag_zero["perBlocco"][1]["fattoreDoppio"]["variazioneMassimaAssoluta"],
+    1/6,
+)
+quasi_uguali(
+    diag_zero["perBlocco"][1]["senzaBlocco"]["variazioneMediaAssoluta"],
+    .4,
+)
+
+csv_zero_blocco = p.prepara_tabella(p.leggi_csv(
+    "x,y,categoria\n0,0,rosso\n3,0,rosso\n0,4,rosso"
+), [
+    {"tipo": "auto", "metodo": "nessuno"},
+    {"tipo": "auto", "metodo": "nessuno"},
+    {"tipo": "auto", "metodo": "auto"},
+])
+res_zero_blocco = p.calcola_matrice(csv_zero_blocco, scelta_blocchi)
+verifica_matrice_finale(res_zero_blocco, 3)
+quasi_uguali(res_zero_blocco["matrice"][0][1], .3)
+quasi_uguali(res_zero_blocco["matrice"][0][2], .4)
+quasi_uguali(res_zero_blocco["matrice"][1][2], .5)
+diagnostica_zero_reale = res_zero_blocco["diagnosticaFinale"]["sensibilitaPesi"]
+assert diagnostica_zero_reale["blocchiSempreNulli"]
+assert diagnostica_zero_reale["blocchiSempreNulli"][0]["coppieDefinite"] == 3
+assert any("mantenuto nel denominatore" in v for v in
+           res_zero_blocco["diagnosticaFinale"]["avvisi"])
+assert res_zero_blocco["matrice"] == p.calcola_matrice(
+    csv_zero_blocco, scelta_blocchi
+)["matrice"]
+
+# Un solo blocco: ogni fattore positivo lascia D invariata; togliere
+# il blocco lascerebbe ogni coppia senza confronto.
+singolo_sens = p.calcola_matrice(dati_misti_blocchi, scelta_unica)
+diag_singolo = singolo_sens["diagnosticaFinale"]["sensibilitaPesi"]
+assert diag_singolo["numeroBlocchi"] == 1
+assert diag_singolo["perBlocco"][0]["fattoreMezzo"]["variazioneMassimaAssoluta"] < 1e-12
+assert diag_singolo["perBlocco"][0]["fattoreDoppio"]["variazioneMassimaAssoluta"] < 1e-12
+assert diag_singolo["perBlocco"][0]["senzaBlocco"]["coppieConfrontabili"] == 0
+assert diag_singolo["perBlocco"][0]["senzaBlocco"]["coppieSenzaAltroContributo"] == 3
+assert diag_singolo["perBlocco"][0]["senzaBlocco"]["variazioneMassimaAssoluta"] is None
+
+# Presenza di mancanti pairwise: rimuovere il percorso Gower renderebbe
+# alcune coppie del tutto non confrontabili. Tali confronti NON
+# vengono inseriti nella media delle variazioni leave-one-out.
+con_mancanti_sens = p.calcola_matrice(
+    misti_pairwise, {**base_pairwise, "misuraBinaria-bin": "jaccard"}
+)
+diag_mancanti = con_mancanti_sens["diagnosticaFinale"]["sensibilitaPesi"]
+assert diag_mancanti["numeroBlocchi"] == 2
+assert diag_mancanti["coppieTotali"] == 10
+assert diag_mancanti["perBlocco"][0]["senzaBlocco"]["coppieSenzaAltroContributo"] == 5
+assert diag_mancanti["perBlocco"][0]["senzaBlocco"]["coppieConfrontabili"] == 5
+assert diag_mancanti["perBlocco"][1]["coppieNonDisponibili"] == 5
+assert diag_mancanti["perBlocco"][1]["senzaBlocco"]["coppieSenzaAltroContributo"] == 0
+assert diag_mancanti["perBlocco"][1]["senzaBlocco"]["coppieConfrontabili"] == 5
+assert con_mancanti_sens["matrice"][0][4] == 0
+assert con_mancanti_sens["matrice"][1][3] == 1
+
+# Il rapporto JSON è coerente con la diagnostica e non la omette.
+rapporto_diag = p.crea_rapporto_calcolo(
+    "x,y,categoria\n0,0,rosso\n3,0,rosso\n0,4,rosso",
+    [
+        {"tipo": "auto", "metodo": "nessuno"},
+        {"tipo": "auto", "metodo": "nessuno"},
+        {"tipo": "auto", "metodo": "auto"},
+    ],
+    scelta_blocchi, "zero-osservato.csv",
+)
+assert rapporto_diag["risultato"]["diagnosticaFinale"]["sensibilitaPesi"] == (
+    res_zero_blocco["diagnosticaFinale"]["sensibilitaPesi"]
+)
+assert rapporto_diag["risultato"]["matrice"] == res_zero_blocco["matrice"]
+assert json.loads(p.crea_rapporto_json(
+    "x,y,categoria\n0,0,rosso\n3,0,rosso\n0,4,rosso",
+    json.dumps([
+        {"tipo": "auto", "metodo": "nessuno"},
+        {"tipo": "auto", "metodo": "nessuno"},
+        {"tipo": "auto", "metodo": "auto"},
+    ]), json.dumps(scelta_blocchi)
+))["ok"]
+
 print("Tutti i test Python di preprocessing sono stati superati.")
