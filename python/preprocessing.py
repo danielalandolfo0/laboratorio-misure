@@ -1021,6 +1021,16 @@ REGISTRO_MISURE_NUMERICHE = {
         "famiglia": "Distanze basate sulla covarianza",
         "proprieta": "Metrica se la matrice di covarianza è definita positiva.",
     },
+    "mahalanobis_ridge": {
+        "nome": "Mahalanobis con covarianza regolarizzata",
+        "famiglia": "Distanze basate sulla covarianza",
+        "proprieta": "Metrica per S + λI definita positiva (λ > 0).",
+    },
+    "mahalanobis_pinv": {
+        "nome": "Mahalanobis con pseudoinversa",
+        "famiglia": "Distanze basate sulla covarianza",
+        "proprieta": "Pseudometrica su R^p se la covarianza è singolare; gli scarti nel suo nucleo non contribuiscono.",
+    },
     "canberra": {
         "nome": "Distanza di Canberra",
         "famiglia": "Confronti relativi",
@@ -1694,6 +1704,7 @@ def _specifica_misura_numerica(
     scale = interpretazione.get("comparabilitaScale", "")  # compatibilità con risposte salvate
     politica_preelaborazione = "originale"
     diagnosi = _diagnosi_numerica(nomi, analisi_per_nome)
+    manuale = interpretazione.get("misuraNumericaManuale", "automatico")
 
     # Le vecchie risposte restano interpretabili. In assenza di una scelta salvata,
     # il nuovo flusso riscala sempre le quantità ordinarie in modo automatico.
@@ -1795,12 +1806,9 @@ def _specifica_misura_numerica(
         if dipendenza == "si":
             id_misura = "mahalanobis"
             politica_preelaborazione = "originale"
-            if numero_istanze <= len(nomi) or not _covarianza_empirica_invertibile(nomi, analisi_per_nome):
-                avvisi.append(
-                    "La covarianza empirica non è invertibile: servono più righe complete, "
-                    "l’eliminazione delle dipendenze lineari oppure una regolarizzazione esplicita."
-                )
-                stato = "da_completare"
+            # La validita' della misura effettivamente scelta viene controllata
+            # DOPO l'eventuale scelta manuale: niente avvisi obsoleti se l'utente
+            # passa a regolarizzazione o pseudoinversa.
 
         if scelta_automatica and id_misura == "mahalanobis" and (
             dipendenza == "no" or not diagnosi["covarianzaUtilizzabile"]
@@ -1842,10 +1850,10 @@ def _specifica_misura_numerica(
 
     # La scelta esplicita nel piano prevale sulla raccomandazione, ma non sui
     # vincoli matematici della misura. Nessun fallback silenzioso.
-    manuale = interpretazione.get("misuraNumericaManuale", "automatico")
     opzioni_manuali = {
         "euclidean", "manhattan", "chebyshev", "minkowski",
         "weighted_minkowski", "weighted_chebyshev", "mahalanobis",
+        "mahalanobis_ridge", "mahalanobis_pinv",
         "canberra", "bray_curtis", "chi_square",
     }
     if manuale not in ("", "automatico"):
@@ -1871,11 +1879,34 @@ def _specifica_misura_numerica(
             else:
                 # Normalizzazione solo facoltativa: conserviamo i pesi scelti.
                 parametri["pesi"] = pesi
-        if manuale == "mahalanobis":
+        if manuale in {"mahalanobis", "mahalanobis_ridge", "mahalanobis_pinv"}:
             politica_preelaborazione = "originale"
-            if not diagnosi["covarianzaUtilizzabile"] or numero_istanze <= len(nomi):
-                avvisi.append("Mahalanobis richiede una covarianza empirica utilizzabile e ben condizionata.")
-                stato = "da_completare"
+            if manuale == "mahalanobis_ridge":
+                try:
+                    valore = float(str(interpretazione.get("lambdaMahalanobis", "")).replace(",", "."))
+                except (ValueError, TypeError):
+                    valore = math.nan
+                if not math.isfinite(valore) or valore <= 0:
+                    avvisi.append(
+                        "Per la regolarizzazione indica esplicitamente λ > 0, "
+                        "nelle unità al quadrato delle coordinate originali."
+                    )
+                    stato = "da_completare"
+                else:
+                    parametri["lambda"] = valore
+            elif manuale == "mahalanobis_pinv":
+                try:
+                    valore = float(str(interpretazione.get("tolleranzaPseudoinversa", "")).replace(",", "."))
+                except (ValueError, TypeError):
+                    valore = math.nan
+                if not math.isfinite(valore) or not 1e-12 <= valore <= 0.1:
+                    avvisi.append(
+                        "Per la pseudoinversa indica la tolleranza relativa sullo spettro "
+                        "fra 1e-12 e 0.1, confermandola esplicitamente."
+                    )
+                    stato = "da_completare"
+                else:
+                    parametri["tolleranzaRelativa"] = valore
         elif manuale in {"canberra", "bray_curtis", "chi_square"}:
             # Le trasformazioni centrate possono rendere negative le abbondanze.
             politica_preelaborazione = "originale"
@@ -1890,6 +1921,27 @@ def _specifica_misura_numerica(
             for candidato, specifica in REGISTRO_MISURE_NUMERICHE.items()
             if candidato != id_misura
         ]
+
+    # Verifica l'effettiva misura, senza trasferire blocchi della proposta
+    # automatica a una variante esplicitamente selezionata.
+    if id_misura == "mahalanobis":
+        if not diagnosi["covarianzaUtilizzabile"] or not _covarianza_empirica_invertibile(
+            nomi, analisi_per_nome
+        ):
+            avvisi.append(
+                "Mahalanobis classica richiede una covarianza non singolare e ben "
+                "condizionata. Puoi rivedere le colonne oppure selezionare "
+                "esplicitamente una regolarizzazione o una pseudoinversa."
+            )
+            stato = "da_completare"
+    elif id_misura in {"mahalanobis_ridge", "mahalanobis_pinv"} and parametri:
+        try:
+            _prepara_covarianza_mahalanobis(
+                _righe_complete_numeriche(nomi, analisi_per_nome), id_misura, parametri
+            )
+        except ValueError as errore:
+            avvisi.append(str(errore))
+            stato = "da_completare"
 
     # Una trasformazione richiesta manualmente non puo' essere ignorata
     # dalla politica diagnostica predefinita. Le misure che dipendono dal
@@ -1922,7 +1974,8 @@ def _specifica_misura_numerica(
         }
         if id_misura in geometriche:
             politica_preelaborazione = "trasformazioni_candidate"
-        elif id_misura in {"mahalanobis", "canberra", "bray_curtis", "chi_square"}:
+        elif id_misura in {"mahalanobis", "mahalanobis_ridge", "mahalanobis_pinv",
+                          "canberra", "bray_curtis", "chi_square"}:
             politica_preelaborazione = "originale"
             nota_preelaborazione = (
                 "Questa misura usa i valori originali, non quelli riscalati: "
@@ -2429,7 +2482,9 @@ def _completa_specifica_percorso(
         percorso["stato"] = "da_completare"
     if (
         tipo == "numerico"
-        and percorso.get("idMisura") == "mahalanobis"
+        and percorso.get("idMisura") in {
+            "mahalanobis", "mahalanobis_ridge", "mahalanobis_pinv"
+        }
         and mancanti["presenza"]
         and any(
             strategia != "escludi_riga"
@@ -2438,9 +2493,10 @@ def _completa_specifica_percorso(
     ):
         percorso["stato"] = "da_completare"
         percorso.setdefault("avvisi", []).append(
-            "Mahalanobis con imputazione richiederebbe una nuova stima e una nuova "
-            "verifica della covarianza. Usa l'esclusione delle righe complete oppure "
-            "scegli una misura basata sulle coordinate."
+            "Le varianti di Mahalanobis stimano la covarianza su righe complete: "
+            "con mancanti, scegli l'esclusione della riga per ogni colonna coinvolta. "
+            "Imputazione e confronto pairwise richiederebbero una diversa stima "
+            "esplicita, qui non disponibile."
         )
     percorso["preelaborazione"] = preelaborazione
     percorso["compatibilitaPreelaborazione"] = compatibilita
@@ -3662,7 +3718,7 @@ def _righe_numeriche_per_percorso(
 def _cholesky(matrice: list[list[float]]) -> list[list[float]]:
     p = len(matrice)
     scala = max((abs(v) for riga in matrice for v in riga), default=1.0)
-    tolleranza = max(1.0, scala) * 1e-12
+    tolleranza = scala * 1e-12
     l = [[0.0] * p for _ in range(p)]
     for i in range(p):
         for j in range(i + 1):
@@ -3676,16 +3732,132 @@ def _cholesky(matrice: list[list[float]]) -> list[list[float]]:
     return l
 
 
-def _covarianza(righe: list[list[float]]) -> list[list[float]]:
+def _covarianza(
+    righe: list[list[float]], richiede_rango_pieno: bool = True,
+) -> list[list[float]]:
     n = len(righe)
+    if n < 2 or not righe or not righe[0]:
+        raise ValueError("La covarianza richiede almeno due righe complete e una colonna.")
     p = len(righe[0])
-    if n <= p:
-        raise ValueError("Per Mahalanobis servono più righe complete del numero di colonne.")
+    if any(len(riga) != p or any(not math.isfinite(v) for v in riga) for riga in righe):
+        raise ValueError("La covarianza richiede vettori completi e finiti.")
+    if richiede_rango_pieno and n <= p:
+        raise ValueError("Per Mahalanobis classica servono più righe complete delle colonne.")
     medie = [sum(riga[j] for riga in righe) / n for j in range(p)]
     return [[
         sum((riga[j] - medie[j]) * (riga[k] - medie[k]) for riga in righe) / (n - 1)
         for k in range(p)
     ] for j in range(p)]
+
+
+
+
+def _spettro_covarianza(matrice: list[list[float]]) -> list[tuple[float, list[float]]]:
+    """Autovalori e autovettori ortonormali di una matrice simmetrica, via Jacobi.
+
+    Non sostituisce gli autovalori minimi con numeri positivi: l'eventuale
+    troncamento è separato e dipende dalla soglia dichiarata dall'utente.
+    """
+    n = len(matrice)
+    if not 1 <= n <= 60 or any(len(riga) != n for riga in matrice):
+        raise ValueError("La pseudoinversa supporta da 1 a 60 coordinate numeriche.")
+    a = [[float(v) for v in riga] for riga in matrice]
+    if any(not math.isfinite(v) for riga in a for v in riga):
+        raise ValueError("La covarianza contiene valori non finiti.")
+    scala = max(abs(v) for riga in a for v in riga)
+    if any(abs(a[i][j] - a[j][i]) > 1e-12 * scala
+           for i in range(n) for j in range(i)):
+        raise ValueError("La covarianza non è simmetrica.")
+    if scala == 0:
+        return [(0.0, [float(i == j) for i in range(n)]) for j in range(n)]
+    v = [[float(i == j) for j in range(n)] for i in range(n)]
+    for _ in range(60 * n * n):
+        pivot = max(((abs(a[i][j]), i, j) for i in range(n)
+                     for j in range(i + 1, n)), default=(0.0, 0, 0))
+        off, i, j = pivot
+        if off <= scala * 1e-14:
+            break
+        alpha = a[i][i]
+        beta = a[j][j]
+        tau = (beta - alpha) / (2.0 * a[i][j])
+        t = (1.0 if tau >= 0 else -1.0) / (abs(tau) + math.hypot(1.0, tau))
+        c = 1.0 / math.hypot(1.0, t)
+        s = t * c
+        a[i][i] = alpha - t * a[i][j]
+        a[j][j] = beta + t * a[i][j]
+        a[i][j] = a[j][i] = 0.0
+        for k in range(n):
+            if k != i and k != j:
+                aki, akj = a[k][i], a[k][j]
+                a[k][i] = a[i][k] = c * aki - s * akj
+                a[k][j] = a[j][k] = s * aki + c * akj
+            vki, vkj = v[k][i], v[k][j]
+            v[k][i] = c * vki - s * vkj
+            v[k][j] = s * vki + c * vkj
+    else:
+        raise ValueError("La diagonalizzazione della covarianza non è convergente.")
+    autovalori = [(a[j][j], [v[i][j] for i in range(n)]) for j in range(n)]
+    limite = max(1e-12 * scala, 0.0)
+    if any(valore < -limite for valore, _ in autovalori):
+        raise ValueError("La covarianza ha autovalori negativi oltre la tolleranza numerica.")
+    return [(max(0.0, valore), vec) for valore, vec in autovalori]
+
+
+def _prepara_covarianza_mahalanobis(
+    righe: list[list[float]], id_misura: str, parametri: dict[str, Any],
+) -> dict[str, Any]:
+    """Prepara una sola matrice di covarianza su righe complete.
+
+    Sλ = S + λI, λ > 0 (λ nelle unità quadratiche dei valori originali).
+    S+ = V diag(1/μj per μj > ε μmax, 0 altrimenti) V^T.
+    Nessuna delle due opzioni è scelta implicitamente.
+    """
+    if id_misura not in {"mahalanobis", "mahalanobis_ridge", "mahalanobis_pinv"}:
+        raise ValueError("Variante di Mahalanobis non riconosciuta.")
+    cov = _covarianza(righe, richiede_rango_pieno=id_misura == "mahalanobis")
+    n = len(cov)
+    if id_misura == "mahalanobis_pinv":
+        tol = float(parametri["tolleranzaRelativa"])
+        if not math.isfinite(tol) or not 1e-12 <= tol <= 0.1:
+            raise ValueError("La soglia relativa per la pseudoinversa non è valida.")
+        spettro = _spettro_covarianza(cov)
+        massimo = max(valore for valore, _ in spettro)
+        selezionati = [(valore, v) for valore, v in spettro
+                       if massimo > 0 and valore > tol * massimo]
+        return {
+            "autodirezioni": selezionati,
+            "rangoEffettivo": len(selezionati),
+            "dimensione": n,
+            "tolleranzaRelativa": tol,
+            "numeroRigheCovarianza": len(righe),
+        }
+    if id_misura == "mahalanobis_ridge":
+        lam = float(parametri["lambda"])
+        if not math.isfinite(lam) or lam <= 0:
+            raise ValueError("La regolarizzazione richiede λ finito e strettamente positivo.")
+        cov = [[v + (lam if i == j else 0.0) for j, v in enumerate(riga)]
+               for i, riga in enumerate(cov)]
+        inversa = _inversa_gauss_jordan(cov)
+        if inversa is None:
+            raise ValueError("La regolarizzazione è numericamente troppo piccola: aumenta λ.")
+        cond = _norma_infinito_matrice(cov) * _norma_infinito_matrice(inversa)
+        if not math.isfinite(cond) or cond > 1e8:
+            raise ValueError(
+                "La covarianza regolarizzata resta mal condizionata: "
+                "aumenta λ oppure modifica le colonne."
+            )
+        return {
+            "cholesky": _cholesky(cov),
+            "lambda": lam,
+            "condizionamento": cond,
+            "dimensione": n,
+            "numeroRigheCovarianza": len(righe),
+        }
+    return {
+        "cholesky": _cholesky(cov),
+        "dimensione": n,
+        "numeroRigheCovarianza": len(righe),
+    }
 
 
 def _distanza_coordinate_comuni(
@@ -3747,6 +3919,7 @@ def _distanza_numerica(
     id_misura: str,
     parametri: dict[str, Any],
     cholesky_covarianza: list[list[float]] | None = None,
+    autodirezioni: list[tuple[float, list[float]]] | None = None,
 ) -> float | None:
     scarti = [abs(a - b) for a, b in zip(x, y)]
     if id_misura == "manhattan":
@@ -3768,7 +3941,15 @@ def _distanza_numerica(
     if id_misura == "standardized_euclidean":
         scale = [float(scala) for scala in parametri["scale"]]
         return math.sqrt(sum((scarto / scala) ** 2 for scarto, scala in zip(scarti, scale)))
-    if id_misura == "mahalanobis":
+    if id_misura == "mahalanobis_pinv":
+        if autodirezioni is None:
+            raise ValueError("La pseudoinversa della covarianza non è disponibile.")
+        differenze = [a - b for a, b in zip(x, y)]
+        return math.sqrt(sum(
+            (sum(v * d for v, d in zip(vettore, differenze)) ** 2) / autovalore
+            for autovalore, vettore in autodirezioni
+        ))
+    if id_misura in {"mahalanobis", "mahalanobis_ridge"}:
         if cholesky_covarianza is None:
             raise ValueError("La covarianza necessaria per Mahalanobis non è disponibile.")
         differenze = [a - b for a, b in zip(x, y)]
@@ -3816,8 +3997,14 @@ def calcola_matrice_numerica(
     if id_misura == "standardized_euclidean":
         parametri["scale"] = [analisi_per_nome[nome]["statistiche"]["deviazione"] for nome in nomi]
     fattore_cholesky = None
-    if id_misura == "mahalanobis":
-        fattore_cholesky = _cholesky(_covarianza(righe_numeriche))
+    autodirezioni = None
+    diagnostica_covarianza = None
+    if id_misura in {"mahalanobis", "mahalanobis_ridge", "mahalanobis_pinv"}:
+        diagnostica_covarianza = _prepara_covarianza_mahalanobis(
+            righe_numeriche, id_misura, parametri
+        )
+        fattore_cholesky = diagnostica_covarianza.get("cholesky")
+        autodirezioni = diagnostica_covarianza.get("autodirezioni")
 
     n = len(righe_numeriche)
     matrice: list[list[float | None]] = [[0.0 for _ in range(n)] for _ in range(n)]
@@ -3830,7 +4017,7 @@ def calcola_matrice_numerica(
                 ) if usa_pairwise else
                 _distanza_numerica(
                     righe_numeriche[i], righe_numeriche[k],
-                    id_misura, parametri, fattore_cholesky
+                    id_misura, parametri, fattore_cholesky, autodirezioni
                 )
             )
             matrice[i][k] = distanza
@@ -3848,7 +4035,28 @@ def calcola_matrice_numerica(
             nota += f" Righe escluse: {escluse}."
     if id_misura == "mahalanobis":
         nota += " La covarianza empirica considera il pattern con cui le colonne variano insieme; nessuna colonna è stata eliminata."
+    elif id_misura == "mahalanobis_ridge":
+        nota += (
+            " Mahalanobis regolarizzata: Sλ = S + λI, "
+            f"λ = {format(parametri['lambda'], '.12g')}, "
+            f"condizionamento infinito stimato {format(diagnostica_covarianza['condizionamento'], '.6g')}. "
+            "λ è riferito alle unità al quadrato delle coordinate originali."
+        )
+    elif id_misura == "mahalanobis_pinv":
+        nota += (
+            " Mahalanobis con pseudoinversa di Moore–Penrose da "
+            f"{diagnostica_covarianza['numeroRigheCovarianza']} righe complete; "
+            f"rango numerico {diagnostica_covarianza['rangoEffettivo']}/{diagnostica_covarianza['dimensione']}; "
+            f"soglia relativa {format(parametri['tolleranzaRelativa'], '.12g')}. "
+            "Le direzioni con autovalori sotto soglia sono ignorate: "
+            "sullo spazio completo può essere una pseudometrica."
+        )
     return {
+        "diagnosticaCovarianza": (
+            {chiave: valore for chiave, valore in diagnostica_covarianza.items()
+             if chiave not in {"autodirezioni", "cholesky"}}
+            if diagnostica_covarianza is not None else None
+        ),
         "metodo": percorso["metodo"], "colonne": nomi,
         "etichette": etichette, "matrice": matrice,
         "indiciRighe": indici_usati,
