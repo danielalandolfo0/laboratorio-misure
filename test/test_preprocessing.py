@@ -3934,4 +3934,135 @@ quasi_uguali(matrice_dim_mancanti["matrice"][0][4], 0)
 assert matrice_dim_mancanti["diagnosticaFinale"]["coppieCoperturaParziale"] > 0
 
 
+
+# Fase 7: il rapporto è autocontenuto, ha impronte crittografiche
+# dell'esatta sorgente CSV e delle scelte, e permette un ricalcolo
+# deterministico senza conoscere le scelte implicite del questionario.
+import hashlib
+
+csv_rapporto = "x,y,categoria\n0,0,rosso\n3,0,rosso\n0,4,blu\n"
+scelte_rapporto = [
+    {"tipo": "auto", "metodo": "nessuno"},
+    {"tipo": "auto", "metodo": "nessuno"},
+    {"tipo": "auto", "metodo": "auto"},
+]
+config_rapporto = {
+    **scelta_blocchi, "modalitaPesiPercorsi": "dimensione",
+}
+rapporto = p.crea_rapporto_calcolo(
+    csv_rapporto, scelte_rapporto, config_rapporto, "origine test.csv"
+)
+assert rapporto["formato"] == "laboratorio-misure/rapporto-calcolo"
+assert rapporto["versioneSchema"] == 1
+assert rapporto["revisioneMotore"]
+assert rapporto["sorgente"]["csvOriginale"] == csv_rapporto
+assert rapporto["sorgente"]["nomeFile"] == "origine test.csv"
+assert rapporto["sorgente"]["numeroRighe"] == 3
+assert rapporto["sorgente"]["numeroColonne"] == 3
+assert rapporto["sorgente"]["intestazioni"] == ["x", "y", "categoria"]
+assert rapporto["riproducibilita"]["sha256CsvOriginale"] == hashlib.sha256(
+    csv_rapporto.encode("utf-8")
+).hexdigest()
+canon = json.dumps(
+    rapporto["configurazione"], ensure_ascii=False,
+    sort_keys=True, separators=(",", ":"), allow_nan=False,
+)
+assert rapporto["riproducibilita"]["sha256Configurazione"] == hashlib.sha256(
+    canon.encode("utf-8")
+).hexdigest()
+assert rapporto["configurazione"]["sceltePreprocessing"] == scelte_rapporto
+assert rapporto["configurazione"]["risposteQuestionario"] == config_rapporto
+assert rapporto["piano"]["completo"]
+assert rapporto["piano"]["pesaturaGlobale"]["modalita"] == "dimensione"
+assert [p["pesoAggregazione"] for p in rapporto["piano"]["percorsi"]] == [2, 1]
+assert [p["preelaborazione"]["passi"] for p in rapporto["piano"]["percorsi"]]
+assert rapporto["preprocessing"]["analisiColonne"]
+assert rapporto["risultato"]["contributi"]
+assert rapporto["risultato"]["diagnosticaFinale"]
+assert rapporto["risultato"]["pesaturaGlobale"]["modalita"] == "dimensione"
+assert rapporto["risultato"]["matrice"] == p.calcola_matrice(
+    p.prepara_tabella(p.leggi_csv(csv_rapporto), scelte_rapporto),
+    config_rapporto
+)["matrice"]
+assert rapporto["risultato"]["matrice"] == dimensione_matrice["matrice"]
+assert rapporto["risultato"]["csvMatrice"] == dimensione_matrice["csv"]
+assert "personali" in rapporto["avvisoRiservatezza"]
+
+# Il contenuto è JSON standard, senza NaN o Infinity non conformi.
+rapporto_api = json.loads(p.crea_rapporto_json(
+    csv_rapporto, json.dumps(scelte_rapporto),
+    json.dumps(config_rapporto), "origine test.csv"
+), parse_constant=lambda costante: (_ for _ in ()).throw(
+    AssertionError("Valore JSON non finito: " + costante)
+))
+assert rapporto_api["ok"]
+assert rapporto_api["rapporto"] == rapporto
+# Il rapporto non contiene una data di creazione che modifichi la
+# stessa elaborazione ripetuta senza modifiche ai dati.
+assert p.crea_rapporto_calcolo(
+    csv_rapporto, scelte_rapporto, config_rapporto, "origine test.csv"
+) == rapporto
+# Replay: ricostruire dai campi del rapporto senza valori interni.
+replay = rapporto_api["rapporto"]
+rigenerata = p.calcola_matrice(
+    p.prepara_tabella(
+        p.leggi_csv(replay["sorgente"]["csvOriginale"]),
+        replay["configurazione"]["sceltePreprocessing"],
+    ),
+    replay["configurazione"]["risposteQuestionario"],
+)
+assert rigenerata["matrice"] == replay["risultato"]["matrice"]
+assert rigenerata["csv"] == replay["risultato"]["csvMatrice"]
+assert rigenerata["diagnosticaFinale"] == replay["risultato"]["diagnosticaFinale"]
+assert hashlib.sha256(
+    (csv_rapporto + "#alterato").encode("utf-8")
+).hexdigest() != rapporto["riproducibilita"]["sha256CsvOriginale"]
+
+# Anche il percorso singolo non deve perdere scelta, normalizzazione
+# e CSV della matrice.
+rapporto_singolo = p.crea_rapporto_calcolo(
+    csv_rapporto, scelte_rapporto, scelta_unica, "unico.csv"
+)
+assert rapporto_singolo["piano"]["conteggioPercorsi"] == 1
+assert rapporto_singolo["risultato"]["matrice"] == matrice_unica
+assert rapporto_singolo["risultato"]["normalizzazioneFinale"]
+assert rapporto_singolo["risultato"]["csvMatrice"]
+assert rapporto_singolo["risultato"]["diagnosticaFinale"]
+
+# Righe parziali, politiche di mancanti, dissimilarità a contributi
+# disponibili e somma pesata devono essere ricostruite senza zeri inventati.
+csv_rapporto_mancanti = (
+    "id,flag1,flag2,flag3,categoria\n"
+    "A,1,NA,0,x\nB,1,0,NA,x\nC,0,0,0,y\n"
+    "D,NA,NA,0,y\nE,NA,NA,NA,x"
+)
+rapporto_mancanti = p.crea_rapporto_calcolo(
+    csv_rapporto_mancanti, [], pesi_dim_mancanti, "mancanti.csv"
+)
+assert [x["peso"] for x in rapporto_mancanti["risultato"]["contributi"]] == [1, 3]
+assert rapporto_mancanti["risultato"]["diagnosticaFinale"]["coppieCoperturaParziale"] > 0
+assert rapporto_mancanti["risultato"]["matrice"] == matrice_dim_mancanti["matrice"]
+
+# Diagnostica non finita eventualmente presente in un modulo futuro:
+# mai scrivere NaN/Infinity in JSON, né farlo passare per un numero.
+assert p._normalizza_json_rapporto({
+    "x": float("nan"), "y": [float("inf"), float("-inf")]
+}) == {
+    "x": {"valoreNonFinito": "NaN"},
+    "y": [{"valoreNonFinito": "+Inf"}, {"valoreNonFinito": "-Inf"}],
+}
+
+# Errore dichiarato invece di una relazione apparentemente riuscita
+# se il piano richiede ancora una decisione o il CSV non è valido.
+for testo, scelte_errate, configurazione in (
+    ("", [], config_rapporto),
+    (csv_rapporto, scelte_rapporto, {"riga": "oggetto"}),
+    (csv_rapporto, [], {"riga": "oggetto", "modalitaPesiPercorsi": "inesistente"}),
+):
+    risposta = json.loads(p.crea_rapporto_json(
+        testo, json.dumps(scelte_errate), json.dumps(configurazione)
+    ))
+    assert not risposta["ok"], risposta
+    assert risposta["errore"]
+
 print("Tutti i test Python di preprocessing sono stati superati.")
