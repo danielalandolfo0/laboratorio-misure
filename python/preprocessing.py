@@ -3031,6 +3031,85 @@ def _normalizza_per_aggregazione(
     return normalizzata, descrizione
 
 
+
+def _valida_matrice_finale(
+    matrice: list[list[float | None]], etichette: list[str],
+) -> dict[str, Any]:
+    """Decisioni 9 e 45: validazione obbligatoria e avvisi non bloccanti."""
+    n = len(etichette)
+    if len(matrice) != n or any(len(riga) != n for riga in matrice):
+        raise ValueError("La matrice finale non e' quadrata o non corrisponde alle righe.")
+
+    non_disponibili: list[tuple[int, int]] = []
+    for i in range(n):
+        for j in range(i, n):
+            x = matrice[i][j]
+            y = matrice[j][i]
+            if x is None or y is None:
+                if i != j:
+                    non_disponibili.append((i, j))
+                else:
+                    raise ValueError("La diagonale della matrice finale non e' definita.")
+                continue
+            if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+                raise ValueError(f"Valore non numerico nella matrice finale: ({i + 1}, {j + 1}).")
+            if not math.isfinite(x) or not math.isfinite(y):
+                raise ValueError(f"Valore non finito nella matrice finale: ({i + 1}, {j + 1}).")
+            if abs(float(x) - float(y)) > 1e-10:
+                raise ValueError(f"La matrice finale non e' simmetrica: ({i + 1}, {j + 1}).")
+            if i == j and abs(float(x)) > 1e-12:
+                raise ValueError(f"La diagonale della matrice finale deve essere nulla (riga {i + 1}).")
+            if float(x) < -1e-12 or float(x) > 1 + 1e-12:
+                raise ValueError(f"Dissimilarita' fuori dall'intervallo [0,1]: ({i + 1}, {j + 1}).")
+            # Soltanto arrotondamenti numerici trascurabili ai confini.
+            if 0 > x > -1e-12 or 1 < x < 1 + 1e-12:
+                matrice[i][j] = min(1.0, max(0.0, float(x)))
+            if 0 > y > -1e-12 or 1 < y < 1 + 1e-12:
+                matrice[j][i] = min(1.0, max(0.0, float(y)))
+
+    if non_disponibili:
+        esempi = "; ".join(
+            f"righe {i + 1} ({etichette[i]}) e {j + 1} ({etichette[j]})"
+            for i, j in non_disponibili[:6]
+        )
+        raise ValueError(
+            f"Non posso generare una matrice completa: {len(non_disponibili)} "
+            f"coppie non hanno alcun contributo valido. Esempi: {esempi}. "
+            "Rivedi le scelte sui mancanti, le colonne o le misure; "
+            "nessuna distanza verra' inventata."
+        )
+
+    coppie = [float(matrice[i][j]) for i in range(n) for j in range(i + 1, n)]
+    zeri = sum(v <= 1e-12 for v in coppie)
+    profili: dict[tuple[float, ...], list[int]] = {}
+    for i, riga in enumerate(matrice):
+        chiave = tuple(round(float(v), 10) for v in riga)
+        profili.setdefault(chiave, []).append(i)
+    gruppi_profili_uguali = [
+        [etichette[i] for i in indici]
+        for indici in profili.values() if len(indici) > 1
+    ]
+    avvisi: list[str] = []
+    if zeri:
+        avvisi.append(
+            f"{zeri} coppie di righe distinte hanno dissimilarita' zero; "
+            "possono essere indistinguibili con le caratteristiche selezionate."
+        )
+    if gruppi_profili_uguali:
+        avvisi.append(
+            f"{len(gruppi_profili_uguali)} gruppi di righe hanno profili "
+            "di dissimilarita' identici."
+        )
+    if coppie and all(v <= 1e-12 for v in coppie):
+        avvisi.append("Tutte le dissimilarita' tra righe distinte sono nulle.")
+    return {
+        "coppieTotali": len(coppie),
+        "coppieZeroDistinte": zeri,
+        "gruppiProfiliIdentici": gruppi_profili_uguali,
+        "avvisi": avvisi,
+    }
+
+
 def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) -> dict[str, Any]:
     piano = crea_piano_confronto(risultato, interpretazione)
     percorsi = piano["percorsi"]
@@ -3051,6 +3130,7 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
         singolo = calcola(percorsi[0])
         normalizzata, descrizione = _normalizza_per_aggregazione(singolo)
         etichette = singolo["etichette"]
+        singolo["diagnosticaFinale"] = _valida_matrice_finale(normalizzata, etichette)
         singolo["matrice"] = normalizzata
         singolo["limiteAggregazione"] = 1.0
         singolo["csv"] = crea_csv(
@@ -3099,6 +3179,7 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
             matrice_finale[k][i] = distanza
 
     etichette = _etichette_righe(risultato, interpretazione)
+    diagnostica_finale = _valida_matrice_finale(matrice_finale, etichette)
     righe_csv = [[etichetta, *riga] for etichetta, riga in zip(etichette, matrice_finale)]
     contributi = [
         {
@@ -3122,6 +3203,7 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
         )),
         "etichette": etichette,
         "matrice": matrice_finale,
+        "diagnosticaFinale": diagnostica_finale,
         "indiciRighe": list(range(n)),
         "limiteAggregazione": 1.0,
         "contributi": contributi,
