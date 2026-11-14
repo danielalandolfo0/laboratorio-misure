@@ -79,6 +79,8 @@ async function gower(browser){
     assert.equal(rapporto.riproducibilita.sha256CsvOriginale,
       crypto.createHash("sha256").update(originale,"utf8").digest("hex"));
     assert.equal(rapporto.piano.completo,true);
+    assert.equal(rapporto.piano.rapportoProblemi.numeroBloccanti,0);
+    assert.equal(rapporto.piano.rapportoProblemi.calcoloConsentito,true);
     assert.equal(rapporto.piano.conteggioPercorsi,1);
     assert.ok(rapporto.preprocessing.analisiColonne.length===3);
     assert.deepEqual(rapporto.risultato.etichette,["A","B","C","D"]);
@@ -93,6 +95,33 @@ async function gower(browser){
     assert.equal(await page.locator("#gower-diagnostics").isVisible(),true);
     assert.match(await page.locator("#gower-diagnostics").innerText(),/unico blocco/);
     assert.match(rapporto.avvisoRiservatezza,/CSV/);
+    // Il bridge Pyodide conserva il rapporto delle coppie mancanti
+    // senza sostituirle con zero e senza rendere disponibile una matrice.
+    const erroreCoppie = await page.evaluate(async () => {
+      const risposte = {
+        riga: "oggetto", significatoMancanti: "sconosciuto",
+        colonne: {
+          flag1: {ruolo: "presenza", usa: true},
+          flag2: {ruolo: "presenza", usa: true}
+        },
+        gruppi: [{id: "bin", nome: "Presenze", tipo: "vettore_binario"}],
+        assegnazioni: {flag1: "bin", flag2: "bin"},
+        "misuraBinaria-bin": "jaccard",
+        "mancanti-gruppo-bin": "pairwise"
+      };
+      try {
+        await window.Preprocessing.calcolaMatrice(
+          "flag1,flag2\n1,NA\nNA,1\n1,1", [], risposte
+        );
+        return {errore: "Il calcolo non doveva avere esito positivo"};
+      } catch (e) {
+        return {messaggio: e.message, rapporto: e.rapportoProblemi};
+      }
+    });
+    assert.match(erroreCoppie.messaggio,/non hanno alcun contributo valido/);
+    assert.equal(erroreCoppie.rapporto.fase,"calcolo");
+    assert.equal(erroreCoppie.rapporto.numeroCoppieNonConfrontabili,1);
+    assert.deepEqual(erroreCoppie.rapporto.coppieNonConfrontabili,[[1,2]]);
     fs.writeFileSync(path.join(OUT,"gower-rapporto.json"),rapportoJson);
 
     // Cambiando il significato di una coppia categoriale, la misura
