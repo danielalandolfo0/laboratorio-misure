@@ -108,6 +108,9 @@ async function main() {
       mimeType:"text/csv", buffer:Buffer.from(INPUT)
     });
     await page.locator("#csv-output").waitFor({state:"visible"});
+    assert.match(await page.locator("#comparison-guide-phase").innerText(),/Indica che cosa rappresenta una riga/);
+    await page.locator("#comparison-guide-next").click();
+    assert.equal(await page.locator("#row-meaning").evaluate(e=>e===document.activeElement),true);
     await choose("#row-meaning","oggetto");
     checkpoint("CSV caricato con Pyodide: 6 righe, 9 colonne");
 
@@ -182,6 +185,11 @@ async function main() {
     await page.locator("#comparison-plan").waitFor({state:"visible"});
     assert.equal(await page.locator("#gower-actions").isVisible(),false,
       "Senza le conferme il calcolo deve essere bloccato");
+    assert.match(await page.locator("#comparison-guide-phase").innerText(),/Completa una domanda/);
+    await page.locator("#comparison-guide-next").click();
+    assert.equal(await page.locator(confirmMixed).evaluate(
+      el => el === document.activeElement), true,
+      "La guida deve raggiungere la conferma ancora mancante");
     checkpoint("Piano incompleto blocca correttamente il calcolo");
     await choose(confirmMixed,"si");
     await choose(confirmOriginal,"si");
@@ -248,6 +256,7 @@ async function main() {
     approx(parseValue(clean[1][2]),expectedAB,1e-9);
     approx(parseValue(clean[1][5]),19/21,1e-9);
     fs.writeFileSync(path.join(OUT,"four-block-export.csv"),csv);
+    assert.match(await page.locator("#comparison-guide-phase").innerText(),/La matrice è pronta/);
     await snapshot("success");
     checkpoint("Esportazione CSV: matrice completa, simmetrica e valida");
   }catch(error){

@@ -483,6 +483,19 @@ e non implica automaticamente compatibilità con tutti i browser,
 usabilità per qualsiasi pubblico o conformità WCAG: queste richiedono
 ulteriori verifiche manuali e tecniche.
 
+### Guida alla compilazione del questionario
+
+Una sezione **Indicazione per proseguire** evidenzia la prossima
+decisione richiesta: significato della riga, tipo di gruppo,
+domande incomplete, personalizzazioni nominali e ordinali,
+riscalamenti, controllo del piano, calcolo ed esportazione.
+Il pulsante porta il focus al controllo pertinente, ma
+**non seleziona valori, non approva scelte e non calcola**.
+Le spiegazioni introduttive chiariscono dissimilarità,
+caratteristiche, gruppi, pesi e differenza fra riscalamento
+dei valori e normalizzazione delle distanze. La validazione
+matematica resta affidata al motore Python.
+
 ## Matrice complessiva con più percorsi
 
 Ogni percorso produce prima la propria matrice. Gower, i confronti 0/1 e le

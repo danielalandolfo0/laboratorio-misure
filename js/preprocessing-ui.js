@@ -214,6 +214,80 @@
     </div>`;
   }
 
+
+  // Il suggerimento non approva alcuna interpretazione e non sostituisce
+  // la validazione del piano; porta soltanto alla prossima decisione.
+  let prossimoCampoGuida = null;
+  function aggiornaGuida() {
+    if (!risultato) return;
+    const domande = $("adaptive-questions");
+    const campoVuoto = selettore => Array.from(domande.querySelectorAll(selettore))
+      .find(c => !c.disabled && !String(c.value || "").trim());
+    let titolo, testo, campo;
+    if (!$("row-meaning").value) {
+      titolo = "1. Indica che cosa rappresenta una riga.";
+      testo = "Ogni riga può descrivere una persona, un oggetto o un evento. La risposta definisce il significato delle osservazioni.";
+      campo = $("row-meaning");
+    } else {
+      const indefinito = interpretazione.gruppi.find(gruppo =>
+        gruppo.tipo === "altro" &&
+        Object.values(interpretazione.assegnazioni).includes(gruppo.id));
+      if (indefinito) {
+        titolo = "2. Specifica il significato delle colonne riunite nel gruppo.";
+        testo = "Scegli che cosa rappresentano insieme, oppure lascia le colonne indipendenti.";
+        campo = Array.from($("group-config-list").querySelectorAll(".group-config"))
+          .find(x => x.dataset.groupId === indefinito.id)?.querySelector(".group-type");
+      }
+      const risposta = !titolo && campoVuoto(
+        "select.semantic-answer, select.group-measure-setting, " +
+        "select.group-preprocessing-confirmation, select.specialized-missing-setting");
+      if (risposta) {
+        titolo = "3. Completa una domanda sul significato o sul confronto.";
+        testo = "Scegli ciò che descrive davvero i dati. Quando è previsto, puoi rispondere «Non lo so»: il sito non inventa una scelta al tuo posto.";
+        campo = risposta;
+      }
+      const dettaglio = !titolo && campoVuoto(
+        "input.gower-nominal-pair, " +
+        "input.gower-setting[data-gower-key='ordiniLivelliGower'], " +
+        "input.gower-setting[data-gower-key='passiOrdinaliGower']");
+      if (dettaglio) {
+        titolo = "3. Completa la personalizzazione delle categorie o dei livelli.";
+        testo = "Per categorie diverse indica valori fra 0 e 1; per livelli ordinali usa intervalli positivi. Puoi anche tornare alle impostazioni standard.";
+        campo = dettaglio;
+      }
+      if (!titolo && richiedeRiscalamentoConfermato() && !riscalamentoConfermato) {
+        titolo = "4. Controlla e conferma le trasformazioni numeriche.";
+        testo = "Verifica i metodi proposti per le colonne quantitative. Il file originale non verrà modificato.";
+        campo = $("confirm-numeric-scaling");
+      }
+      if (!titolo && !pianoCorrente) {
+        titolo = "5. Prepara il piano per verificare le scelte.";
+        testo = "Prima di calcolare, il piano mostrerà eventuali incompatibilità e le conferme ancora necessarie.";
+        campo = $("prepare-comparison-plan");
+      }
+      if (!titolo && !pianoCorrente.completo) {
+        titolo = "5. Consulta gli avvisi e completa la configurazione.";
+        testo = "Il calcolo resta bloccato finché le scelte non sono coerenti. Leggi gli avvisi del piano.";
+        campo = $("comparison-plan-warnings");
+      }
+      if (!titolo && !matriceCorrente) {
+        titolo = "6. Il piano è completo: puoi calcolare la matrice unica.";
+        testo = "Tutti i percorsi previsti sono calcolabili; verranno aggregati secondo le importanze confermate.";
+        campo = $("calculate-gower");
+      }
+      if (!titolo) {
+        titolo = "6. La matrice è pronta.";
+        testo = "Puoi consultarla o scaricare l'intera matrice CSV. Se modifichi una scelta, sarà necessario ricalcolarla.";
+        campo = $("download-gower");
+      }
+    }
+    $("comparison-guide-phase").textContent = titolo;
+    $("comparison-guide-explanation").textContent = testo;
+    prossimoCampoGuida = campo || null;
+    $("comparison-guide-next").hidden = !campo || campo.hidden;
+    $("comparison-guide").hidden = false;
+  }
+
   function annullaScelteNormalizzazione() {
     // Gli ID dei percorsi dipendono dalla struttura corrente: non riutilizzare
     // una vecchia scala robusta dopo cambi di colonne, gruppi o misure.
@@ -244,6 +318,7 @@
     $("calculate-gower").textContent = "Calcola la matrice finale";
     $("download-gower").disabled = true;
     aggiornaVisibilitaTrasformazione();
+    aggiornaGuida();
   }
 
   function colonneNumericheSelezionate() {
@@ -484,6 +559,7 @@
     $("adaptive-questions").hidden = false;
     $("prepare-comparison-plan").hidden = !pronto;
     aggiornaVisibilitaTrasformazione();
+    aggiornaGuida();
   }
 
   function confermaRiscalamentoNumerico() {
@@ -858,7 +934,7 @@
     );
     const avvisi = [...piano.avvisi, ...avvisiBlocchi, ...avvisiPercorsi];
     $("comparison-plan-warnings").innerHTML = avvisi.length
-      ? `<p><strong>Prima del calcolo:</strong></p><ul>${avvisi.map(avviso => `<li>${escapeHtml(avviso)}</li>`).join("")}</ul>`
+      ? `<p><strong>Che cosa controllare prima del calcolo:</strong></p><ul>${avvisi.map(avviso => `<li>${escapeHtml(avviso)}</li>`).join("")}</ul>`
       : "";
     $("comparison-plan-intro").textContent = !piano.completo
       ? "Il piano è stato preparato, ma alcune informazioni devono ancora essere completate."
@@ -875,6 +951,7 @@
     }
     $("comparison-plan").hidden = false;
     aggiornaVisibilitaTrasformazione();
+    aggiornaGuida();
   }
 
   function disegnaMatrice(risposta) {
@@ -890,6 +967,7 @@
     $("gower-result-caption").textContent = `${risposta.etichette.length} × ${risposta.etichette.length}. ${risposta.nota}${limite < risposta.etichette.length ? ` Anteprima delle prime ${limite} righe.` : ""}${avvisiFinali.length ? " Diagnostica (non bloccante): " + avvisiFinali.join(" ") : ""}`;
     $("download-gower").disabled = false;
     $("gower-result").hidden = false;
+    aggiornaGuida();
   }
 
   async function calcolaMatrice() {
@@ -1556,11 +1634,11 @@
         const idMisura = interpretazione.misureGruppi?.[gruppo.id] ||
           (gruppo.tipo === "coordinate" ? "" : "euclidean");
         const opzioniGruppo = [
-          ["euclidean", "Euclidea: considera la grandezza complessiva degli scarti"],
-          ["manhattan", "Manhattan: somma gli scarti assoluti"],
-          ["chebyshev", "Chebyshev: considera lo scarto piu' grande"],
-          ["minkowski", "Minkowski: regola l'influenza degli scarti con q"],
-          ["weighted_minkowski", "Minkowski pesata: scegli q e l'importanza di ogni colonna"],
+          ["euclidean", "Euclidea: combina gli scarti dando maggior rilievo a quelli grandi"],
+          ["manhattan", "Manhattan: somma le differenze assolute"],
+          ["chebyshev", "Chebyshev: conta soltanto la differenza più grande"],
+          ["minkowski", "Minkowski: scegli quanto pesano le differenze grandi"],
+          ["weighted_minkowski", "Minkowski pesata: scegli anche quanto conta ciascuna colonna"],
         ];
         const menuMisure = '<option value=""' + (idMisura === "" ? " selected" : "") +
           '>Scegli una misura per questo gruppo</option>' +
@@ -1586,8 +1664,9 @@
         domande.push('<div class="question-item"><label><strong>Quale misura vuoi usare per il gruppo “' +
           escapeHtml(gruppo.nome) + '”?</strong><select class="group-measure-setting" data-group-id="' +
           escapeHtml(gruppo.id) + '">' + menuMisure +
-          '</select></label><p>La scelta riguarda solo questo gruppo. Le altre caratteristiche ' +
-          'possono essere confrontate con misure differenti, poi riunite in una sola matrice finale.</p>' +
+          '</select></label><p>La scelta riguarda solo questo gruppo. Indica se vuoi ' +
+          'considerare tutte le differenze, soprattutto quella maggiore, oppure importanze diverse. ' +
+          'Gli altri gruppi potranno usare altri criteri e contribuire alla stessa matrice.</p>' +
           parametriMisura + '</div>');
       }
 
@@ -1740,6 +1819,12 @@
   $("load-example-csv").addEventListener("click", () => elaboraTesto(esempio, "esempio.csv"));
   $("view-original").addEventListener("click", () => { vista = "originale"; disegnaTabella(); });
   $("view-work").addEventListener("click", () => { vista = "lavoro"; disegnaTabella(); });
+  $("comparison-guide-next").addEventListener("click", () => {
+    const campo = prossimoCampoGuida;
+    if (!campo) return;
+    campo.scrollIntoView?.({block:"center"});
+    campo.focus?.({preventScroll:true});
+  });
   $("download-work").addEventListener("click", scaricaTabella);
   $("confirm-numeric-scaling").addEventListener("click", confermaRiscalamentoNumerico);
   $("prepare-comparison-plan").addEventListener("click", preparaPiano);

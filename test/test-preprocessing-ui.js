@@ -199,6 +199,15 @@ function createHarness() {
   return {fire, element, observations, makeTable, makePlan, makeMatrix, customTarget};
 }
 
+async function testGuida() {
+  const h=createHarness();
+  h.fire("load-example-csv","click");
+  await flush();
+  assert.match(h.element("comparison-guide-phase").textContent,/Indica che cosa rappresenta una riga/);
+  h.fire("row-meaning","change",{value:"oggetto"});
+  assert.doesNotMatch(h.element("comparison-guide-phase").textContent,/Indica che cosa rappresenta una riga/);
+}
+
 async function testStaleFiles() {
   const h = createHarness();
   const prima = deferred();
@@ -438,6 +447,7 @@ async function testRiscalamentoNumericoInTabellaMista() {
 
 (async () => {
   await testRiscalamentoNumericoInTabellaMista();
+  await testGuida();
   await testStaleFiles();
   await testStaleFileRead();
   await testStalePlanAndMatrix();
