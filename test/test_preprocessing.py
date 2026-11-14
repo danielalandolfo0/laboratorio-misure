@@ -3399,4 +3399,160 @@ assert not p.crea_piano_confronto(
     tutta_vuota, risposte_serie_per_riga
 )["completo"]
 
+
+# Fase 5: binarie con confronto pairwise sulla sola intersezione delle
+# coordinate osservate. Nessun valore mancante è trasformato in zero.
+assert p._distanza_vettori_binari([1, None, 0], [1, 0, None], "hamming") == 0
+assert p._distanza_vettori_binari([None, 0], [None, 0], "jaccard") == 0
+assert p._distanza_vettori_binari([None, None], [0, 1], "jaccard") is None
+assert p._distanza_vettori_binari(
+    [None, 0], [None, 0], "dice", consenti_indefiniti=True
+) is None
+try:
+    p._distanza_vettori_binari([0, 0], [0, 0], "dice")
+    assert False, "Dice non può assegnare zero al denominatore nullo."
+except ValueError:
+    pass
+
+misti_pairwise = p.prepara_tabella(p.leggi_csv(
+    "id,flag1,flag2,flag3,categoria\n"
+    "A,1,NA,0,x\n"
+    "B,1,0,NA,x\n"
+    "C,0,0,0,y\n"
+    "D,NA,NA,0,y\n"
+    "E,NA,NA,NA,x"
+))
+base_pairwise = {
+    "riga": "oggetto",
+    "significatoMancanti": "sconosciuto",
+    "colonne": {
+        **{nome: {"ruolo": "presenza", "usa": True}
+           for nome in ("flag1", "flag2", "flag3")},
+        "categoria": {"ruolo": "categoria", "usa": True},
+        "id": {"ruolo": "identificativo", "usa": False},
+    },
+    "gruppi": [{"id": "bin", "nome": "Presenze", "tipo": "vettore_binario"}],
+    "assegnazioni": {
+        nome: "bin" for nome in ("flag1", "flag2", "flag3")
+    },
+    "mancanti-gruppo-bin": "pairwise",
+}
+
+# Verifica formula sui conteggi osservati in comune per tutte e quattro
+# le misure; Jaccard su doppia assenza osservata resta definita con 0.
+for misura, atteso_ac, coppie_parziali in (
+    ("hamming", 0.5, 5),
+    ("rogers_tanimoto", 2/3, 5),
+    ("jaccard", 1.0, 5),
+    ("dice", 1.0, 7),
+):
+    scelta = {**base_pairwise, "misuraBinaria-bin": misura}
+    piano = p.crea_piano_confronto(misti_pairwise, scelta)
+    assert piano["completo"], (misura, piano)
+    assert [v["tipo"] for v in piano["percorsi"]] == ["gower", "gruppo"]
+    blocco = piano["percorsi"][1]
+    assert blocco["mancanti"]["strategia"] == "pairwise"
+    assert blocco["normalizzazione"]["limiteTeorico"] == 1
+    assert blocco["coppieBinariValide"] == 10 - coppie_parziali
+    assert blocco["coppieSenzaCoordinateComuni"] == 5
+    if misura == "dice":
+        assert blocco["coppieDiceIndefinite"] == 2
+    locale = p._calcola_matrice_specializzata(misti_pairwise, scelta, blocco)
+    quasi_uguali(locale["matrice"][0][1], 0)
+    quasi_uguali(locale["matrice"][0][2], atteso_ac)
+    quasi_uguali(locale["matrice"][1][2], atteso_ac)
+    assert locale["matrice"][1][3] is None
+    assert locale["matrice"][0][4] is None
+    if misura == "dice":
+        assert locale["matrice"][0][3] is None
+        assert locale["matrice"][2][3] is None
+    else:
+        quasi_uguali(locale["matrice"][0][3], 0)
+        quasi_uguali(locale["matrice"][2][3], 0)
+    globale = p.calcola_matrice(misti_pairwise, scelta)
+    verifica_matrice_finale(globale, 5)
+    quasi_uguali(globale["matrice"][0][2], (atteso_ac + 1) / 2)
+    quasi_uguali(globale["matrice"][1][3], 1)
+    quasi_uguali(globale["matrice"][0][4], 0)
+    quasi_uguali(globale["matrice"][2][4], 1)
+    quasi_uguali(globale["matrice"][2][3], 0)
+    assert globale["diagnosticaFinale"]["coppieCoperturaParziale"] == coppie_parziali
+    assert globale["diagnosticaFinale"]["coppieConSoloUnPercorso"] == coppie_parziali
+    assert globale["diagnosticaFinale"]["minContributiPerCoppia"] == 1
+    assert globale["diagnosticaFinale"]["maxContributiPerCoppia"] == 2
+    assert any("coppie usano meno" in text
+               for text in globale["diagnosticaFinale"]["avvisi"])
+
+# I pesi vengono rinormalizzati sulle sole componenti disponibili;
+# una doppia assenza in comune conta con distanza Jaccard pari a 0.
+pesata_pairwise = {
+    **base_pairwise, "misuraBinaria-bin": "jaccard",
+    "pesiPercorsi": {"percorso-1": "1", "percorso-2": "3"},
+}
+d_pesata = p.calcola_matrice(misti_pairwise, pesata_pairwise)
+quasi_uguali(d_pesata["matrice"][0][2], (1 + 3) / 4)
+quasi_uguali(d_pesata["matrice"][0][3], 1 / 4)
+quasi_uguali(d_pesata["matrice"][1][3], 1)
+assert d_pesata["matrice"][0][4] == 0
+
+# Quando un blocco binario è l'unico percorso e una coppia non ha
+# nessuna coordinata osservata in comune, non si inventa D=0.
+solo_binari_pairwise = p.prepara_tabella(p.leggi_csv(
+    "flag1,flag2\n1,NA\nNA,1\n1,1"
+))
+solo_binari_risposte = {
+    "riga": "oggetto",
+    "significatoMancanti": "sconosciuto",
+    "colonne": {
+        "flag1": {"ruolo": "presenza", "usa": True},
+        "flag2": {"ruolo": "presenza", "usa": True},
+    },
+    "gruppi": [{"id": "bin", "nome": "Presenze", "tipo": "vettore_binario"}],
+    "assegnazioni": {"flag1": "bin", "flag2": "bin"},
+    "misuraBinaria-bin": "jaccard",
+    "mancanti-gruppo-bin": "pairwise",
+}
+assert p.crea_piano_confronto(
+    solo_binari_pairwise, solo_binari_risposte
+)["completo"]
+try:
+    p.calcola_matrice(solo_binari_pairwise, solo_binari_risposte)
+    assert False, "La coppia senza coordinate comuni deve impedire la matrice."
+except ValueError as errore:
+    assert "non hanno alcun contributo valido" in str(errore), str(errore)
+
+# Se nessuna coppia è utilizzabile, il gruppo va corretto prima
+# ancora di eseguire il calcolo della matrice.
+tutte_senza_intersezione = p.prepara_tabella(p.leggi_csv(
+    "flag1,flag2\n1,NA\nNA,1"
+))
+piano_nessun_binario = p.crea_piano_confronto(
+    tutte_senza_intersezione, solo_binari_risposte
+)
+assert not piano_nessun_binario["completo"], piano_nessun_binario
+assert any(
+    "Non esiste alcuna coppia con contributo binario definito" in messaggio
+    for percorso in piano_nessun_binario["percorsi"]
+    for messaggio in percorso.get("avvisi", [])
+)
+
+# Dati sconosciuti non diventano assenze per effetto della politica
+# sull'intersezione: la conversione a zero rimane un'opzione distinta.
+piano_non_risposto = p.crea_piano_confronto(
+    misti_pairwise, {**base_pairwise, "misuraBinaria-bin": "jaccard",
+                    "mancanti-gruppo-bin": ""}
+)
+assert not piano_non_risposto["completo"]
+piano_zeri_confermati = p.crea_piano_confronto(
+    misti_pairwise, {**base_pairwise, "misuraBinaria-bin": "jaccard",
+                    "mancanti-gruppo-bin": "zero"}
+)
+assert piano_zeri_confermati["completo"]
+locale_zero = p._calcola_matrice_specializzata(
+    misti_pairwise, {**base_pairwise, "misuraBinaria-bin": "jaccard",
+                    "mancanti-gruppo-bin": "zero"},
+    piano_zeri_confermati["percorsi"][1]
+)
+quasi_uguali(locale_zero["matrice"][0][3], 1)
+
 print("Tutti i test Python di preprocessing sono stati superati.")
