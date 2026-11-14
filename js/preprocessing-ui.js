@@ -1107,11 +1107,17 @@
         (gruppo.tipo === "distribuzione" && tipo === "binaria")
       );
       const tutteQuantitative = tutteNumeriche && membri.every(nome => interpretazione.colonne[nome]?.ruolo === "quantita");
+      const tutteBinarie = membri.length >= 2 && membri.every((nome, indice) =>
+        ["binaria", "non_numerica", "numerica_costante"].includes(tipi[indice]) &&
+        ["binaria", "presenza"].includes(interpretazione.colonne[nome]?.ruolo)
+      );
       const nota = membri.length < 2
         ? "Assegna almeno due colonne a questo gruppo."
-        : !tutteQuantitative && gruppo.tipo !== "altro"
-          ? "Per questa interpretazione servono quantità numeriche: verifica che non siano codici o livelli."
-          : `Colonne: ${membri.join(", ")}.`;
+        : gruppo.tipo === "vettore_binario" && !tutteBinarie
+          ? "Per questo gruppo servono risposte binarie o presenze, con stati 0/1 oppure sì/no."
+          : !tutteQuantitative && !["altro", "vettore_binario"].includes(gruppo.tipo)
+            ? "Per questa interpretazione servono quantità numeriche: verifica che non siano codici o livelli."
+            : `Colonne: ${membri.join(", ")}.`;
       return `<div class="group-config" data-group-id="${gruppo.id}">
         <label>Nome del gruppo<input class="group-name" value="${escapeHtml(gruppo.nome)}" aria-label="Nome di ${escapeHtml(gruppo.nome)}"></label>
         <label>Che cosa formano insieme?<select class="group-type" aria-label="Tipo di ${escapeHtml(gruppo.nome)}">
@@ -1121,6 +1127,7 @@
           <option value="tempo"${gruppo.tipo === "tempo" ? " selected" : ""}>Osservazioni successive nel tempo</option>
           <option value="parti"${gruppo.tipo === "parti" ? " selected" : ""}>Parti dello stesso totale (Aitchison)</option>
           <option value="distribuzione"${gruppo.tipo === "distribuzione" ? " selected" : ""}>Distribuzione di probabilità o istogramma</option>
+          <option value="vettore_binario"${gruppo.tipo === "vettore_binario" ? " selected" : ""}>Insieme di presenze/assenze da confrontare come vettore binario</option>
         </select></label>
         <p>${escapeHtml(nota)}</p>
         <button class="remove-group" type="button">Rimuovi gruppo</button>
@@ -1527,9 +1534,12 @@
         '>Levenshtein: consenti inserimenti, cancellazioni e sostituzioni</option>' +
         '<option value="hamming"' + (scelta === "hamming" ? " selected" : "") +
         '>Hamming: conta le posizioni diverse nelle sequenze allineate</option>' +
+        '<option value="damerau_levenshtein"' + (scelta === "damerau_levenshtein" ? " selected" : "") +
+        '>Damerau–Levenshtein: consenti anche lo scambio di caratteri vicini</option>' +
         '</select></label><p>Hamming richiede che tutte le sequenze confrontate abbiano ' +
-        'la stessa lunghezza; la dissimilarità è il numero di posizioni discordanti ' +
-        'diviso per tale lunghezza. Se le lunghezze differiscono, usa Levenshtein.</p></div>');
+        'la stessa lunghezza. Levenshtein e Damerau–Levenshtein ammettono lunghezze diverse. ' +
+        'La versione CSV di Damerau–Levenshtein usa la distanza completa con trasposizioni ' +
+        'adiacenti e la divide per la lunghezza maggiore per ottenere valori in [0,1].</p></div>');
     });
     profiliInclusi.filter(profilo => {
       const ruolo = interpretazione.colonne[profilo.nome]?.ruolo;
@@ -1561,6 +1571,38 @@
         (["numerica", "numerica_costante"].includes(tipi[indice]) ||
           (gruppo.tipo === "distribuzione" && tipi[indice] === "binaria")) &&
           interpretazione.colonne[profilo.nome]?.ruolo === "quantita");
+      if (gruppo.tipo === "vettore_binario") {
+        const binarie = membri.length >= 2 && membri.every((profilo, indice) =>
+          ["binaria", "non_numerica", "numerica_costante"].includes(tipi[indice]) &&
+          ["binaria", "presenza"].includes(interpretazione.colonne[profilo.nome]?.ruolo));
+        if (!binarie) return;
+        domande.push(domandaAdattiva(
+          `misuraBinaria-${gruppo.id}`,
+          `Nel gruppo “${escapeHtml(gruppo.nome)}”, come confrontiamo le presenze e le assenze?`,
+          "Le colonne sono confrontate insieme come vettori 0/1, senza usare Gower "
+          + "sulle stesse colonne. Rogers–Tanimoto raddoppia i disaccordi; Dice "
+          + "dà più peso alle presenze condivise. Dice non è definita per un "
+          + "vettore tutto zero; Jaccard adotta in questo caso la convenzione 0.",
+          [
+            ["hamming", "Hamming binaria: quota di disaccordi, comprese le assenze comuni"],
+            ["rogers_tanimoto", "Rogers–Tanimoto: penalizza maggiormente i disaccordi"],
+            ["jaccard", "Jaccard: ignora le assenze comuni; due vettori nulli valgono 0"],
+            ["dice", "Dice: pesa maggiormente le presenze comuni; vietati i vettori nulli"]
+          ]
+        ));
+        if (membri.some(profilo =>
+          (risultato.colonne.find(colonna => colonna.nome === profilo.nome)?.mancanti || 0) > 0)) {
+          domande.push(domandaAdattiva(
+            `mancanti-gruppo-${gruppo.id}`,
+            `Nel gruppo “${escapeHtml(gruppo.nome)}”, come trattiamo i valori mancanti?`,
+            "Il sito non inventa una presenza o assenza. Puoi ignorare il blocco per "
+            + "le coppie coinvolte oppure dichiarare esplicitamente che vuoto significa zero.",
+            [["escludi_percorso", "Non usare questo blocco per una riga con vuoti"],
+             ["zero", "Confermo che ogni vuoto rappresenta assenza (zero)"]]
+          ));
+        }
+        return;
+      }
       if (!valido) return;
       if (gruppo.tipo === "ripetute") domande.push(domandaAdattiva(
         `somiglianza-${gruppo.id}`, `Nel gruppo “${escapeHtml(gruppo.nome)}”, quando due righe devono essere considerate simili?`,
@@ -2085,7 +2127,7 @@
       interpretazione[evento.target.dataset.answer] = evento.target.value;
       if (evento.target.matches(".semantic-answer")) {
         const chiave = evento.target.dataset.answer || "";
-        if (/^(gestioneQuantitativeMiste|confrontoQuantitativo|aggregazioneScarti|dipendenzaCoordinate|importanzaCoordinate|somiglianza-|ritardo-|totale-|mancanti-gruppo-|naturaDistribuzione-|misuraDistribuzione-)/.test(chiave)) {
+        if (/^(gestioneQuantitativeMiste|confrontoQuantitativo|aggregazioneScarti|dipendenzaCoordinate|importanzaCoordinate|somiglianza-|ritardo-|totale-|mancanti-gruppo-|misuraBinaria-|naturaDistribuzione-|misuraDistribuzione-)/.test(chiave)) {
           annullaScelteNormalizzazione();
         }
         if (/^(somiglianza|ritardo|totale|naturaDistribuzione|misuraDistribuzione)-/.test(chiave)) {
@@ -2169,6 +2211,8 @@
     if (gruppoId !== precedenteGruppo) {
       invalidaConfermaTemporale(precedenteGruppo);
       invalidaConfermaTemporale(gruppoId);
+      delete interpretazione[`misuraBinaria-${precedenteGruppo}`];
+      delete interpretazione[`misuraBinaria-${gruppoId}`];
     }
     if (gruppoId) interpretazione.assegnazioni[nome] = gruppoId;
     else delete interpretazione.assegnazioni[nome];
@@ -2185,7 +2229,10 @@
     if (!gruppo) return;
     if (evento.target.matches(".group-name")) gruppo.nome = evento.target.value.trim() || gruppo.nome;
     if (evento.target.matches(".group-type")) {
-      if (gruppo.tipo !== evento.target.value) invalidaConfermaTemporale(gruppo.id);
+      if (gruppo.tipo !== evento.target.value) {
+        invalidaConfermaTemporale(gruppo.id);
+        delete interpretazione[`misuraBinaria-${gruppo.id}`];
+      }
       gruppo.tipo = evento.target.value;
       if (interpretazione.misureGruppi) delete interpretazione.misureGruppi[gruppo.id];
       annullaScelteNormalizzazione();
@@ -2209,6 +2256,7 @@
     if (!pulsante) return;
     const gruppoId = pulsante.closest(".group-config").dataset.groupId;
     invalidaConfermaTemporale(gruppoId);
+    delete interpretazione[`misuraBinaria-${gruppoId}`];
     interpretazione.gruppi = interpretazione.gruppi.filter(gruppo => gruppo.id !== gruppoId);
     annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
