@@ -4144,7 +4144,7 @@ csv_zero_blocco = p.prepara_tabella(p.leggi_csv(
     {"tipo": "auto", "metodo": "nessuno"},
     {"tipo": "auto", "metodo": "nessuno"},
     {"tipo": "auto", "metodo": "auto"},
-]))
+])
 res_zero_blocco = p.calcola_matrice(csv_zero_blocco, scelta_blocchi)
 verifica_matrice_finale(res_zero_blocco, 3)
 quasi_uguali(res_zero_blocco["matrice"][0][1], .3)
