@@ -3657,7 +3657,7 @@ piano_nonapp_numerica = p.crea_piano_confronto(
     numerici_con_assenza, scelta_nonapp_numerica
 )
 assert not piano_nonapp_numerica["completo"]
-assert any("non imputare automaticamente" in testo
+assert any("non imputare o interpolare automaticamente" in testo
            for testo in piano_nonapp_numerica["avvisi"])
 
 # Gruppo binario: codifica mista, stato assenza osservato, pairwise sulle
