@@ -89,6 +89,24 @@ impediscono il calcolo; le questioni aperte, le scelte non confermate
 e i percorsi non calcolabili lo impediscono. Le decisioni proposte non
 vengono applicate senza l'utente.
 
+**Assegnazioni a gruppi eliminati.** Una colonna ancora associata a un
+identificativo di gruppo inesistente non può diventare silenziosamente
+indipendente: il piano rimane incompleto. Nel menu di assegnazione il
+gruppo non trovato è evidenziato come scelta non valida. L'utente deve
+indicare un gruppo esistente oppure selezionare esplicitamente
+«Caratteristica indipendente»; soltanto questa risposta aggiorna il piano.
+Il rapporto include il nome della colonna e l'identificativo obsoleto.
+
+Il collaudo `test/test_integrazione.py` contiene anche uno scenario
+con **sette incompatibilità contemporanee in quattro percorsi**:
+dissimilarità nominale fuori da `[0,1]`, Hamming su stringhe di
+lunghezza diversa, distribuzione non normalizzata, conferma mancata
+dei valori originali, scala robusta con una riga inesistente,
+peso globale non positivo e assegnazione a un gruppo eliminato.
+Il rapporto JSON espone tutte le anomalie; correggerne una non
+sblocca le altre. Ripristinate le scelte coerenti, il test confronta
+la matrice finale con quella precedentemente verificata.
+
 Durante il calcolo, gli errori dei **diversi blocchi** vengono raccolti
 separatamente prima di sospendere la produzione della matrice.
 L'interfaccia mostra un rapporto aggiuntivo con i blocchi coinvolti.
