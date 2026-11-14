@@ -566,7 +566,7 @@
       const pesiGower = Object.entries(percorso.pesiGower || {}).map(([nome, peso]) =>
         escapeHtml(nome) + ": " + formatoNumero(peso)
       ).join(" · ");
-      const escluseGower = (percorso.colonneEscluseGower || []).map(escapeHtml).join(", ");
+      const costantiGower = (percorso.colonneCostantiGower || []).map(escapeHtml).join(", ");
       const parametri = Object.entries(percorso.parametri || {}).map(([chiave, valore]) =>
         `${escapeHtml(chiave)} = ${escapeHtml(Array.isArray(valore) ? valore.join(", ") : valore)}`
       ).join(" · ");
@@ -594,7 +594,7 @@
           <div><dt>Trasformazioni</dt><dd>${passi}</dd></div>
           ${parametri ? `<div><dt>Parametri</dt><dd>${parametri}</dd></div>` : ""}
           ${pesiGower ? `<div><dt>Pesi Gower</dt><dd>${pesiGower}</dd></div>` : ""}
-          ${escluseGower ? `<div><dt>Colonne senza variabilità</dt><dd>Escluse dal denominatore: ${escluseGower}</dd></div>` : ""}
+          ${costantiGower ? `<div><dt>Colonne costanti</dt><dd>Contributo zero, ma peso mantenuto: ${costantiGower}</dd></div>` : ""}
           <div><dt>Mancanti</dt><dd>${escapeHtml(mancanti.descrizione)}</dd></div>
           ${percorso.proprieta ? `<div><dt>Proprietà</dt><dd>${escapeHtml(percorso.proprieta)}</dd></div>` : ""}
           <div><dt>Stato</dt><dd>${escapeHtml(calcolo)}</dd></div>
