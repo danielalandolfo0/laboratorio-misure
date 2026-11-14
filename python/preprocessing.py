@@ -6541,7 +6541,7 @@ def crea_csv(intestazioni: list[str], righe: list[list[Any]]) -> str:
 
 RAPPORTO_FORMATO = "laboratorio-misure/rapporto-calcolo"
 RAPPORTO_VERSIONE_SCHEMA = 1
-RAPPORTO_REVISIONE_MOTORE = "20261114-fase7-rapporto-v1"
+RAPPORTO_REVISIONE_MOTORE = "20261114-fase7-sensibilita-pesi-v2"
 
 
 def _normalizza_json_rapporto(dato: Any) -> Any:
