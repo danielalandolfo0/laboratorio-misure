@@ -172,6 +172,8 @@
       identificativo: "Un codice identificativo",
       data: "Una data o un orario",
       testo: "Un testo o una sequenza",
+      insieme: "Un insieme di etichette nella stessa cella",
+      ciclica: "Una quantità ciclica con periodo noto",
       risultato: "Un risultato da spiegare o prevedere",
       altro: "Qualcos’altro",
       ignoto: "Non lo so"
@@ -179,7 +181,7 @@
   }
 
   function opzioniRuolo(selezionato) {
-    const ruoli = ["quantita", "livello", "presenza", "binaria", "categoria", "identificativo", "data", "testo", "risultato", "altro", "ignoto"];
+    const ruoli = ["quantita", "livello", "presenza", "binaria", "categoria", "insieme", "ciclica", "identificativo", "data", "testo", "risultato", "altro", "ignoto"];
     return ruoli.map(ruolo => `<option value="${ruolo}"${ruolo === selezionato ? " selected" : ""}>${etichettaRuolo(ruolo)}</option>`).join("");
   }
 
@@ -1524,6 +1526,75 @@
     }
     profiliInclusi.filter(profilo =>
       !interpretazione.assegnazioni[profilo.nome] &&
+      interpretazione.colonne[profilo.nome]?.ruolo === "insieme"
+    ).forEach(profilo => {
+      const nome = profilo.nome;
+      const conf = interpretazione.configurazioniInsiemi?.[nome] || {};
+      domande.push('<div class="question-item"><strong>Insiemi nella colonna “' +
+        escapeHtml(nome) + '”</strong><p>Ogni cella contiene più etichette, ' +
+        'senza ordine: esempio rosso|blu. Usa [] per un insieme vuoto osservato. ' +
+        'Una cella realmente vuota, NA o ?, invece, indica un dato mancante. ' +
+        'Gli spazi esterni a ciascuna etichetta sono ignorati.</p>' +
+        '<label>Confermi che ogni cella rappresenta un insieme?' +
+        '<select class="set-setting" data-set-column="' + escapeHtml(nome) + '" data-set-key="conferma">' +
+        '<option value="">Scegli una risposta</option>' +
+        '<option value="si"' + (conf.conferma === "si" ? " selected" : "") + '>Sì, sono insiemi</option>' +
+        '<option value="no"' + (conf.conferma === "no" ? " selected" : "") + '>No, devo cambiare il ruolo della colonna</option>' +
+        '</select></label>' +
+        '<label>Quale separatore distingue le etichette?' +
+        '<select class="set-setting" data-set-column="' + escapeHtml(nome) + '" data-set-key="separatore">' +
+        '<option value="">Scegli un separatore</option>' +
+        [["|", "Barra verticale |"], [";", "Punto e virgola ;"], [",", "Virgola , (celle CSV tra virgolette)"]].map(([v, t]) =>
+          '<option value="' + escapeHtml(v) + '"' + (conf.separatore === v ? " selected" : "") + '>' + escapeHtml(t) + '</option>'
+        ).join("") +
+        '</select></label>' +
+        '<label>Le maiuscole distinguono due etichette?' +
+        '<select class="set-setting" data-set-column="' + escapeHtml(nome) + '" data-set-key="maiuscole">' +
+        '<option value="">Scegli una risposta</option>' +
+        '<option value="distingui"' + (conf.maiuscole === "distingui" ? " selected" : "") + '>Sì: Roma e roma sono diverse</option>' +
+        '<option value="ignora"' + (conf.maiuscole === "ignora" ? " selected" : "") + '>No: Roma e roma sono uguali</option>' +
+        '</select></label>' +
+        '<label>Se un’etichetta si ripete, conta una volta sola?' +
+        '<select class="set-setting" data-set-column="' + escapeHtml(nome) + '" data-set-key="ripetizioni">' +
+        '<option value="">Scegli una risposta</option>' +
+        '<option value="deduplica"' + (conf.ripetizioni === "deduplica" ? " selected" : "") + '>Sì, ripetizioni ignorate: è un insieme</option>' +
+        '<option value="no"' + (conf.ripetizioni === "no" ? " selected" : "") + '>No, contano le ripetizioni: questa struttura non è adatta</option>' +
+        '</select></label>' +
+        '<label>Come confrontare gli insiemi?' +
+        '<select class="set-setting" data-set-column="' + escapeHtml(nome) + '" data-set-key="misura">' +
+        '<option value="">Scegli una misura</option>' +
+        '<option value="jaccard"' + (conf.misura === "jaccard" ? " selected" : "") + '>Jaccard: quota di etichette non condivise sull’unione</option>' +
+        '<option value="dice"' + (conf.misura === "dice" ? " selected" : "") + '>Dice: doppio peso alle etichette condivise</option>' +
+        '</select></label><p>Per due insiemi entrambi vuoti e osservati ' +
+        'entrambe le misure valgono zero. L’assenza di informazione non vale zero.</p></div>');
+    });
+    profiliInclusi.filter(profilo =>
+      !interpretazione.assegnazioni[profilo.nome] &&
+      interpretazione.colonne[profilo.nome]?.ruolo === "ciclica"
+    ).forEach(profilo => {
+      const nome = profilo.nome;
+      const conf = interpretazione.configurazioniCicliche?.[nome] || {};
+      domande.push('<div class="question-item"><strong>Ciclo della colonna “' +
+        escapeHtml(nome) + '”</strong><p>Un valore descrive una posizione ' +
+        'su un ciclo, come un’ora nel giorno o una direzione. ' +
+        'Inserisci il periodo positivo P e verifica che tutti i valori siano ' +
+        'nell’intervallo [0,P): 0 e P rappresentano lo stesso punto, ' +
+        'ma i valori P non vengono corretti automaticamente.</p>' +
+        '<label>Qual è il periodo completo P?' +
+        '<input type="text" inputmode="decimal" class="cycle-period-setting" data-cycle-column="' +
+        escapeHtml(nome) + '" value="' + escapeHtml(conf.periodo ?? "") +
+        '" placeholder="es. 24 o 360"></label>' +
+        '<label>In quali unità è espresso il periodo?' +
+        '<select class="cycle-unit-setting" data-cycle-column="' + escapeHtml(nome) + '">' +
+        '<option value="">Scegli un’unità</option>' +
+        [["ore", "Ore"], ["giorni", "Giorni"], ["gradi", "Gradi"], ["radianti", "Radianti"], ["altre", "Altre unità della colonna"]].map(([v,t]) =>
+          '<option value="' + v + '"' + (conf.unita === v ? " selected" : "") + '>' + t + '</option>'
+        ).join("") + '</select></label><p>Il sito usa il percorso più corto sul ciclo: ' +
+        '(2/P) × min(|u−v|, P−|u−v|), con valori in [0,1]. ' +
+        'Il riscalamento preliminare non viene applicato a questa colonna.</p></div>');
+    });
+    profiliInclusi.filter(profilo =>
+      !interpretazione.assegnazioni[profilo.nome] &&
       interpretazione.colonne[profilo.nome]?.ruolo === "testo"
     ).forEach(profilo => {
       const scelta = interpretazione.misureTestualiPerColonna?.[profilo.nome] || "levenshtein";
@@ -1546,22 +1617,26 @@
       const colonna = risultato.colonne.find(elemento => elemento.nome === profilo.nome);
       return !interpretazione.assegnazioni[profilo.nome]
         && !ruoliStandard.has(ruolo)
-        && ["testo", "identificativo"].includes(ruolo)
+        && ["testo", "identificativo", "insieme", "ciclica"].includes(ruolo)
         && colonna?.mancanti > 0;
     }).forEach(profilo => {
       if (!interpretazione.mancantiSpecializzatiPerColonna) {
         interpretazione.mancantiSpecializzatiPerColonna = {};
       }
       const valore = interpretazione.mancantiSpecializzatiPerColonna[profilo.nome] || "";
+      const alternativa = ruolo === "insieme"
+        ? `<option value="insieme_vuoto"${valore === "insieme_vuoto" ? " selected" : ""}>Confermo che ogni vuoto è un insieme vuoto osservato</option>`
+        : ruolo === "ciclica" ? "" :
+          `<option value="stringa_vuota"${valore === "stringa_vuota" ? " selected" : ""}>Confermo che significa un testo di lunghezza zero</option>`;
       domande.push(`<div class="question-item">
-        <label><strong>Nella colonna “${escapeHtml(profilo.nome)}”, che cosa facciamo quando il testo manca?</strong>
+        <label><strong>Nella colonna “${escapeHtml(profilo.nome)}”, che cosa significa una casella mancante?</strong>
           <select class="specialized-missing-setting" data-specialized-missing-column="${escapeHtml(profilo.nome)}">
             <option value="">Scegli una risposta</option>
             <option value="escludi_percorso"${valore === "escludi_percorso" ? " selected" : ""}>Non usare questa colonna per le coppie coinvolte</option>
-            <option value="stringa_vuota"${valore === "stringa_vuota" ? " selected" : ""}>Confermo che significa un testo di lunghezza zero</option>
+            ${alternativa}
           </select>
         </label>
-        <p>Il sito non trasforma automaticamente una casella vuota in una parola o in uno zero.</p>
+        <p>Non attribuiamo automaticamente dissimilarità zero a dati mancanti. ${ruolo === "insieme" ? "Puoi usare [] nelle celle del CSV per un insieme vuoto realmente osservato." : ""}</p>
       </div>`);
     });
     interpretazione.gruppi.forEach(gruppo => {
@@ -2048,6 +2123,25 @@
     disegnaQuestionario();
   });
   $("adaptive-questions").addEventListener("change", evento => {
+    if (evento.target.matches(".set-setting")) {
+      if (!interpretazione.configurazioniInsiemi) interpretazione.configurazioniInsiemi = {};
+      const nome = evento.target.dataset.setColumn;
+      if (!interpretazione.configurazioniInsiemi[nome]) interpretazione.configurazioniInsiemi[nome] = {};
+      interpretazione.configurazioniInsiemi[nome][evento.target.dataset.setKey] = evento.target.value;
+      annullaScelteNormalizzazione();
+      disegnaQuestionario();
+      return;
+    }
+    if (evento.target.matches(".cycle-period-setting, .cycle-unit-setting")) {
+      if (!interpretazione.configurazioniCicliche) interpretazione.configurazioniCicliche = {};
+      const nome = evento.target.dataset.cycleColumn;
+      if (!interpretazione.configurazioniCicliche[nome]) interpretazione.configurazioniCicliche[nome] = {};
+      interpretazione.configurazioniCicliche[nome][evento.target.matches(".cycle-period-setting") ? "periodo" : "unita"] = evento.target.value;
+      annullaScelteNormalizzazione();
+      if (evento.target.matches(".cycle-unit-setting")) disegnaQuestionario();
+      else nascondiPiano();
+      return;
+    }
     if (evento.target.matches(".text-measure-setting")) {
       if (!interpretazione.misureTestualiPerColonna) interpretazione.misureTestualiPerColonna = {};
       interpretazione.misureTestualiPerColonna[evento.target.dataset.textMeasureColumn] =

@@ -370,6 +370,46 @@ La scelta di Kendall in un blocco di profili o di Hamming in una
 colonna testuale non cambia le misure degli altri percorsi; la matrice
 finale aggrega i contributi disponibili con i pesi confermati.
 
+### Insiemi di etichette e grandezze cicliche
+
+Una colonna può essere dichiarata **insieme di etichette** quando una
+cella contiene più etichette non ordinate (per esempio `rosso|blu`).
+La struttura viene confermata dall'utente, insieme a separatore
+(`|`, `;` o `,`), distinzione tra maiuscole/minuscole, eliminazione
+delle ripetizioni e scelta tra Jaccard e Dice. Gli spazi esterni alle
+etichette vengono ignorati; un delimitatore consecutivo è segnalato
+come errore e non viene riparato automaticamente.
+
+L'intera cella `[]` rappresenta **un insieme vuoto osservato** e
+produce distanza zero rispetto a un altro insieme vuoto; una cella
+vuota, `NA` o `?` rappresenta invece un dato mancante, a meno
+che l'utente non confermi esplicitamente la sostituzione con l'insieme
+vuoto. Le formule sono
+
+\[
+d_J(A,B)=1-\frac{|A\cap B|}{|A\cup B|},\qquad
+d_D(A,B)=1-\frac{2|A\cap B|}{|A|+|B|},
+\]
+
+con dissimilarità zero per due insiemi vuoti osservati. Le due
+dissimilarità appartengono a \([0,1]\). Dice, a differenza di Jaccard,
+può violare la disuguaglianza triangolare.
+
+Per una **grandezza ciclica** in una colonna numerica si richiedono
+esplicitamente periodo finito e positivo \(P\), unità e valori
+rappresentativi in \([0,P)\). Si applica ai dati originali la formula
+
+\[
+\delta_{\rm cic}(u,v)=\frac{2}{P}\min\{|u-v|,P-|u-v|\}.
+\]
+
+Non si convertono date in angoli e non si modifica automaticamente
+un valore negativo o maggiore/uguale a \(P\). Una cella ciclica
+mancante non viene convertita in zero; l'utente può escludere il
+contributo del blocco per quella coppia. Entrambe le famiglie
+producono blocchi indipendenti, non contati anche in Gower, che
+si aggregano nella stessa matrice unica, con pesi per percorso.
+
 ### Gruppi di caratteristiche binarie (Hamming, Rogers–Tanimoto, Jaccard, Dice)
 
 L'utente può assegnare almeno due colonne con ruolo **binaria** o

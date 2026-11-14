@@ -79,7 +79,7 @@ function createHarness() {
     const names = lines[0].split(",");
     const data = lines.slice(1).map(line => line.split(","));
     const numerical = n => n !== "categoria" && n !== "livello" &&
-      n !== "codice" && n !== "id" && n !== "gruppo" && n !== "presente";
+      n !== "codice" && n !== "etichette" && n !== "id" && n !== "gruppo" && n !== "presente";
     const colonne = names.map((nome, i) => {
       const tipo = /^flag[12]$/.test(nome) ? "binaria" :
         numerical(nome) ? "numerica" : "non_numerica";
@@ -111,7 +111,8 @@ function createHarness() {
             /^flag[12]$/.test(nome) ? "presenza" :
             nome === "livello" ? "livello" :
             nome === "categoria" || nome === "gruppo" ? "categoria" :
-            nome === "codice" ? "testo" : "quantita",
+            nome === "codice" ? "testo" :
+            nome === "etichette" ? "categoria" : "quantita",
           usaNelConfronto: nome !== "id"
         }))
       },
@@ -549,7 +550,60 @@ async function testGruppoBinarioESceltaTestuale() {
     "damerau_levenshtein");
 }
 
+async function testInsiemiECicliQuestionario() {
+  const h = createHarness();
+  h.fire("csv-file", "change", {target: {files: [{
+    name: "insiemi.csv", type: "text/csv", size: 140,
+    text: async () => "etichette,categoria,id\nrosso|blu,x,A\nrosso|verde,y,B\n[],x,C"
+  }]}});
+  await flush();
+  assert.match(h.element("meaning-body").innerHTML, /value="insieme"/);
+  const setRole = h.customTarget(".semantic-role", {semanticColumn: "0"}, "insieme");
+  h.fire("meaning-body", "change", {target: setRole});
+  assert.match(h.element("adaptive-questions").innerHTML, /class="set-setting"/);
+  assert.match(h.element("adaptive-questions").innerHTML, /data-set-key="ripetizioni"/);
+  for (const [key, value] of Object.entries({
+    conferma: "si", separatore: "|", maiuscole: "ignora",
+    ripetizioni: "deduplica", misura: "dice"
+  })) {
+    h.fire("adaptive-questions", "change", {target: h.customTarget(
+      ".set-setting", {setColumn: "etichette", setKey: key}, value
+    )});
+  }
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  const a = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(a.colonne.etichette.ruolo, "insieme");
+  assert.equal(a.configurazioniInsiemi.etichette.misura, "dice");
+  assert.equal(a.configurazioniInsiemi.etichette.maiuscole, "ignora");
+  assert.equal(a.configurazioniInsiemi.etichette.separatore, "|");
+
+  const c = createHarness();
+  c.fire("csv-file", "change", {target: {files: [{
+    name: "ciclo.csv", type: "text/csv", size: 120,
+    text: async () => "ora,categoria,id\n23,x,A\n0,x,B\n12,y,C"
+  }]}});
+  await flush();
+  const cycleRole = c.customTarget(".semantic-role", {semanticColumn: "0"}, "ciclica");
+  c.fire("meaning-body", "change", {target: cycleRole});
+  assert.match(c.element("adaptive-questions").innerHTML, /class="cycle-period-setting"/);
+  assert.match(c.element("adaptive-questions").innerHTML, /class="cycle-unit-setting"/);
+  c.fire("adaptive-questions", "change", {target: c.customTarget(
+    ".cycle-period-setting", {cycleColumn: "ora"}, "24"
+  )});
+  c.fire("adaptive-questions", "change", {target: c.customTarget(
+    ".cycle-unit-setting", {cycleColumn: "ora"}, "ore"
+  )});
+  c.fire("prepare-comparison-plan", "click");
+  await flush();
+  const b = c.observations.planCalls.at(-1).interpretazione;
+  assert.equal(b.colonne.ora.ruolo, "ciclica");
+  assert.equal(b.configurazioniCicliche.ora.periodo, "24");
+  assert.equal(b.configurazioniCicliche.ora.unita, "ore");
+}
+
 (async () => {
+  await testInsiemiECicliQuestionario();
   await testGruppoBinarioESceltaTestuale();
   await testMahalanobisAvanzata();
   await testRiscalamentoNumericoInTabellaMista();

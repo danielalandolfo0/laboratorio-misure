@@ -565,6 +565,7 @@ ETICHETTE_RUOLO = {
     "presenza": "Presenza o assenza", "binaria": "Risposta con due possibilità",
     "categoria": "Categoria senza ordine", "identificativo": "Codice identificativo",
     "data": "Data o orario", "testo": "Testo o sequenza",
+    "insieme": "Insieme di etichette", "ciclica": "Grandezza ciclica",
     "risultato": "Risultato da spiegare o prevedere",
     "altro": "Significato da specificare", "ignoto": "Significato non ancora noto",
 }
@@ -646,6 +647,66 @@ def _blocco_indipendente(nome: str, ruolo: str, analisi: dict[str, Any], interpr
             misura, motivo = "Da decidere", "Occorre stabilire come le date debbano contribuire al confronto."
             avvisi.append("Rispondi alla domanda sull’uso delle date.")
             stato = "da_completare"
+    elif ruolo == "insieme":
+        configurata = interpretazione.get("configurazioniInsiemi") or {}
+        specifica = configurata.get(nome, {}) if isinstance(configurata, dict) else {}
+        if not isinstance(specifica, dict):
+            specifica = {}
+        scelta = specifica.get("misura")
+        if tipo != "non_numerica":
+            misura, motivo = "Da decidere", "Per gli insiemi servono celle con etichette, non quantità."
+            avvisi.append("Controlla il tipo di dato: imposta la colonna come non numerica.")
+            stato = "da_completare"
+        elif (specifica.get("conferma") != "si"
+              or specifica.get("separatore") not in {"|", ";", ","}
+              or specifica.get("maiuscole") not in {"distingui", "ignora"}
+              or specifica.get("ripetizioni") != "deduplica"
+              or scelta not in {"jaccard", "dice"}):
+            misura, motivo = "Da decidere", (
+                "Una cella può descrivere un insieme solo se confermi separatore, "
+                "trattamento delle etichette, ripetizioni e formula."
+            )
+            avvisi.append(
+                "Conferma la struttura insiemistica, il separatore, le maiuscole, "
+                "le ripetizioni e scegli Jaccard oppure Dice."
+            )
+            stato = "da_completare"
+        else:
+            misura = ("Dissimilarità di Jaccard tra insiemi" if scelta == "jaccard"
+                      else "Dissimilarità di Dice tra insiemi")
+            motivo = (
+                "Confronta le etichette come insiemi, indipendentemente dall'ordine. "
+                "Le ripetizioni sono ignorate; [] indica un insieme vuoto osservato. "
+                "Jaccard e Dice valgono zero per due insiemi entrambi vuoti."
+            )
+    elif ruolo == "ciclica":
+        opzioni = interpretazione.get("configurazioniCicliche") or {}
+        specifica = opzioni.get(nome, {}) if isinstance(opzioni, dict) else {}
+        if not isinstance(specifica, dict):
+            specifica = {}
+        try:
+            periodo = float(str(specifica.get("periodo", "")).strip().replace(",", "."))
+        except (ValueError, TypeError):
+            periodo = math.nan
+        if tipo not in {"numerica", "numerica_costante", "binaria"}:
+            misura, motivo = "Da decidere", "La distanza ciclica richiede numeri."
+            avvisi.append("La colonna deve essere numerica; verifica il tipo rilevato.")
+            stato = "da_completare"
+        elif (not math.isfinite(periodo) or periodo <= 0
+              or specifica.get("unita") not in {"ore", "giorni", "gradi", "radianti", "altre"}):
+            misura, motivo = "Da decidere", "Per il ciclo occorrono un periodo positivo e un'unità dichiarati."
+            avvisi.append(
+                "Indica il periodo P > 0 e le unità di misura. "
+                "I valori devono rappresentare posizioni in [0,P)."
+            )
+            stato = "da_completare"
+        else:
+            misura = "Distanza ciclica normalizzata"
+            motivo = (
+                f"Periodo dichiarato P={format(periodo,'.10g')} "
+                f"({specifica['unita']}); confronta l'arco più corto sul ciclo, "
+                "con risultato in [0,1]. I valori originali non vengono riscalati."
+            )
     elif ruolo == "testo":
         preferenze = interpretazione.get("misureTestualiPerColonna") or {}
         if not isinstance(preferenze, dict):
@@ -1009,6 +1070,9 @@ MISURE_SPECIALIZZATE_CALCOLABILI = {
     "Distanza di Levenshtein normalizzata",
     "Distanza di Hamming normalizzata",
     "Distanza di Damerau–Levenshtein normalizzata",
+    "Dissimilarità di Jaccard tra insiemi",
+    "Dissimilarità di Dice tra insiemi",
+    "Distanza ciclica normalizzata",
     "Distanza di Hamming binaria normalizzata",
     "Dissimilarità di Rogers–Tanimoto",
     "Dissimilarità di Jaccard binaria",
@@ -2291,19 +2355,31 @@ def _politica_mancanti(
         if not isinstance(configurate, dict):
             raise ValueError("Le strategie per i mancanti testuali non sono valide.")
         strategia = configurate.get(nome, "")
-        if strategia not in {"escludi_percorso", "stringa_vuota"}:
+        metodo = percorso.get("metodo")
+        if metodo in {
+            "Dissimilarità di Jaccard tra insiemi",
+            "Dissimilarità di Dice tra insiemi",
+        }:
+            ammesse = {"escludi_percorso", "insieme_vuoto"}
+        elif metodo == "Distanza ciclica normalizzata":
+            ammesse = {"escludi_percorso"}
+        else:
+            ammesse = {"escludi_percorso", "stringa_vuota"}
+        if strategia not in ammesse:
             return {
                 "presenza": True,
                 "strategia": "da_definire",
-                "descrizione": f"Scegli come trattare le caselle vuote nella colonna “{nome}”.",
+                "descrizione": f"Scegli come trattare le caselle vuote nella colonna “{nome}” senza attribuire loro una distanza nulla.",
                 "pronta": False,
                 "colonne": colonne,
             }
         osservate = numero_istanze - analisi_per_nome[nome]["mancanti"]
-        pronta = strategia == "stringa_vuota" or osservate >= 2
+        pronta = strategia in {"stringa_vuota", "insieme_vuoto"} or osservate >= 2
         descrizione = (
             "Le coppie che coinvolgono una casella vuota non ricevono un contributo da questo percorso."
             if strategia == "escludi_percorso"
+            else "La casella vuota è trattata esplicitamente come insieme vuoto osservato."
+            if strategia == "insieme_vuoto"
             else "La casella vuota è trattata esplicitamente come testo di lunghezza zero."
         )
         if not pronta:
@@ -2314,7 +2390,7 @@ def _politica_mancanti(
             "descrizione": descrizione,
             "pronta": pronta,
             "colonne": colonne,
-            "righeUtilizzabili": numero_istanze if strategia == "stringa_vuota" else osservate,
+            "righeUtilizzabili": numero_istanze if strategia in {"stringa_vuota", "insieme_vuoto"} else osservate,
         }
     return {
         "presenza": True,
@@ -2708,10 +2784,20 @@ def _crea_percorsi(
 
     for nome in separati:
         blocco = blocchi_per_nome[nome]
+        specifica_speciale: dict[str, Any] = {}
+        if ruoli[nome] == "insieme":
+            specifica_speciale = dict(
+                (interpretazione.get("configurazioniInsiemi") or {}).get(nome, {})
+            )
+        elif ruoli[nome] == "ciclica":
+            specifica_speciale = dict(
+                (interpretazione.get("configurazioniCicliche") or {}).get(nome, {})
+            )
         percorsi.append({
             "tipo": "separato", "titolo": ETICHETTE_RUOLO.get(ruoli[nome], "Confronto separato"),
             "colonne": [nome], "metodo": blocco["misura"],
             "motivo": blocco["motivo"], "stato": blocco["stato"],
+            "parametri": specifica_speciale,
         })
 
     for gruppo, blocco in gruppi_con_blocco:
@@ -2751,7 +2837,10 @@ def _limite_teorico_percorso(percorso: dict[str, Any]) -> float | None:
     if tipo == "separato":
         if misura in {"Uguale o diverso", "Distanza di Levenshtein normalizzata",
                       "Distanza di Hamming normalizzata",
-                      "Distanza di Damerau–Levenshtein normalizzata"}:
+                      "Distanza di Damerau–Levenshtein normalizzata",
+                      "Dissimilarità di Jaccard tra insiemi",
+                      "Dissimilarità di Dice tra insiemi",
+                      "Distanza ciclica normalizzata"}:
             return 1.0
     if percorso.get("tipoGruppo") == "vettore_binario":
         return 1.0
@@ -2933,6 +3022,101 @@ def _verifica_vettore_binario_percorso(
         percorso.setdefault("avvisi", []).append(str(errore))
 
 
+
+def _leggi_insieme_etichette(
+    valore: str, specifica: dict[str, Any], politica: str,
+) -> frozenset[str] | None:
+    """La cella '[]' rappresenta l'insieme vuoto, la cella vuota è mancante."""
+    if mancante(valore):
+        if politica == "insieme_vuoto":
+            return frozenset()
+        if politica in {"escludi_percorso", "non_necessaria"}:
+            return None
+        raise ValueError("Manca una politica esplicita per le celle vuote degli insiemi.")
+    if str(valore).strip() == "[]":
+        return frozenset()
+    separatore = specifica.get("separatore")
+    if separatore not in {"|", ";", ","}:
+        raise ValueError("Conferma il separatore delle etichette.")
+    elementi = [v.strip() for v in str(valore).split(separatore)]
+    if any(not s or s == "[]" for s in elementi):
+        raise ValueError(
+            "Sono presenti etichette vuote o il simbolo [] all'interno di una lista: "
+            "scrivi [] soltanto per l'intero insieme vuoto; correggi i separatori consecutivi."
+        )
+    if specifica.get("maiuscole") == "ignora":
+        elementi = [s.casefold() for s in elementi]
+    elif specifica.get("maiuscole") != "distingui":
+        raise ValueError("Conferma come trattare maiuscole e minuscole negli insiemi.")
+    if specifica.get("ripetizioni") != "deduplica":
+        raise ValueError("Conferma che le etichette ripetute contano una sola volta.")
+    return frozenset(elementi)
+
+
+def _distanza_insiemi(
+    a: frozenset[str], b: frozenset[str], scelta: str,
+) -> float:
+    comuni = len(a & b)
+    if scelta == "jaccard":
+        totale = len(a | b)
+        return 0.0 if totale == 0 else 1.0 - comuni / totale
+    if scelta == "dice":
+        totale = len(a) + len(b)
+        return 0.0 if totale == 0 else 1.0 - 2.0 * comuni / totale
+    raise ValueError("Scegli Jaccard oppure Dice per confrontare gli insiemi.")
+
+
+def _distanza_ciclica(a: float, b: float, periodo: float) -> float:
+    if not math.isfinite(periodo) or periodo <= 0:
+        raise ValueError("Il periodo deve essere finito e strettamente positivo.")
+    if not all(math.isfinite(x) and 0 <= x < periodo for x in (a, b)):
+        raise ValueError("I valori ciclici devono appartenere all'intervallo [0,P).")
+    ampiezza = abs(a - b)
+    return 2.0 * min(ampiezza, periodo - ampiezza) / periodo
+
+
+def _verifica_specializzati_percorso(
+    percorso: dict[str, Any], risultato: dict[str, Any],
+) -> None:
+    """Controlla i domini prima di dichiarare il piano completo."""
+    if percorso["tipo"] != "separato" or percorso["stato"] == "da_completare":
+        return
+    metodo = percorso["metodo"]
+    if metodo not in {
+        "Dissimilarità di Jaccard tra insiemi",
+        "Dissimilarità di Dice tra insiemi",
+        "Distanza ciclica normalizzata",
+    }:
+        return
+    tabella = risultato["originale"]
+    indice = tabella["intestazioni"].index(percorso["colonne"][0])
+    strategia = percorso["mancanti"]["strategia"]
+    specifica = percorso.get("parametri", {})
+    try:
+        for numero_riga, riga in enumerate(tabella["righe"], 1):
+            grezzo = riga[indice]
+            if metodo == "Distanza ciclica normalizzata":
+                if mancante(grezzo):
+                    if strategia == "escludi_percorso":
+                        continue
+                    raise ValueError("La cella ciclica è mancante e non è stata esclusa.")
+                valore = leggi_numero(grezzo, tabella["separatore"])
+                if valore is INVALIDO or valore is None:
+                    raise ValueError(f"Riga {numero_riga}: non è un numero ciclico valido.")
+                periodo = float(str(specifica["periodo"]).replace(",", "."))
+                _distanza_ciclica(float(valore), float(valore), periodo)
+            else:
+                try:
+                    _leggi_insieme_etichette(grezzo, specifica, strategia)
+                except ValueError as errore:
+                    raise ValueError(f"Riga {numero_riga}: {errore}") from errore
+    except (ValueError, KeyError, TypeError) as errore:
+        percorso["stato"] = "da_completare"
+        percorso["calcolo"]["disponibile"] = False
+        percorso["calcolo"]["descrizione"] = "Controlla il formato del blocco specializzato."
+        percorso.setdefault("avvisi", []).append(str(errore))
+
+
 def _verifica_distribuzione_percorso(
     percorso: dict[str, Any],
     risultato: dict[str, Any],
@@ -3069,6 +3253,7 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
     for percorso in percorsi:
         _verifica_distribuzione_percorso(percorso, risultato)
         _verifica_vettore_binario_percorso(percorso, risultato)
+        _verifica_specializzati_percorso(percorso, risultato)
     # Hamming richiede che tutte le sequenze confrontabili abbiano una
     # lunghezza comune. Il controllo precede il calcolo; non si converte
     # implicitamente a Levenshtein se le lunghezze sono differenti.
@@ -4543,7 +4728,7 @@ def _calcola_matrice_specializzata(
         strategia = percorso["mancanti"].get("strategia")
         valori = [
             None if mancante(riga[indici[0]]) and strategia == "escludi_percorso"
-            else "" if mancante(riga[indici[0]]) and strategia == "stringa_vuota"
+            else "" if mancante(riga[indici[0]]) and strategia in {"stringa_vuota", "insieme_vuoto"}
             else riga[indici[0]]
             for riga in tabella["righe"]
         ]
@@ -4565,6 +4750,20 @@ def _calcola_matrice_specializzata(
                     distanza = _damerau_levenshtein_normalizzata(
                         str(valori[i]).strip(), str(valori[k]).strip()
                     )
+                elif metodo in {"Dissimilarità di Jaccard tra insiemi", "Dissimilarità di Dice tra insiemi"}:
+                    specifica = percorso["parametri"]
+                    insieme_i = _leggi_insieme_etichette(str(valori[i]), specifica, strategia)
+                    insieme_k = _leggi_insieme_etichette(str(valori[k]), specifica, strategia)
+                    distanza = _distanza_insiemi(
+                        insieme_i, insieme_k, specifica["misura"]
+                    )
+                elif metodo == "Distanza ciclica normalizzata":
+                    periodo = float(str(percorso["parametri"]["periodo"]).replace(",", "."))
+                    valore_i = leggi_numero(valori[i], tabella["separatore"])
+                    valore_k = leggi_numero(valori[k], tabella["separatore"])
+                    if valore_i is INVALIDO or valore_k is INVALIDO or valore_i is None or valore_k is None:
+                        raise ValueError("La grandezza ciclica richiede valori numerici completi.")
+                    distanza = _distanza_ciclica(float(valore_i), float(valore_k), periodo)
                 else:
                     raise ValueError(f"Il confronto separato “{metodo}” non è ancora calcolabile.")
                 matrice[i][k] = distanza
@@ -4712,6 +4911,19 @@ def _calcola_matrice_specializzata(
         + ("le trasformazioni numeriche confermate." if percorso["preelaborazione"]["usaTabellaTrasformata"]
            else "i valori originali.")
     )
+    if metodo in {"Dissimilarità di Jaccard tra insiemi", "Dissimilarità di Dice tra insiemi"}:
+        nota += (
+            " Ogni cella viene interpretata come insieme di etichette; "
+            "[] è un insieme vuoto osservato, distinto dai mancanti. "
+            "Etichette ripetute contano una sola volta. "
+            "Confronto di due insiemi vuoti: dissimilarità zero."
+        )
+    if metodo == "Distanza ciclica normalizzata":
+        nota += (
+            f" Periodo P={percorso['parametri']['periodo']} "
+            f"({percorso['parametri']['unita']}); "
+            "valori richiesti in [0,P), senza correzioni modulari implicite."
+        )
     if percorso.get("tipoGruppo") == "vettore_binario":
         nota += (
             " Il gruppo confronta simultaneamente tutte le colonne come "
