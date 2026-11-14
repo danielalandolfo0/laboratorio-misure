@@ -2637,9 +2637,10 @@ for parametro in ("0", "1e-15", "0.5", "nan", "xyz"):
 
 # Con meno osservazioni delle coordinate, la classica è impossibile,
 # ma le due alternative esplicite restano matematicamente definite.
-m_scarse = p.prepara_tabella(p.leggi_csv(
-    "x,y,z\n0,0,0\n1,2,3"
-))
+m_scarse = p.prepara_tabella(
+    p.leggi_csv("x,y,z\n0,0,0\n1,2,3"),
+    [{"tipo": "numerica", "metodo": "auto"}, {}, {}],
+)
 scarse_base = {**m_base,
     "colonne": {nome: {"ruolo": "quantita", "usa": True}
                 for nome in ("x", "y", "z")}}
