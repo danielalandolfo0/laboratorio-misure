@@ -270,7 +270,14 @@ header p {
 .plan-warnings p { margin: 0 0 6px; color: #76420b; font-size: .76rem; }
 .plan-warnings ul { margin: 6px 0 0; padding-left: 20px; color: var(--muted); font-size: .75rem; }
 .plan-warnings li + li { margin-top: 4px; }
-.gower-actions { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+.gower-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.gower-actions .data-privacy-note {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: .74rem;
+  line-height: 1.45;
+}
 .gower-actions[hidden],
 .gower-result[hidden] { display: none; }
 .gower-actions .action { width: auto; margin: 0; }
