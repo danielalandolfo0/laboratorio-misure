@@ -40,7 +40,7 @@
   }
 
   function etichettaMetodo(metodo) {
-    return ({ zscore: "Z-score", robusto: "Scala robusta", minmax: "Min–max", maxabs: "Max-abs", log1p: "Log(1+x)", costante: "Valore 0", nessuno: "Nessuno" })[metodo];
+    return ({ zscore: "Z-score", robusto: "Scala robusta", minmax: "Min–max", maxabs: "Max-abs", log: "Log(x)", log1p: "Log(1+x)", costante: "Valore 0", nessuno: "Nessuno" })[metodo];
   }
 
   function mostraErrore(messaggio) {
@@ -68,6 +68,8 @@
             ? `min ${formatoNumero(s.minimo)} · max ${formatoNumero(s.massimo)}`
             : colonna.metodo === "maxabs"
               ? `max |x| ${formatoNumero(s.massimoAssoluto)}`
+          : colonna.metodo === "log"
+            ? "log(x) · rapporti |log(x/y)| · non è una standardizzazione"
           : colonna.metodo === "log1p"
             ? "log(1+x) · non è una standardizzazione" 
           : colonna.metodo === "costante" ? "deviazione 0" : "—";
@@ -87,7 +89,8 @@
           <option value="robusto"${metodo === "robusto" ? " selected" : ""}>Usa mediana e IQR (robusto: non elimina gli outlier)</option>
           <option value="minmax"${metodo === "minmax" ? " selected" : ""}>Porta i valori tra 0 e 1 (min–max)</option>
           <option value="maxabs"${metodo === "maxabs" ? " selected" : ""}>Dividi per il valore massimo assoluto (max-abs)</option>
-          <option value="log1p"${metodo === "log1p" ? " selected" : ""}${s.minimo < 0 ? " disabled" : ""}>Comprimi le differenze grandi: log(1+x), solo dati non negativi</option>
+          <option value="log"${metodo === "log" ? " selected" : ""}${s.minimo <= 0 ? " disabled" : ""}>Confronta rapporti: log(x), soltanto per valori strettamente positivi (x &gt; 0)</option>
+          <option value="log1p"${metodo === "log1p" ? " selected" : ""}${s.minimo < 0 ? " disabled" : ""}>Comprimi le differenze grandi: log(1+x), per valori non negativi (x ≥ 0)</option>
           <option value="nessuno"${metodo === "nessuno" ? " selected" : ""}>Mantieni i valori originali</option>
         </select><button class="method-info-button" data-info-column="${indice}" type="button" aria-label="Informazioni sulla scelta per ${escapeHtml(colonna.nome)}" aria-controls="method-reason-${indice}" aria-expanded="false">i</button></div><p class="method-reason" id="method-reason-${indice}" hidden>${escapeHtml(colonna.motivo)}</p></div></td>
         <td><span class="method-params">${parametri}</span></td>
@@ -436,9 +439,11 @@
           "puoi mantenere i valori originali oppure mantenere gli scarti ma " +
           "riscalare con mediana e IQR" +
           (st.iqr > 0 ? "" : " (non disponibile: IQR nullo)") +
-          (st.minimo >= 0
-            ? "; puoi anche valutare log(1+x), che comprime i valori grandi ma cambia la scala delle differenze"
-            : "; log(1+x) non è disponibile perché esistono valori negativi") +
+          (st.minimo > 0
+            ? "; puoi valutare log(x) se contano i rapporti tra valori positivi, oppure log(1+x) se è coerente con la scala e lo zero"
+            : st.minimo === 0
+              ? "; log(x) non è definito in zero, ma puoi valutare log(1+x) se aggiungere 1 nel logaritmo è semanticamente motivato"
+              : "; né log(x) né log(1+x) sono disponibili senza modificare i dati perché ci sono valori negativi") +
           ". Nessuna alternativa viene applicata sulla sola base di questi indicatori.";
       }).filter(Boolean);
       const spiegazioni = [

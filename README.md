@@ -99,6 +99,49 @@ finale contengono soltanto le righe effettivamente utilizzate. Mahalanobis con
 imputazione non viene abilitata automaticamente, perché richiede una nuova
 verifica della covarianza dopo il completamento dei dati.
 
+## Trasformazioni logaritmiche: log(x) e log(1+x)
+
+Nella tabella del preprocessing numerico si possono ora scegliere **due
+trasformazioni distinte, entrambe manuali**:
+
+- **log(x)**, definita solo per valori **strettamente positivi** x > 0.
+  Gli scarti assoluti tra i valori trasformati soddisfano
+  |log(x) − log(y)| = |log(x/y)|: il confronto dipende dal **rapporto**
+  fra i valori positivi anziché dallo scarto sulla scala originale.
+  Non è un metodo di standardizzazione e non corregge automaticamente
+  outlier o unità incoerenti.
+- **log(1+x)**, definita per x ≥ 0. La trasformazione conserva lo zero
+  e comprime differenze grandi, ma lo scarto è
+  |log((1+x)/(1+y))|, **non** |log(x/y)|. La costante 1 fa parte della
+  trasformazione richiesta dall'utente e non è aggiunta come
+  correzione nascosta dei dati.
+
+Se esistono **zeri**, l'opzione log(x) è disabilitata e il motore
+rifiuta la scelta anche su dati importati programmaticamente. Con
+**valori negativi** entrambe le trasformazioni sono disabilitate
+(per la definizione di log(1+x) qui adottata, con dominio x ≥ 0).
+Non si applicano traslazioni automatiche né pseudoconteggi.
+Le trasformazioni vengono applicate soltanto dopo scelta e conferma
+dell'utente e sono elencate esplicitamente nel piano e nell'anteprima.
+
+Le trasformazioni logaritmiche sono ammesse **per singola colonna** e
+possono convivere con z-score, min–max, robusto, MaxAbs o valori
+originali nelle altre colonne di un blocco numerico. La scelta non
+costringe tutte le colonne a usare lo stesso metodo. Per una colonna
+costante positiva trasformata manualmente con log(x), l'anteprima
+mostra il vero valore log(c) (e le differenze tra righe restano zero).
+Il sistema impedisce di trasformare un valore **imputato zero** con
+log(x), segnalando l'incompatibilità già nel piano.
+
+Per le misure che richiedono i valori originali, come la Gower
+classica e le misure relative, si continua a rispettare il percorso
+dichiarato senza applicare di nascosto la trasformazione preliminare.
+L'argomento di un logaritmo deve rappresentare un numero puro o
+essere espresso rispetto a un'unità di riferimento coerente; usare
+una scala di unità diversa modifica il valore di log(x), pur senza
+modificare le differenze logaritmiche quando la conversione applica
+lo stesso fattore positivo a tutti i valori della colonna.
+
 ## Mahalanobis: covarianza singolare o instabile
 
 Il percorso numerico distingue tre operazioni:

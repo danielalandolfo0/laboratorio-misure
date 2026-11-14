@@ -1952,6 +1952,123 @@ try:
 except ValueError as errore:
     assert "non negativi" in str(errore) or "maggior" in str(errore)
 
+
+# Il logaritmo puro log(x) non è log(1+x): confronta RAPPORTI, non
+# scarti assoluti, e ammette esclusivamente valori strettamente positivi.
+csv_log_positivo = csv_log.replace("0,3\n", "0.5,3\n", 1)
+scelte_log_puro = [
+    {"tipo": "auto", "metodo": "log"},
+    {"tipo": "auto", "metodo": "nessuno"},
+]
+preparata_log_puro = p.prepara_tabella(
+    p.leggi_csv(csv_log_positivo), scelte_log_puro
+)
+assert preparata_log_puro["colonne"][0]["sceltaMetodo"] == "log"
+assert preparata_log_puro["colonne"][0]["metodo"] == "log"
+quasi_uguali(preparata_log_puro["trasformate"][0][0], math.log(0.5))
+quasi_uguali(preparata_log_puro["trasformate"][1][0], math.log(1.0))
+quasi_uguali(preparata_log_puro["trasformate"][9][0], math.log(20.0))
+quasi_uguali(abs(math.log(0.5) - math.log(2)), abs(math.log(0.5/2)))
+assert all(
+    a != b for a, b in zip(
+        [r[0] for r in preparata_log_puro["trasformate"]],
+        [r[0] for r in p.prepara_tabella(
+            p.leggi_csv(csv_log_positivo),
+            [{"tipo": "auto", "metodo": "log1p"}, scelte_log_puro[1]]
+        )["trasformate"]]
+    )
+)
+analisi_log_puro = {c["nome"]: c for c in preparata_log_puro["colonne"]}
+for predefinito in ("zscore", "robusto", "minmax", "maxabs"):
+    trasf_pura = p._preelaborazione_numerica(
+        ["a", "b"], analisi_log_puro, predefinito
+    )
+    assert [passo["metodo"] for passo in trasf_pura["passi"]] == [
+        "log", "nessuno"
+    ]
+piano_log_puro = p.crea_piano_confronto(
+    preparata_log_puro, risposte_log
+)
+assert piano_log_puro["completo"], piano_log_puro
+assert [p["metodo"] for p in piano_log_puro["percorsi"][0]["preelaborazione"]["passi"]] == [
+    "log", "nessuno"
+]
+matrice_log_puro = p.calcola_matrice_numerica(
+    preparata_log_puro, risposte_log
+)
+quasi_uguali(
+    matrice_log_puro["matrice"][0][1],
+    math.hypot(math.log(1/0.5), 8 - 3)
+)
+assert matrice_log_puro["matrice"] != p.calcola_matrice_numerica(
+    p.prepara_tabella(
+        p.leggi_csv(csv_log_positivo),
+        [{"tipo": "auto", "metodo": "log1p"}, scelte_log_puro[1]]
+    ), risposte_log
+)["matrice"]
+matrice_log_puro_finale = p.calcola_matrice(
+    preparata_log_puro, risposte_log
+)
+verifica_matrice_finale(matrice_log_puro_finale, 10)
+
+# log(x) non è definito né a 0 né sui negativi. Non si aggiunge 1
+# né qualsiasi altra costante per far rientrare i dati nel dominio.
+for valori in ("0,3\n1,4\n2,5", "-1,3\n1,4\n2,5"):
+    try:
+        p.prepara_tabella(
+            p.leggi_csv("a,b\n" + valori),
+            [{"tipo": "auto", "metodo": "log"}, {}]
+        )
+        assert False, f"log(x) deve rifiutare il CSV {valori!r}"
+    except ValueError as errore:
+        assert "strettamente positivi" in str(errore), str(errore)
+try:
+    p._trasforma_per_percorso(
+        0.0, analisi_log_puro["a"], "log"
+    )
+    assert False, "Una successiva imputazione zero non è nel dominio log(x)."
+except ValueError as errore:
+    assert "strettamente positivi" in str(errore)
+
+# Un campione costante positivo può essere trasformato in modo esatto:
+# log(c) resta log(c), non 0; ogni dissimilarità tra righe resta zero.
+const_log = p.prepara_tabella(
+    p.leggi_csv("a,b\n5,1\n5,2\n5,3"),
+    [{"tipo": "auto", "metodo": "log"}, {"tipo": "auto", "metodo": "nessuno"}]
+)
+assert const_log["colonne"][0]["metodo"] == "log"
+assert all(
+    math.isclose(r[0], math.log(5), abs_tol=1e-12)
+    for r in const_log["trasformate"]
+)
+const_log1p = p.prepara_tabella(
+    p.leggi_csv("a,b\n0,1\n0,2\n0,3"),
+    [{"tipo": "numerica", "metodo": "log1p"}, {}]
+)
+assert all(r[0] == 0 for r in const_log1p["trasformate"])
+
+# Se l'utente propone di imputare uno zero in una colonna con log(x),
+# l'incompatibilità va dichiarata dal piano, non solo dal calcolo.
+csv_log_mancante = csv_log_positivo.replace("4,7\n", "NA,7\n", 1)
+preparata_log_mancante = p.prepara_tabella(
+    p.leggi_csv(csv_log_mancante), scelte_log_puro
+)
+scelte_imputazione_zero = {
+    **risposte_log,
+    "significatoMancanti": "sconosciuto",
+    "mancantiNumericiPerColonna": {"a": "zero"},
+}
+piano_log_zero = p.crea_piano_confronto(
+    preparata_log_mancante, scelte_imputazione_zero
+)
+assert not piano_log_zero["completo"]
+assert any(
+    "log(x) non è definito nello zero" in avviso
+    for percorso in piano_log_zero["percorsi"]
+    for avviso in percorso.get("avvisi", [])
+), piano_log_zero
+assert not piano_log_zero["percorsi"][0]["calcolo"]["disponibile"]
+
 # Conferma che il metodo robusto esplicito non diventi z-score.
 preparata_robusta = p.prepara_tabella(
     p.leggi_csv(csv_log), scelte_robuste_manuali
