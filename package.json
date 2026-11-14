@@ -4,7 +4,6 @@
   "private": true,
   "description": "Laboratorio interattivo di distanze, dissimilarità e similarità",
   "scripts": {
-    "test": "node test/test-misure.js && node test/test-preprocessing-ui.js && python3 test/test_preprocessing.py && python3 test/test_integrazione.py"
+    "test": "node test/test-misure.js && node test/test-preprocessing-ui.js && python3 test/test_preprocessing.py && python3 test/test_integrazione.py && python3 test/test_casi_limite.py"
   }
 }
-
