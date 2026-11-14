@@ -602,7 +602,117 @@ async function testInsiemiECicliQuestionario() {
   assert.equal(b.configurazioniCicliche.ora.unita, "ore");
 }
 
+async function testScelteTemporaliAvanzate() {
+  const h = createHarness();
+  h.fire("csv-file", "change", {target: {files: [{
+    name: "irregolari.csv", type: "text/csv", size: 120,
+    text: async () => "t1,t2,t3,id\n0,3,0,A\n0,5,0,B\n2,4,2,C"
+  }]}});
+  await flush();
+  h.fire("add-column-group", "click");
+  for (const nome of ["t1", "t2", "t3"]) {
+    h.fire("group-assignment-body", "change", {target: h.customTarget(
+      ".group-assignment", {groupColumn: nome}, "gruppo-1"
+    )});
+  }
+  const tipo = h.customTarget(".group-type", {}, "tempo");
+  tipo.closest = () => ({dataset: {groupId: "gruppo-1"}});
+  h.fire("group-config-list", "change", {target: tipo});
+  assert.match(h.element("adaptive-questions").innerHTML,
+    /data-temporal-key="tempiTemporaliGruppi"/);
+  assert.match(h.element("adaptive-questions").innerHTML,
+    /data-temporal-key="unitaTemporaleGruppi"/);
+  h.fire("adaptive-questions", "input", {target: h.customTarget(
+    ".temporal-order-input", {groupId: "gruppo-1"}, "t1; t2; t3"
+  )});
+  h.fire("adaptive-questions", "change", {target: h.customTarget(
+    ".temporal-spacing-select", {groupId: "gruppo-1"}, "irregolare"
+  )});
+  for (const [key,value] of [
+    ["tempiTemporaliGruppi", "0; 1; 4"],
+    ["unitaTemporaleGruppi", "ore"],
+  ]) {
+    const cls = key === "tempiTemporaliGruppi" ? ".temporal-parameter" : ".temporal-option";
+    h.fire("adaptive-questions", "change", {target: h.customTarget(
+      cls, {groupId: "gruppo-1", temporalKey: key}, value
+    )});
+  }
+  h.fire("adaptive-questions", "change", {target: h.customTarget(
+    ".semantic-answer", {answer: "ritardo-gruppo-1"}, "no"
+  )});
+  assert.match(h.element("adaptive-questions").innerHTML,
+    /data-temporal-key="misureTemporaliGruppi"/);
+  h.fire("adaptive-questions", "change", {target: h.customTarget(
+    ".temporal-option", {groupId: "gruppo-1", temporalKey: "misureTemporaliGruppi"}, "pendenze"
+  )});
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  let last = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(last.misureTemporaliGruppi["gruppo-1"], "pendenze");
+  assert.equal(last.tempiTemporaliGruppi["gruppo-1"], "0; 1; 4");
+
+  h.fire("adaptive-questions", "change", {target: h.customTarget(
+    ".semantic-answer", {answer: "ritardo-gruppo-1"}, "si"
+  )});
+  h.fire("adaptive-questions", "change", {target: h.customTarget(
+    ".temporal-option", {groupId: "gruppo-1", temporalKey: "metodiAllineamentoTemporaleGruppi"}, "dtw"
+  )});
+  assert.match(h.element("adaptive-questions").innerHTML,
+    /data-temporal-key="finestreDTWGruppi"/);
+  assert.match(h.element("adaptive-questions").innerHTML,
+    /data-temporal-key="penalizzazioniDTWGruppi"/);
+  h.fire("adaptive-questions", "change", {target: h.customTarget(
+    ".temporal-option", {groupId: "gruppo-1", temporalKey: "penalizzazioniDTWGruppi"}, "si"
+  )});
+  for (const [key, value] of [
+    ["finestreDTWGruppi", "1"],
+    ["pesiRitardoDTWGruppi", "0.5"],
+    ["scaleRitardoDTWGruppi", "2"]
+  ]) {
+    h.fire("adaptive-questions", "input", {target: h.customTarget(
+      ".temporal-parameter", {groupId: "gruppo-1", temporalKey: key}, value
+    )});
+  }
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  last = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(last.penalizzazioniDTWGruppi["gruppo-1"], "si");
+  assert.equal(last.pesiRitardoDTWGruppi["gruppo-1"], "0.5");
+  assert.equal(last.finestreDTWGruppi["gruppo-1"], "1");
+
+  h.fire("adaptive-questions", "change", {target: h.customTarget(
+    ".temporal-option", {groupId: "gruppo-1", temporalKey: "metodiAllineamentoTemporaleGruppi"}, "lcss"
+  )});
+  assert.match(h.element("adaptive-questions").innerHTML,
+    /data-temporal-key="tolleranzeValoreLCSSGruppi"/);
+  assert.match(h.element("adaptive-questions").innerHTML,
+    /data-temporal-key="tolleranzeTempoLCSSGruppi"/);
+  for(const [key,value] of [
+    ["tolleranzeValoreLCSSGruppi", "0.5"],
+    ["tolleranzeTempoLCSSGruppi", "3"]
+  ]) {
+    h.fire("adaptive-questions", "input", {target: h.customTarget(
+      ".temporal-parameter", {groupId: "gruppo-1", temporalKey: key}, value
+    )});
+  }
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  last = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(last.metodiAllineamentoTemporaleGruppi["gruppo-1"], "lcss");
+  assert.equal(last.tolleranzeTempoLCSSGruppi["gruppo-1"], "3");
+  // Modifiche alla struttura invalidano timestamp e conferme precedenti.
+  h.fire("group-assignment-body", "change", {target: h.customTarget(
+    ".group-assignment", {groupColumn: "t3"}, ""
+  )});
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  last = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(last.tempiTemporaliGruppi?.["gruppo-1"], undefined);
+  assert.equal(last.unitaTemporaleGruppi?.["gruppo-1"], undefined);
+}
+
 (async () => {
+  await testScelteTemporaliAvanzate();
   await testInsiemiECicliQuestionario();
   await testGruppoBinarioESceltaTestuale();
   await testMahalanobisAvanzata();
