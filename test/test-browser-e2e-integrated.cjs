@@ -185,7 +185,11 @@ async function main() {
     await page.locator("#comparison-plan").waitFor({state:"visible"});
     assert.equal(await page.locator("#gower-actions").isVisible(),false,
       "Senza le conferme il calcolo deve essere bloccato");
-    assert.match(await page.locator("#comparison-guide-phase").innerText(),/Consulta gli avvisi/);
+    assert.match(await page.locator("#comparison-guide-phase").innerText(),/Completa una domanda/);
+    await page.locator("#comparison-guide-next").click();
+    assert.equal(await page.locator(confirmMixed).evaluate(
+      el => el === document.activeElement), true,
+      "La guida deve raggiungere la conferma ancora mancante");
     checkpoint("Piano incompleto blocca correttamente il calcolo");
     await choose(confirmMixed,"si");
     await choose(confirmOriginal,"si");
