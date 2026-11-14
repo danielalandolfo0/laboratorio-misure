@@ -29,7 +29,7 @@ async function main() {
     locale:"it-IT", acceptDownloads:true
   });
   const page = await context.newPage();
-  page.setDefaultTimeout(45000);
+  page.setDefaultTimeout(16000);
   const errors = [];
   const phases = [];
   page.on("pageerror", err => errors.push("JS: " + err.message));
@@ -117,6 +117,12 @@ async function main() {
     for(let i=0;i<names.length;i++){
       await choose('.semantic-role[data-semantic-column="'+i+'"]',roles[i]);
     }
+    // Il ruolo "testo" e' inizialmente escluso per prudenza:
+    // l'utente deve riabilitare esplicitamente il suo confronto.
+    const textUsed=page.locator('.semantic-use[data-semantic-column="7"]');
+    assert.equal(await textUsed.isChecked(),false,
+      "Una colonna appena dichiarata testo deve richiedere inclusione esplicita");
+    await textUsed.check();
     const idUsed=page.locator('.semantic-use[data-semantic-column="8"]');
     if(await idUsed.isChecked())await idUsed.uncheck();
 
