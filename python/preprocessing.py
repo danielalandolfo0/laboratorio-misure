@@ -2345,7 +2345,7 @@ def _metadati_gower(
                         f"Per la colonna “{nome}” indica i numeri delle righe "
                         "anomale separati da punto e virgola."
                     )
-                parti = [v for v in re.split(r"[;,\\s]+", grezzo_esclusi.strip()) if v]
+                parti = [v for v in re.split(r"[;,\s]+", grezzo_esclusi.strip()) if v]
                 if any(not v.isdigit() or int(v) < 1 or int(v) > len(grezzi) for v in parti):
                     raise ValueError(
                         f"Per “{nome}” le righe anomale devono essere numeri "
