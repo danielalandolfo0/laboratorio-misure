@@ -152,7 +152,7 @@ vicino(p._distanza_lcss([1, 2], [1, 2], [0, 1], [0, 1], 0, 0), 0)
 vicino(p._distanza_lcss([1], [3], [0], [0], 0, 0), 1)
 
 # 6. Invarianti globali e compatibilità semantica dichiarata.
-dati_bray = "x,y\n0,0\n0,0\n3,0"
+dati_bray = "x,y\n0,0\n0,0\n3,2"
 base = {
     "riga": "oggetto",
     "confrontoQuantitativo": "abbondanza",
@@ -203,14 +203,14 @@ vicino(output["matrice"]["matrice"][0][1], 0)
 assert output["matrice"]["diagnosticaFinale"]["coppieZeroDistinte"] == 1
 
 # Non si può convertire in numeri finiti una matrice non valida.
-for matrice in (
-    [[0, math.nan], [math.nan, 0]],
-    [[0, math.inf], [math.inf, 0]],
-    [[0, -0.1], [-0.1, 0]],
-    [[0, 0.3], [0.8, 0]],
+for matrice, messaggio in (
+    ([[0, math.nan], [math.nan, 0]], "non finito"),
+    ([[0, math.inf], [math.inf, 0]], "non finito"),
+    ([[0, -0.1], [-0.1, 0]], "intervallo"),
+    ([[0, 0.3], [0.8, 0]], "simmetrica"),
 ):
     deve_fallire(
-        lambda m=matrice: p._valida_matrice_finale(m, ["A", "B"]), "matrice finale"
+        lambda m=matrice: p._valida_matrice_finale(m, ["A", "B"]), messaggio
     )
 
 print("Collaudo trasversale dei casi limite superato.")
