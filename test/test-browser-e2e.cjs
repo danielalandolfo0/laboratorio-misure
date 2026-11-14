@@ -62,6 +62,24 @@ async function gower(browser){
     assert.equal(m.length,5);assert.ok(m.every(row=>row.length===5));
     equal(number(m[1][2]),.5);equal(number(m[1][3]),1);
     fs.writeFileSync(path.join(OUT,"gower-export.csv"),csv);
+
+    // Cambiando il significato di una coppia categoriale, la misura
+    // locale deve cambiare davvero: blu/rosso passa da 1 a 0.2.
+    await page.locator(
+      '#adaptive-questions select.gower-setting[data-gower-key="modalitaCategorieGower"][data-gower-column="colore"]'
+    ).selectOption("personalizzata");
+    await page.locator(
+      '#adaptive-questions input.gower-nominal-pair[data-gower-nominal-column="colore"]'
+    ).fill("0,2");
+    await page.locator("#prepare-comparison-plan").click();
+    await page.locator("#comparison-plan").waitFor({state:"visible"});
+    assert.equal(await page.locator("#gower-actions").isVisible(),true,
+      "Gower personalizzata non pronta: " +
+      await page.locator("#comparison-plan-warnings").innerText());
+    await page.locator("#calculate-gower").click();
+    await page.locator("#gower-result").waitFor({state:"visible"});
+    const customized=page.locator("#gower-matrix-body tr");
+    equal(number(await customized.nth(0).locator("td").nth(1).innerText()),.1);
     await capture("success");
   }catch(e){await capture("failure");e.message+="\n"+JSON.stringify(errors);throw e}
   finally{await ctx.close()}
@@ -70,7 +88,7 @@ async function mobile(browser){
   const {ctx,page,capture,errors}=await newPage(browser,"numerico-mobile",390);
   try{
     await init(page);
-    await upload(page,"x,y,id\n0,1,A\n1,2,B\n2,3,C\n3,4,D","numerico.csv");
+    await upload(page,"x,y,id\n0,1,A\n1,4,B\n2,2,C\n3,3,D","numerico.csv");
     await page.locator("#row-meaning").selectOption("oggetto");
     await role(page,0,"quantita");await role(page,1,"quantita");await role(page,2,"identificativo");await omit(page,2);
     assert.equal(await page.locator("#scaling-wrap").isVisible(),true);
@@ -91,6 +109,19 @@ async function mobile(browser){
     await page.locator("#comparison-plan").waitFor({state:"visible"});
     assert.match(await page.locator("#comparison-plan-paths").innerText(),/numeriche|euclidea|Minkowski/i);
     assert.equal(await page.locator("#download-work").isEnabled(),true);
+    // Qui la scelta della misura deve appartenere all'utente.
+    await page.locator("#numeric-measure-choice").selectOption("euclidean");
+    await page.locator("#apply-numeric-measure").click();
+    await page.locator("#gower-actions").waitFor({state:"visible"});
+    await page.locator("#calculate-gower").click();
+    await page.locator("#gower-result").waitFor({state:"visible"});
+    assert.equal(await page.locator("#gower-matrix-body tr").count(),4);
+    const mobileExport=page.waitForEvent("download");
+    await page.locator("#download-gower").click();
+    const downloaded=await mobileExport;
+    const matrix=fs.readFileSync(await downloaded.path(),"utf8").trim().split(/\r?\n/);
+    assert.equal(matrix.length,5);
+    fs.writeFileSync(path.join(OUT,"numerico-mobile-export.csv"),matrix.join("\n"));
     await capture("success");
   }catch(e){await capture("failure");e.message+="\n"+JSON.stringify(errors);throw e}
   finally{await ctx.close()}
