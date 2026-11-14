@@ -2663,6 +2663,10 @@ def _politica_mancanti(
                     "come assenza (zero)."
                 ),
                 "pronta": True, "colonne": colonne,
+                "statiPerColonna": (
+                    interpretazione.get("statiMancantiPerColonna") or {}
+                    if interpretazione.get("significatoMancanti") == "misto" else {}
+                ),
             }
         ammesse = {"escludi_percorso", "zero"}
         if tipo_gruppo == "tempo":
@@ -3340,19 +3344,37 @@ def _decodifica_vettori_binari(
     nomi = percorso["colonne"]
     indici = [tabella["intestazioni"].index(nome) for nome in nomi]
     strategia = percorso["mancanti"].get("strategia", "non_necessaria")
+    stati_per_colonna = percorso["mancanti"].get("statiPerColonna") or {}
     positivi = {"1", "1.0", "si", "sì", "yes", "true", "vero", "presente", "attivo"}
     negativi = {"0", "0.0", "no", "false", "falso", "assente", "inattivo"}
     vettori: list[list[int | None] | None] = []
     for numero_riga, riga in enumerate(tabella["righe"], start=1):
         if (strategia == "escludi_percorso"
-                and any(mancante(riga[indice]) for indice in indici)):
+                and any(
+                    mancante(riga[indice]) and (
+                        not stati_per_colonna or
+                        stati_per_colonna.get(nome, {}).get(
+                            str(riga[indice]).strip().casefold()
+                        ) != "assenza"
+                    )
+                    for nome, indice in zip(nomi, indici)
+                )):
             vettori.append(None)
             continue
         valori: list[int | None] = []
         for nome, indice in zip(nomi, indici):
             valore = riga[indice]
             if mancante(valore):
-                if strategia == "zero":
+                marcatore = str(valore).strip().casefold()
+                stato = stati_per_colonna.get(nome, {}).get(marcatore)
+                if stati_per_colonna and stato not in STATI_MANCANTI:
+                    raise ValueError(
+                        f"Riga {numero_riga}, colonna “{nome}”: "
+                        "specifica il significato del marcatore mancante."
+                    )
+                if stato == "assenza" or (
+                    not stati_per_colonna and strategia == "zero"
+                ):
                     valori.append(0)
                 elif strategia == "pairwise":
                     valori.append(None)
@@ -3908,6 +3930,7 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
             }
     return {
         "anteprimaNumerica": anteprima_numerica,
+        "diagnosticaMancantiSemantici": diagnostica_mancanti,
         "diagnosi": diagnosi, "blocchi": blocchi, "percorsi": percorsi, "avvisi": avvisi,
         "completo": completo, "conteggioBlocchi": len(blocchi),
         "conteggioPercorsi": len(percorsi), "versioneContratto": 4,
@@ -6066,6 +6089,7 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
         )
         etichette = singolo["etichette"]
         singolo["diagnosticaFinale"] = _valida_matrice_finale(normalizzata, etichette)
+        singolo["diagnosticaMancantiSemantici"] = piano["diagnosticaMancantiSemantici"]
         if diagnostica_normalizzazione["coppieSaturate"]:
             singolo["diagnosticaFinale"]["avvisi"].append(
                 f"{diagnostica_normalizzazione['coppieSaturate']} coppie sono "
@@ -6184,6 +6208,7 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
         "etichette": etichette,
         "matrice": matrice_finale,
         "diagnosticaFinale": diagnostica_finale,
+        "diagnosticaMancantiSemantici": piano["diagnosticaMancantiSemantici"],
         "indiciRighe": list(range(n)),
         "limiteAggregazione": 1.0,
         "contributi": contributi,
