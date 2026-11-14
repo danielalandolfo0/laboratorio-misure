@@ -2650,7 +2650,7 @@ def _prepara_normalizzazione_percorso(
                 "Le righe restano nella matrice."
             )
         else:
-            parti = [p for p in re.split(r"[;,\\s]+", testo.strip()) if p]
+            parti = [p for p in re.split(r"[;,\s]+", testo.strip()) if p]
             if any(not p.isdigit() or not 1 <= int(p) <= numero_righe for p in parti):
                 errori.append(
                     f"I numeri delle righe anomale devono essere interi da 1 a {numero_righe}."

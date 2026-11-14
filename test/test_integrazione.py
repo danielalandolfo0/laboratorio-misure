@@ -96,6 +96,11 @@ risposte = {
 
 piano = p.crea_piano_confronto(tabella, risposte)
 assert piano["completo"], piano
+# Gli spazi sono validi separatori nel campo dei numeri di riga: l'UI
+# mostra esempi come "4; 5", quindi il parser deve accettarli davvero.
+con_spazi = copy.deepcopy(risposte)
+con_spazi["righeAnomaleNormalizzazione"]["percorso-3"] = "4 ;  5"
+assert p.crea_piano_confronto(tabella, con_spazi)["completo"]
 assert piano["conteggioPercorsi"] == 4, piano
 assert [percorso["tipo"] for percorso in piano["percorsi"]] == [
     "gower", "separato", "gruppo", "gruppo"
