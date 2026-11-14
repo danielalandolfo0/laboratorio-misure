@@ -3910,8 +3910,36 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
     if not isinstance(pesi_percorsi, dict):
         pesi_percorsi = {}
         avvisi.append("La configurazione dell’importanza dei percorsi non è valida.")
+    modalita_pesi = interpretazione.get("modalitaPesiPercorsi")
+    if modalita_pesi in (None, ""):
+        # Compatibilità: le risposte storiche che indicano direttamente
+        # pesiPercorsi mantengono il loro esatto significato manuale.
+        modalita_pesi = "personalizzati" if pesi_percorsi else "uguali"
+    if modalita_pesi not in {"uguali", "dimensione", "personalizzati"}:
+        avvisi.append(
+            "La modalità dei pesi globali non è riconosciuta: scegli uguali, "
+            "numero di caratteristiche del blocco oppure personalizzati."
+        )
+    dimensioni_blocchi: dict[str, int] = {}
     for percorso in percorsi:
-        grezzo = pesi_percorsi.get(percorso["idPercorso"], 1)
+        id_percorso = percorso["idPercorso"]
+        # |B_k| conta le colonne sorgente disgiunte attribuite al percorso,
+        # NON il numero di righe, categorie distinte, campioni osservati,
+        # né i singoli contributi interni di una misura non additiva.
+        dimensione = len(percorso["colonne"])
+        dimensioni_blocchi[id_percorso] = dimensione
+        if dimensione == 0:
+            percorso["stato"] = "da_completare"
+            percorso["calcolo"]["disponibile"] = False
+            percorso.setdefault("avvisi", []).append(
+                "Non si può attribuire un peso proporzionale a un blocco senza colonne."
+            )
+        if modalita_pesi == "dimensione":
+            grezzo = dimensione
+        elif modalita_pesi == "personalizzati":
+            grezzo = pesi_percorsi.get(id_percorso, 1)
+        else:
+            grezzo = 1
         try:
             peso = float(str(grezzo).strip().replace(",", "."))
         except (TypeError, ValueError):
@@ -3923,10 +3951,34 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
                 "L’importanza del percorso deve essere un numero strettamente positivo."
             )
             peso = 1.0
+        percorso["numeroCaratteristiche"] = dimensione
         percorso["pesoAggregazione"] = peso
+        percorso["originePesoAggregazione"] = (
+            "Numero di colonne sorgente del blocco"
+            if modalita_pesi == "dimensione" else
+            "Peso positivo indicato dall'utente"
+            if modalita_pesi == "personalizzati" else
+            "Peso unitario per blocco"
+        )
         percorso["normalizzazione"] = _prepara_normalizzazione_percorso(
             percorso, interpretazione, len(risultato["originale"]["righe"])
         )
+    pesatura_globale = {
+        "modalita": modalita_pesi,
+        "dimensioniBlocchi": dimensioni_blocchi,
+        "descrizione": (
+            "Proposta esplicita w_k=|B_k|: il peso di ogni percorso è il "
+            "numero delle sue colonne sorgente disgiunte. Non equivale "
+            "in generale a pesare equamente ogni elemento o misura interna, "
+            "soprattutto per gruppi composti e dissimilarità non additive."
+            if modalita_pesi == "dimensione" else
+            "Pesi positivi personalizzati per ciascun blocco, senza "
+            "modificare gli eventuali pesi interni alla misura."
+            if modalita_pesi == "personalizzati" else
+            "Un peso positivo unitario per blocco, indipendentemente "
+            "da quante colonne lo compongono."
+        ),
+    }
     incluse_con_estremi = any(analisi_per_nome[n].get("statistiche", {}).get("estremi", 0) > 0 for n in incluse)
     incluse_con_candidati_multivariati = any(
         percorso["tipo"] == "numerico"
@@ -3976,6 +4028,7 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
     return {
         "anteprimaNumerica": anteprima_numerica,
         "diagnosticaMancantiSemantici": diagnostica_mancanti,
+        "pesaturaGlobale": pesatura_globale,
         "diagnosi": diagnosi, "blocchi": blocchi, "percorsi": percorsi, "avvisi": avvisi,
         "completo": completo, "conteggioBlocchi": len(blocchi),
         "conteggioPercorsi": len(percorsi), "versioneContratto": 4,
@@ -6145,6 +6198,7 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
         etichette = singolo["etichette"]
         singolo["diagnosticaFinale"] = _valida_matrice_finale(normalizzata, etichette)
         singolo["diagnosticaMancantiSemantici"] = piano["diagnosticaMancantiSemantici"]
+        singolo["pesaturaGlobale"] = piano["pesaturaGlobale"]
         if diagnostica_normalizzazione["coppieSaturate"]:
             singolo["diagnosticaFinale"]["avvisi"].append(
                 f"{diagnostica_normalizzazione['coppieSaturate']} coppie sono "
@@ -6245,6 +6299,8 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
             "titolo": componente["percorso"]["titolo"],
             "metodo": componente["percorso"]["metodo"],
             "peso": componente["percorso"]["pesoAggregazione"],
+            "numeroCaratteristiche": componente["percorso"]["numeroCaratteristiche"],
+            "originePeso": componente["percorso"]["originePesoAggregazione"],
             "normalizzazione": componente["normalizzazione"],
             "diagnosticaNormalizzazione": componente["diagnosticaNormalizzazione"],
         }
@@ -6264,13 +6320,16 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
         "matrice": matrice_finale,
         "diagnosticaFinale": diagnostica_finale,
         "diagnosticaMancantiSemantici": piano["diagnosticaMancantiSemantici"],
+        "pesaturaGlobale": piano["pesaturaGlobale"],
         "indiciRighe": list(range(n)),
         "limiteAggregazione": 1.0,
         "contributi": contributi,
         "csv": crea_csv(["Riga", *etichette], righe_csv),
         "nota": (
             "Ogni percorso è riportato nell’intervallo [0,1] e la matrice finale è "
-            "la media pesata dei contributi disponibili per ciascuna coppia. " + dettagli + "."
+            "la media pesata dei contributi disponibili per ciascuna coppia. "
+            + piano["pesaturaGlobale"]["descrizione"] + " "
+            + dettagli + "."
         ),
     }
 

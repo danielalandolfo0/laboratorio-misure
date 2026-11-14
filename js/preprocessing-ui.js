@@ -300,6 +300,17 @@
     delete interpretazione.righeAnomaleNormalizzazione;
   }
 
+  function invalidaPesiPerStruttura() {
+    // Gli ID "percorso-1", ecc. si riferiscono ai blocchi attuali.
+    // Dopo una modifica strutturale non possiamo riutilizzare i pesi
+    // personalizzati per blocchi che potrebbero essere differenti.
+    delete interpretazione.pesiPercorsi;
+    if (interpretazione.modalitaPesiPercorsi === "personalizzati") {
+      interpretazione.modalitaPesiPercorsi = "uguali";
+    }
+    // In modalità "dimensione" il backend ricalcola |B_k| per la nuova struttura.
+  }
+
   function annullaConfermeCompatibilita() {
     delete interpretazione.confermeValoriOriginaliGruppi;
     delete interpretazione.confermeRiscalamentiMistiGruppi;
@@ -827,7 +838,32 @@
     matriceCorrente = null;
     $("gower-result").hidden = true;
     disegnaDiagnosi(piano.diagnosi, piano.completo);
-    $("comparison-plan-paths").innerHTML = piano.percorsi.map((percorso, indice) => {
+    const pesiGlobali = piano.pesaturaGlobale || {};
+    const modalitaPesiGlobali = pesiGlobali.modalita ||
+      (Object.keys(interpretazione.pesiPercorsi || {}).length
+        ? "personalizzati" : "uguali");
+    const scegliPesiGlobali = piano.conteggioPercorsi > 1
+      ? '<div class="question-item global-weights-configuration">' +
+        '<label for="global-weights-mode"><strong>Come vuoi assegnare l’importanza ai blocchi?</strong></label>' +
+        '<select id="global-weights-mode" class="global-weights-mode">' +
+        [
+          ["uguali", "Stesso peso per ogni blocco (1 ciascuno)"],
+          ["dimensione", "Proposta: peso pari al numero di colonne di ogni blocco"],
+          ["personalizzati", "Decido io il peso di ciascun blocco"]
+        ].map(([id, nome]) =>
+          '<option value="' + id + '"' +
+          (modalitaPesiGlobali === id ? ' selected' : '') + '>' +
+          escapeHtml(nome) + '</option>'
+        ).join("") + '</select>' +
+        '<p>' + escapeHtml(pesiGlobali.descrizione ||
+          "La scelta cambia solo i pesi globali, non quelli interni alle misure.") +
+        '</p><p>Un blocco può contenere molte colonne e rappresentare un solo ' +
+        'oggetto composto. Pesare i blocchi in proporzione al numero di colonne ' +
+        'non equivale, in generale, a pesare ogni informazione elementare allo stesso modo. ' +
+        'Le colonne usate sono disgiunte; i pesi restano positivi.</p></div>'
+      : "";
+    $("comparison-plan-paths").innerHTML = scegliPesiGlobali +
+      piano.percorsi.map((percorso, indice) => {
       const classe = percorso.stato === "da_completare" ? " incomplete" : "";
       const pre = percorso.preelaborazione;
       const mancanti = percorso.mancanti;
@@ -895,13 +931,24 @@
             'Nessuna riga viene esclusa dalla matrice finale.</p>'
           : '') +
         '<p>Regola applicata: ' + escapeHtml(norma.descrizione || '') + '</p></div>';
+      const numeroCaratteristiche = percorso.numeroCaratteristiche ??
+        percorso.colonne.length;
       const pesoAggregazione = piano.conteggioPercorsi > 1
-        ? `<label class="path-weight-label">Quanto conta questo percorso nella matrice finale?
-            <input class="path-weight" type="number" min="0.01" step="0.1"
+        ? (modalitaPesiGlobali === "personalizzati"
+          ? `<label class="path-weight-label"><strong>Peso personalizzato per questo blocco</strong>
+            <input class="path-weight" type="number" min="0" step="any"
               data-path-id="${escapeHtml(percorso.idPercorso)}"
               value="${escapeHtml(percorso.pesoAggregazione)}">
-            <small>Il valore proposto è 1: tutti i percorsi hanno la stessa importanza.</small>
+            <small>Inserisci un valore strettamente positivo: 0 non esclude il blocco.
+            Per escludere una colonna o un blocco modifica la selezione dei dati.</small>
           </label>`
+          : `<p class="path-weight-summary"><strong>Peso globale: ${formatoNumero(percorso.pesoAggregazione)}</strong>
+            ${modalitaPesiGlobali === "dimensione"
+              ? "(numero delle " + numeroCaratteristiche + " colonne del blocco)"
+              : "(stesso peso per ogni blocco)"}</p>`)
+        : "";
+      const numeroColonneBlocco = piano.conteggioPercorsi > 1
+        ? `<div><dt>Colonne del blocco</dt><dd>${numeroCaratteristiche}</dd></div>`
         : "";
       const alternative = (percorso.alternative || []).length
         ? `<div class="path-alternatives"><b>Alternative da valutare</b><ul>${percorso.alternative.map(alternativa =>
@@ -921,6 +968,7 @@
           ${pesiGower ? `<div><dt>Pesi Gower</dt><dd>${pesiGower}</dd></div>` : ""}
           ${costantiGower ? `<div><dt>Colonne costanti</dt><dd>Contributo zero, ma peso mantenuto: ${costantiGower}</dd></div>` : ""}
           <div><dt>Mancanti</dt><dd>${escapeHtml(mancanti.descrizione)}</dd></div>
+          ${numeroColonneBlocco}
           ${percorso.proprieta ? `<div><dt>Proprietà</dt><dd>${escapeHtml(percorso.proprieta)}</dd></div>` : ""}
           <div><dt>Stato</dt><dd>${escapeHtml(calcolo)}</dd></div>
         </dl>
@@ -2264,6 +2312,11 @@
   $("calculate-gower").addEventListener("click", calcolaMatrice);
   $("download-gower").addEventListener("click", scaricaMatrice);
   $("comparison-plan-paths").addEventListener("change", evento => {
+    if (evento.target.matches(".global-weights-mode")) {
+      interpretazione.modalitaPesiPercorsi = evento.target.value;
+      preparaPiano();
+      return;
+    }
     if (evento.target.matches(".path-normalization-method")) {
       if (!interpretazione.normalizzazioniPercorsi) interpretazione.normalizzazioniPercorsi = {};
       interpretazione.normalizzazioniPercorsi[evento.target.dataset.pathId] = evento.target.value;
@@ -2280,6 +2333,12 @@
       return;
     }
     if (evento.target.matches(".path-weight")) {
+      if (interpretazione.modalitaPesiPercorsi !== "personalizzati"
+          && Object.keys(interpretazione.pesiPercorsi || {}).length === 0) {
+        // Compatibilità con controlli preesistenti al selettore globale.
+        interpretazione.modalitaPesiPercorsi = "personalizzati";
+      }
+      if (interpretazione.modalitaPesiPercorsi !== "personalizzati") return;
       if (!interpretazione.pesiPercorsi) interpretazione.pesiPercorsi = {};
       interpretazione.pesiPercorsi[evento.target.dataset.pathId] = evento.target.value;
       preparaPiano();
@@ -2355,6 +2414,7 @@
     }
     annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
+    invalidaPesiPerStruttura();
     riscalamentoConfermato = false;
     interpretazione.riscalamentoConfermato = false;
     disegnaQuestionario();
@@ -2557,6 +2617,7 @@
         if (chiave === "gestioneQuantitativeMiste") {
           // Cambiando la struttura cambiano anche gli ID dei percorsi.
           delete interpretazione.pesiPercorsi;
+          interpretazione.modalitaPesiPercorsi = "uguali";
           delete interpretazione.misuraNumericaManuale;
           delete interpretazione.pesiMisuraManuale;
           annullaConfermeCompatibilita();
@@ -2598,6 +2659,7 @@
       return;
     }
     annullaScelteNormalizzazione();
+    invalidaPesiPerStruttura();
     const gruppo = creaGruppo();
     gruppo.nome = proposta.nome;
     gruppo.tipo = tipo;
@@ -2611,6 +2673,7 @@
   $("add-column-group").addEventListener("click", () => {
     annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
+    invalidaPesiPerStruttura();
     riscalamentoConfermato = false;
     interpretazione.riscalamentoConfermato = false;
     creaGruppo();
@@ -2644,6 +2707,7 @@
     }
     if (gruppoId) interpretazione.assegnazioni[nome] = gruppoId;
     else delete interpretazione.assegnazioni[nome];
+    if (gruppoId !== precedenteGruppo) invalidaPesiPerStruttura();
     annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
     riscalamentoConfermato = false;
@@ -2662,6 +2726,7 @@
         delete interpretazione[`misuraBinaria-${gruppo.id}`];
       }
       gruppo.tipo = evento.target.value;
+      invalidaPesiPerStruttura();
       if (interpretazione.misureGruppi) delete interpretazione.misureGruppi[gruppo.id];
       annullaScelteNormalizzazione();
       annullaConfermeCompatibilita();
@@ -2686,6 +2751,7 @@
     invalidaConfermaTemporale(gruppoId);
     delete interpretazione[`misuraBinaria-${gruppoId}`];
     interpretazione.gruppi = interpretazione.gruppi.filter(gruppo => gruppo.id !== gruppoId);
+    invalidaPesiPerStruttura();
     annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
     Object.keys(interpretazione.assegnazioni).forEach(nome => {

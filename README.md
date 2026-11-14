@@ -185,6 +185,54 @@ In entrambi i casi i blocchi sono disgiunti e il risultato finale resta
 Se la scelta della struttura manca, il piano non è completo e non calcola.
 La normalizzazione e i pesi dei percorsi sono presentati nel piano.
 
+## Pesi positivi globali dei blocchi
+
+Quando il piano contiene **almeno due percorsi disgiunti**, è disponibile
+una scelta globale dell'importanza attribuita ai blocchi:
+
+1. **Stesso peso per ogni blocco (predefinito)**: \(w_k=1\).
+2. **Proposta proporzionale alla dimensione del blocco**:
+   \(w_k=|B_k|\), dove \(|B_k|\) è il numero di **colonne sorgente
+   selezionate** e attribuite a quel percorso. Un blocco con due colonne
+   riceve peso 2 e uno con una colonna peso 1; la proposta deve essere
+   selezionata esplicitamente, non viene applicata di default.
+3. **Pesi personalizzati**: un numero finito strettamente positivo per
+   blocco, inserito dall'utente. I pesi interni eventualmente presenti
+   nella formula locale rimangono **distinti** dai pesi globali.
+
+**Attenzione al significato.** Per un percorso Gower formato da due
+colonne, la cardinalità è 2; per un gruppo temporale descritto da sei
+colonne tempo-valore, è 6, benché quelle sei colonne possano
+rappresentare un solo oggetto strutturato. Quindi la proposta
+\(w_k=|B_k|\) **non equivale in generale** a dare uguale importanza a
+ogni informazione elementare né a trasformare una distanza locale non
+additiva in una somma di distanze per caratteristica.
+
+Le dissimilarità locali sono prima normalizzate in \([0,1]\).
+La matrice finale si ottiene con
+
+\[
+D(i,j)=\frac{\sum_{k:\,\omega_k(i,j)=1}w_k\,\delta_k(i,j)}
+{\sum_{k:\,\omega_k(i,j)=1}w_k},
+\]
+
+dove le somme riguardano **solo i percorsi disponibili** per quella
+coppia. Se un contributo manca non viene sostituito con zero;
+una distanza locale definita uguale a zero contribuisce invece
+correttamente al denominatore. Il valore del peso di un unico blocco
+non influenza la matrice finale.
+
+Nel piano sono mostrati il numero di colonne del percorso, il peso
+effettivamente attribuito e l'origine del peso. Il risultato esportabile
+nel sistema riporta la modalità, i pesi e le cardinalità. Una
+configurazione precedente che passa solo \`pesiPercorsi\`, senza
+\`modalitaPesiPercorsi\`, rimane personalizzata per compatibilità con i
+vecchi dati. Quando l'utente seleziona una modalità differente, eventuali
+valori personalizzati conservati **non influenzano** i pesi effettivi.
+I pesi personalizzati vengono invalidati dopo modifiche alla struttura
+delle colonne o dei gruppi, per evitare associazioni scorrette tra
+identificativi di percorso e nuovi blocchi.
+
 ## Gruppi numerici con misure differenti
 
 Una tabella anche interamente numerica puo' essere organizzata in blocchi

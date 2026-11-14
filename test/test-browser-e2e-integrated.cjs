@@ -206,7 +206,23 @@ async function main() {
     }
     checkpoint("Piano con quattro percorsi");
 
-    // Pesi locali indipendenti, default non equivalente ai pesi richiesti.
+    // Prima il criterio e' esplicito: pesi unitari per blocco.
+    assert.equal(await page.locator("#global-weights-mode").inputValue(), "uguali");
+    assert.equal(await page.locator(".path-weight").count(), 0);
+    await choose("#global-weights-mode", "dimensione");
+    await page.locator("#comparison-plan").waitFor({state:"visible"});
+    assert.equal(await page.locator("#global-weights-mode").inputValue(), "dimensione");
+    assert.equal(await page.locator(".path-weight").count(), 0,
+      "La proposta dimensionale mostra pesi calcolati, non input manuali.");
+    const pesiDimensionali = await page.locator(".path-weight-summary").allTextContents();
+    assert.equal(pesiDimensionali.length, 4);
+    assert.match(pesiDimensionali.join(" "), /Peso globale:/);
+    checkpoint("Proposta w_k=|B_k| esplicita: pesi calcolati dalle colonne");
+
+    await choose("#global-weights-mode", "personalizzati");
+    await page.locator(".path-weight").first().waitFor({state:"visible"});
+    // Pesi globali personalizzati: modificano l'aggregazione, non i
+    // pesi delle coordinate interni ai singoli percorsi.
     for(const [id,value] of [
       ["percorso-1","2"],["percorso-2","1"],
       ["percorso-3","3"],["percorso-4","4"]

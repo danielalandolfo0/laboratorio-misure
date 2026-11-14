@@ -1206,6 +1206,95 @@ quasi_uguali(matrice_blocchi_pesata[0][1], 0.45)
 quasi_uguali(matrice_blocchi_pesata[0][2], 0.85)
 quasi_uguali(matrice_blocchi_pesata[1][2], 1)
 
+
+# Fase 3: proposta w_k=|B_k|. La cardinalità è il numero di colonne
+# SORGENTE del blocco, non il numero di osservazioni né i pesi interni.
+# Questo CSV produce un blocco numerico (2 colonne) e uno Gower (1).
+piano_pesi_dimensione = p.crea_piano_confronto(
+    dati_misti_blocchi, {**scelta_blocchi, "modalitaPesiPercorsi": "dimensione"}
+)
+assert piano_pesi_dimensione["completo"], piano_pesi_dimensione
+assert piano_pesi_dimensione["pesaturaGlobale"]["modalita"] == "dimensione"
+assert piano_pesi_dimensione["pesaturaGlobale"]["dimensioniBlocchi"] == {
+    "percorso-1": 2, "percorso-2": 1
+}
+assert [r["numeroCaratteristiche"] for r in piano_pesi_dimensione["percorsi"]] == [2, 1]
+assert [r["pesoAggregazione"] for r in piano_pesi_dimensione["percorsi"]] == [2, 1]
+assert all("Numero di colonne" in r["originePesoAggregazione"]
+           for r in piano_pesi_dimensione["percorsi"])
+dimensione_matrice = p.calcola_matrice(
+    dati_misti_blocchi, {**scelta_blocchi, "modalitaPesiPercorsi": "dimensione"}
+)
+verifica_matrice_finale(dimensione_matrice, 3)
+quasi_uguali(dimensione_matrice["matrice"][0][1], 2/5)
+quasi_uguali(dimensione_matrice["matrice"][0][2], 13/15)
+quasi_uguali(dimensione_matrice["matrice"][1][2], 1)
+assert [x["peso"] for x in dimensione_matrice["contributi"]] == [2, 1]
+assert [x["numeroCaratteristiche"] for x in dimensione_matrice["contributi"]] == [2, 1]
+assert dimensione_matrice["pesaturaGlobale"]["modalita"] == "dimensione"
+assert "non equivale" in dimensione_matrice["nota"].lower()
+
+# L'assegnazione di pesi personalizzati ereditata da versioni precedenti
+# resta invariata se non è specificata una modalità, ma una modalità
+# ESPLICITA diversa la ignora per evitare di mantenere pesi nascosti.
+assert [r["pesoAggregazione"] for r in p.crea_piano_confronto(
+    dati_misti_blocchi, scelta_blocchi_pesata
+)["percorsi"]] == [3.0, 1.0]
+stesso_per_blocco = {
+    **scelta_blocchi, "modalitaPesiPercorsi": "uguali",
+    "pesiPercorsi": {"percorso-1": "37", "percorso-2": "2"},
+}
+piano_uguali = p.crea_piano_confronto(dati_misti_blocchi, stesso_per_blocco)
+assert piano_uguali["completo"]
+assert [x["pesoAggregazione"] for x in piano_uguali["percorsi"]] == [1, 1]
+assert p.calcola_matrice(dati_misti_blocchi, stesso_per_blocco)["matrice"] == matrice_blocchi
+con_pesi_inattivi = {
+    **stesso_per_blocco, "modalitaPesiPercorsi": "dimensione"
+}
+assert [x["pesoAggregazione"] for x in p.crea_piano_confronto(
+    dati_misti_blocchi, con_pesi_inattivi
+)["percorsi"]] == [2, 1]
+assert p.calcola_matrice(
+    dati_misti_blocchi, con_pesi_inattivi
+)["matrice"] == dimensione_matrice["matrice"]
+
+# Pesi decimali validi, nulli, negativi, infiniti e modalità sconosciute.
+personalizzati = {
+    **scelta_blocchi, "modalitaPesiPercorsi": "personalizzati",
+    "pesiPercorsi": {"percorso-1": "2,5", "percorso-2": "1"},
+}
+mat_pers = p.calcola_matrice(dati_misti_blocchi, personalizzati)
+quasi_uguali(mat_pers["matrice"][0][1], 3/7)
+quasi_uguali(mat_pers["matrice"][0][2], 6/7)
+assert [r["pesoAggregazione"] for r in p.crea_piano_confronto(
+    dati_misti_blocchi, personalizzati
+)["percorsi"]] == [2.5, 1]
+for valore in ("0", "-1", "nan", "inf", "", "abc"):
+    scelte_errate = {
+        **personalizzati, "pesiPercorsi": {"percorso-1": valore}
+    }
+    piano_errato = p.crea_piano_confronto(dati_misti_blocchi, scelte_errate)
+    assert not piano_errato["completo"], (valore, piano_errato)
+    assert not piano_errato["percorsi"][0]["calcolo"]["disponibile"]
+    assert any("strettamente positivo" in messaggio
+               for messaggio in piano_errato["percorsi"][0]["avvisi"])
+piano_modalita_errata = p.crea_piano_confronto(
+    dati_misti_blocchi,
+    {**scelta_blocchi, "modalitaPesiPercorsi": "sconosciuta"}
+)
+assert not piano_modalita_errata["completo"]
+assert any("modalità dei pesi" in v for v in piano_modalita_errata["avvisi"])
+
+# Un solo blocco non deve cambiare matrice: il suo peso è ininfluente.
+for modalita in ("uguali", "dimensione", "personalizzati"):
+    scelte_unico = {
+        **scelta_unica, "modalitaPesiPercorsi": modalita,
+        "pesiPercorsi": {"percorso-1": "5"},
+    }
+    risultato_unico = p.calcola_matrice(dati_misti_blocchi, scelte_unico)
+    assert risultato_unico["matrice"] == matrice_unica
+    assert risultato_unico["pesaturaGlobale"]["modalita"] == modalita
+
 # Sono riconosciute anche le colonne sì/no, senza imporre un codice 0/1.
 rilevata_testuale = p.prepara_tabella(p.leggi_csv("presente,classe\\nsì,A\\nno,B".replace("\\n", "\n")))
 assert rilevata_testuale["questionario"]["colonne"][0]["ruoloSuggerito"] == "presenza"
@@ -3828,5 +3917,21 @@ assert p.crea_piano_confronto(
     dati_binari_vuoti, {**base_vuoti,
                         "mancanti-gruppo-flags": "pairwise"}
 )["completo"]
+
+# Con mancanti, pesi dimensionali solo nei percorsi validi: una coppia
+# che usa un solo blocco NON riceve zeri impliciti dagli altri.
+pesi_dim_mancanti = {
+    **base_pairwise, "misuraBinaria-bin": "jaccard",
+    "modalitaPesiPercorsi": "dimensione"
+}
+matrice_dim_mancanti = p.calcola_matrice(misti_pairwise, pesi_dim_mancanti)
+verifica_matrice_finale(matrice_dim_mancanti, 5)
+assert [v["peso"] for v in matrice_dim_mancanti["contributi"]] == [1, 3]
+quasi_uguali(matrice_dim_mancanti["matrice"][0][2], 1)
+quasi_uguali(matrice_dim_mancanti["matrice"][0][3], 1/4)
+quasi_uguali(matrice_dim_mancanti["matrice"][1][3], 1)
+quasi_uguali(matrice_dim_mancanti["matrice"][0][4], 0)
+assert matrice_dim_mancanti["diagnosticaFinale"]["coppieCoperturaParziale"] > 0
+
 
 print("Tutti i test Python di preprocessing sono stati superati.")
