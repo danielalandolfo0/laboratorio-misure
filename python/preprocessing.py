@@ -3507,6 +3507,7 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
     for percorso in percorsi:
         _verifica_distribuzione_percorso(percorso, risultato)
         _verifica_vettore_binario_percorso(percorso, risultato)
+        _verifica_serie_a_coppie_percorso(percorso, risultato)
         _verifica_specializzati_percorso(percorso, risultato)
     # Hamming richiede che tutte le sequenze confrontabili abbiano una
     # lunghezza comune. Il controllo precede il calcolo; non si converte
@@ -5275,6 +5276,34 @@ def _calcola_matrice_specializzata(
                 matrice[i][k] = distanza
                 matrice[k][i] = distanza
         limite: float | None = 1.0
+    elif percorso.get("tipoGruppo") == "tempo_coppie":
+        serie = _serie_da_coppie(tabella, percorso)
+        params = percorso.get("parametri", {})
+        for i in range(n):
+            for k in range(i + 1, n):
+                if serie[i] is None or serie[k] is None:
+                    distanza = None
+                elif metodo == "Dynamic Time Warping":
+                    config = {
+                        chiave: params[chiave] for chiave in
+                        ("costoLocale", "finestra", "lambdaRitardo", "tauRitardo")
+                        if chiave in params
+                    }
+                    config["tempiX"] = serie[i]["tempi"]
+                    config["tempiY"] = serie[k]["tempi"]
+                    distanza = _distanza_dtw(
+                        serie[i]["valori"], serie[k]["valori"], config
+                    )
+                elif metodo == "Dissimilarità LCSS normalizzata":
+                    distanza = _distanza_lcss(
+                        serie[i]["valori"], serie[k]["valori"],
+                        serie[i]["tempi"], serie[k]["tempi"],
+                        params["tolleranzaValori"], params["tolleranzaTempo"]
+                    )
+                else:
+                    raise ValueError("Scegli DTW o LCSS per le serie a tempi individuali.")
+                matrice[i][k] = matrice[k][i] = distanza
+        limite = 1.0 if metodo == "Dissimilarità LCSS normalizzata" else None
     elif percorso.get("tipoGruppo") == "vettore_binario":
         vettori_binari = _decodifica_vettori_binari(risultato, percorso)
         for i in range(n):
@@ -5436,6 +5465,29 @@ def _calcola_matrice_specializzata(
             f"({percorso['parametri']['unita']}); "
             "valori richiesti in [0,P), senza correzioni modulari implicite."
         )
+    if percorso.get("tipoGruppo") == "tempo_coppie":
+        params = percorso.get("parametri", {})
+        nota += (
+            " I timestamp sono letti da coppie di colonne esplicite, "
+            "diverse per ciascuna riga e strettamente crescenti. "
+            f"Unità: {params.get('unitaTempo')}. "
+            "Nessun ricampionamento o imputazione implicita."
+        )
+        if metodo == "Dynamic Time Warping":
+            nota += (
+                " DTW a minimo costo medio esatto, costo locale "
+                f"{params.get('costoLocale')}; finestra={params.get('finestra', 'nessuna')}; "
+                f"λ={params.get('lambdaRitardo', 'non applicato')}; "
+                f"τ={params.get('tauRitardo', 'non applicato')}."
+            )
+            if params.get("timestampIgnoratiNelCosto"):
+                nota += " Lo sfasamento temporale è ignorato per scelta esplicita."
+        else:
+            nota += (
+                " LCSS con tolleranze su valore e tempo "
+                f"({params.get('tolleranzaValori')}, {params.get('tolleranzaTempo')}); "
+                "normalizzazione 1−LCSS/min(lunghezze)."
+            )
     if percorso.get("tipoGruppo") == "vettore_binario":
         nota += (
             " Il gruppo confronta simultaneamente tutte le colonne come "
