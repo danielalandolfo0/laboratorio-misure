@@ -398,6 +398,23 @@ inducono invece la distanza assoluta sulla coordinata cumulativa.
 Le impostazioni incompatibili o incomplete bloccano il piano prima
 della generazione della matrice finale.
 
+### Test dell'interfaccia e risposte asincrone
+
+Oltre ai test numerici Python e ai test JavaScript delle misure,
+`npm test` esegue `test/test-preprocessing-ui.js`. Il collaudo
+simula con un DOM minimale le interazioni tra CSV, questionario,
+gruppi, piani e matrice: caricamenti concorrenti, modifiche al
+riscalamento, risposte asincrone superate, conferme temporali,
+dissimilarità nominali personalizzate e ripristino dei comandi.
+Le risposte di calcolo obsolete non possono riaprire un piano
+invalidato né mostrare una matrice riferita a scelte precedenti.
+
+Il test DOM è intenzionalmente privo di dipendenze esterne e
+**non equivale a un test end-to-end nel browser reale**. Resta
+necessaria una verifica manuale di layout, accessibilità,
+gestione della tastiera, esportazione e percorso completo su
+GitHub Pages.
+
 ## Matrice complessiva con più percorsi
 
 Ogni percorso produce prima la propria matrice. Gower, i confronti 0/1 e le

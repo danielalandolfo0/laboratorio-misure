@@ -361,6 +361,54 @@ async function testNominalSettingsPropagation() {
   assert.deepEqual(Array.from(last.dissimilaritaCategorieGower.categoria.livelli), livelli);
 }
 
+async function testGruppoTemporaleConferme() {
+  const h = createHarness();
+  h.fire("csv-file", "change", {target: {files: [{
+    name: "tempo.csv", type: "text/csv", size: 100,
+    text: async () => "t1,t2,t3,id\n1,2,3,A\n4,5,6,B\n2,3,4,C"
+  }]}});
+  await flush();
+  h.fire("add-column-group", "click");
+  for (const nome of ["t1", "t2", "t3"]) {
+    h.fire("group-assignment-body", "change", {target: h.customTarget(
+      ".group-assignment", {groupColumn: nome}, "gruppo-1"
+    )});
+  }
+  const tipo = h.customTarget(".group-type", {}, "tempo");
+  tipo.closest = () => ({dataset: {groupId: "gruppo-1"}});
+  h.fire("group-config-list", "change", {target: tipo});
+  assert.match(h.element("adaptive-questions").innerHTML,
+    /class="temporal-order-input"/);
+  assert.match(h.element("adaptive-questions").innerHTML,
+    /class="temporal-spacing-select"/);
+
+  h.fire("adaptive-questions", "input", {target: h.customTarget(
+    ".temporal-order-input", {groupId: "gruppo-1"}, "t3; t2; t1"
+  )});
+  h.fire("adaptive-questions", "change", {target: h.customTarget(
+    ".temporal-spacing-select", {groupId: "gruppo-1"}, "regolare"
+  )});
+  h.fire("adaptive-questions", "change", {target: h.customTarget(
+    ".semantic-answer", {answer: "ritardo-gruppo-1"}, "si"
+  )});
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  const prima = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(prima.ordiniTemporaliGruppi["gruppo-1"], "t3; t2; t1");
+  assert.equal(prima.campionamentiTemporaliGruppi["gruppo-1"], "regolare");
+  assert.equal(prima["ritardo-gruppo-1"], "si");
+
+  // La struttura cambia: la vecchia conferma dell'ordine non è riusabile.
+  h.fire("group-assignment-body", "change", {target: h.customTarget(
+    ".group-assignment", {groupColumn: "t3"}, ""
+  )});
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  const nuova = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(nuova.ordiniTemporaliGruppi?.["gruppo-1"], undefined);
+  assert.equal(nuova.campionamentiTemporaliGruppi?.["gruppo-1"], undefined);
+}
+
 (async () => {
   await testStaleFiles();
   await testStaleFileRead();
@@ -368,6 +416,7 @@ async function testNominalSettingsPropagation() {
   await testNewestPlanAndFailures();
   await testLatestColumnChoice();
   await testNominalSettingsPropagation();
+  await testGruppoTemporaleConferme();
   console.log("Collaudo DOM e concorrenza dell'interfaccia superato.");
 })().catch(error => {
   console.error(error);
