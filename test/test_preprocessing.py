@@ -4210,4 +4210,55 @@ assert json.loads(p.crea_rapporto_json(
     ]), json.dumps(scelta_blocchi)
 ))["ok"]
 
+# Fase 7: distribuzione empirica della MATRICE FINALE, usando una volta
+# sola ciascuna coppia distinta e senza modificare la matrice.
+matrice_distribuzione = [
+    [0.0, .1, .3, 1.0],
+    [.1, 0.0, .5, .5],
+    [.3, .5, 0.0, .9],
+    [1.0, .5, .9, 0.0],
+]
+copia_distribuzione = [riga[:] for riga in matrice_distribuzione]
+diag_distribuzione = p._valida_matrice_finale(
+    matrice_distribuzione, ["A", "B", "C", "D"]
+)["distribuzioneDissimilarita"]
+assert matrice_distribuzione == copia_distribuzione
+assert diag_distribuzione["numeroCoppie"] == 6
+quasi_uguali(diag_distribuzione["minimo"], .1)
+quasi_uguali(diag_distribuzione["massimo"], 1)
+quasi_uguali(diag_distribuzione["media"], .55)
+quasi_uguali(diag_distribuzione["mediana"], .5)
+quasi_uguali(diag_distribuzione["primoQuartile"], .35)
+quasi_uguali(diag_distribuzione["terzoQuartile"], .8)
+assert [v["coppie"] for v in diag_distribuzione["intervalli"]] == [1, 1, 2, 0, 2]
+assert sum(v["frazione"] for v in diag_distribuzione["intervalli"]) == 1
+assert diag_distribuzione["coppieZero"] == 0
+assert diag_distribuzione["coppieUno"] == 1
+assert diag_distribuzione["intervalli"][-1]["fineInclusa"] is True
+assert all(not v["fineInclusa"] for v in diag_distribuzione["intervalli"][:-1])
+
+# I limiti 0.2, 0.4, 0.8 appartengono al successivo intervallo;
+# 1 appartiene all'ultimo e non crea un sesto intervallo.
+diag_confini = p._diagnostica_distribuzione_finale([0.0, .2, .4, .8, 1.0])
+assert [v["coppie"] for v in diag_confini["intervalli"]] == [1, 1, 1, 0, 2]
+diag_identica = p._diagnostica_distribuzione_finale([0.0] * 4)
+assert diag_identica["numeroCoppie"] == 4
+assert diag_identica["minimo"] == diag_identica["massimo"] == 0
+assert diag_identica["primoQuartile"] == diag_identica["terzoQuartile"] == 0
+assert diag_identica["coppieZero"] == 4
+assert p._diagnostica_distribuzione_finale([])["media"] is None
+try:
+    p._diagnostica_distribuzione_finale([float("nan")])
+    raise AssertionError("Una dissimilarità non finita non è ammissibile.")
+except ValueError:
+    pass
+
+# Stessi valori per il singolo blocco e per il risultato complessivo:
+# anche il rapporto riproducibile contiene l'esatta distribuzione.
+assert res_zero_blocco["diagnosticaFinale"]["distribuzioneDissimilarita"]["numeroCoppie"] == 3
+assert rapporto_diag["risultato"]["diagnosticaFinale"]["distribuzioneDissimilarita"] == (
+    res_zero_blocco["diagnosticaFinale"]["distribuzioneDissimilarita"]
+)
+assert singolo_sens["diagnosticaFinale"]["distribuzioneDissimilarita"]["numeroCoppie"] == 3
+
 print("Tutti i test Python di preprocessing sono stati superati.")
