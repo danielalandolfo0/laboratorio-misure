@@ -3021,4 +3021,194 @@ verifica_matrice_finale(matrice_ciclo_mancanti, 3)
 assert matrice_ciclo_mancanti["matrice"][0][1] == 0
 assert matrice_ciclo_mancanti["matrice"][1][2] == 1
 
+
+# Serie temporali su griglia COMUNE: reale, irregolare e rigorosamente
+# crescente. La vecchia DTW regolare su soli indici resta invariata.
+assert p._leggi_griglia_temporale("0; 1; 4", 3) == [0, 1, 4]
+assert p._leggi_griglia_temporale("-2; 0; 0,5", 3) == [-2, 0, 0.5]
+assert not p._passi_temporali_regolari([0, 1, 4])
+assert p._passi_temporali_regolari([0, 2, 4])
+for errata in ("0; 1", "0; 1; 1", "0; nan; 2", "0; inf; 3",
+               "0; 4; 1", "0; ; 2", "abc; 1; 3"):
+    try:
+        p._leggi_griglia_temporale(errata, 3)
+        assert False, errata
+    except ValueError:
+        pass
+quasi_uguali(p._distanza_pendenze(
+    [0, 1, 0], [0, 2, 0], [0, 1, 4]
+), math.sqrt(10) / 3)
+quasi_uguali(p._distanza_pendenze(
+    [0, 1, 0], [7, 8, 7], [0, 1, 4]
+), 0)
+assert p._interpola_vuoti_temporali([0, None, 8], [0, 1, 4]) == [0, 2, 8]
+assert p._interpola_vuoti_temporali([None, 4, 8], [0, 1, 4]) is None
+assert p._interpola_vuoti_temporali([0, 4, None], [0, 1, 4]) is None
+
+# Esatto MIN costo medio DTW anche con finestra e costo quadratico.
+quasi_uguali(p._distanza_dtw([0, 0, 0], [1, 1, 2]), 1.2)
+quasi_uguali(p._distanza_dtw(
+    [0, 0, 0], [1, 1, 2], {"finestra": 0}
+), 4/3)
+quasi_uguali(p._distanza_dtw(
+    [0, 0, 0], [1, 1, 2], {"finestra": 0, "costoLocale": "quadratico"}
+), 2)
+assert p._distanza_dtw(
+    [0, 0, 1, 1], [0, 1, 1, 1]
+) == 0
+assert p._distanza_dtw(
+    [0, 0, 1, 1], [0, 1, 1, 1],
+    {"tempi": [0, 1, 4, 8], "lambdaRitardo": 1, "tauRitardo": 1}
+) > 0
+try:
+    p._distanza_dtw([0, 1], [0, 1, 2], {"finestra": 0})
+    assert False, "Una finestra priva di cammini deve essere bloccata."
+except ValueError:
+    pass
+
+# LCSS: la tolleranza temporale impedisce di pareggiare eventi che
+# avvengono in istanti fisici troppo lontani.
+quasi_uguali(p._distanza_lcss(
+    [0, 1, 2], [1, 2, 3], [0, 1, 4], [0, 1, 4], 0, 0
+), 1)
+quasi_uguali(p._distanza_lcss(
+    [0, 1, 2], [1, 2, 3], [0, 1, 4], [0, 1, 4], 0, 3
+), 1/3)
+quasi_uguali(p._distanza_lcss(
+    [1, 2, 3], [1, 2, 3], [0, 1, 4], [0, 1, 4], 0, 0
+), 0)
+
+dati_griglia_irregolare = p.prepara_tabella(p.leggi_csv(
+    "t1,t2,t3,id\n"
+    "0,3,0,A\n"
+    "0,5,0,B\n"
+    "2,4,2,C"
+))
+base_griglia = {
+    "riga": "oggetto",
+    "colonne": {
+        **{v: {"ruolo": "quantita", "usa": True} for v in ("t1","t2","t3")},
+        "id": {"ruolo": "identificativo", "usa": False},
+    },
+    "gruppi": [{"id": "serie", "nome": "Serie", "tipo": "tempo"}],
+    "assegnazioni": {k: "serie" for k in ("t1","t2","t3")},
+    "ordiniTemporaliGruppi": {"serie": "t1; t2; t3"},
+    "campionamentiTemporaliGruppi": {"serie": "irregolare"},
+    "tempiTemporaliGruppi": {"serie": "0; 1; 4"},
+    "unitaTemporaleGruppi": {"serie": "ore"},
+    "ritardo-serie": "no",
+    "misureTemporaliGruppi": {"serie": "punto"},
+}
+piano_puntuale_irregolare = p.crea_piano_confronto(
+    dati_griglia_irregolare, base_griglia
+)
+assert piano_puntuale_irregolare["completo"], piano_puntuale_irregolare
+percorso_puntuale = piano_puntuale_irregolare["percorsi"][0]
+assert percorso_puntuale["parametri"]["tempi"] == [0, 1, 4]
+assert percorso_puntuale["parametri"]["unitaTempo"] == "ore"
+matrice_puntuale = p.calcola_matrice(dati_griglia_irregolare, base_griglia)
+verifica_matrice_finale(matrice_puntuale, 3)
+quasi_uguali(matrice_puntuale["matrice"][0][1], 2 / 3)
+
+scelta_pendenze = {
+    **base_griglia,
+    "misureTemporaliGruppi": {"serie": "pendenze"},
+}
+piano_pendenze = p.crea_piano_confronto(
+    dati_griglia_irregolare, scelta_pendenze
+)
+assert piano_pendenze["completo"], piano_pendenze
+assert piano_pendenze["percorsi"][0]["metodo"] == "Distanza sulle pendenze"
+locale_pendenze = p._calcola_matrice_specializzata(
+    dati_griglia_irregolare, scelta_pendenze, piano_pendenze["percorsi"][0]
+)
+quasi_uguali(locale_pendenze["matrice"][0][1], 2 * math.sqrt(10) / 3)
+assert "pseudometrica" in locale_pendenze["nota"]
+verifica_matrice_finale(p.calcola_matrice(dati_griglia_irregolare, scelta_pendenze), 3)
+
+scelta_lcss = {
+    **base_griglia, "ritardo-serie": "si",
+    "metodiAllineamentoTemporaleGruppi": {"serie": "lcss"},
+    "tolleranzeValoreLCSSGruppi": {"serie": "0"},
+    "tolleranzeTempoLCSSGruppi": {"serie": "3"},
+}
+piano_lcss = p.crea_piano_confronto(dati_griglia_irregolare, scelta_lcss)
+assert piano_lcss["completo"], piano_lcss
+assert piano_lcss["percorsi"][0]["normalizzazione"]["limiteTeorico"] == 1
+assert piano_lcss["percorsi"][0]["metodo"] == "Dissimilarità LCSS normalizzata"
+verifica_matrice_finale(p.calcola_matrice(dati_griglia_irregolare, scelta_lcss), 3)
+
+dtw_irregolare_non_penalizzata = {
+    **base_griglia, "ritardo-serie": "si",
+    "metodiAllineamentoTemporaleGruppi": {"serie": "dtw"},
+}
+assert not p.crea_piano_confronto(
+    dati_griglia_irregolare, dtw_irregolare_non_penalizzata
+)["completo"]
+scelta_dtw_irregolare = {
+    **dtw_irregolare_non_penalizzata,
+    "costiDTWGruppi": {"serie": "quadratico"},
+    "finestreDTWGruppi": {"serie": "1"},
+    "penalizzazioniDTWGruppi": {"serie": "si"},
+    "pesiRitardoDTWGruppi": {"serie": "0.5"},
+    "scaleRitardoDTWGruppi": {"serie": "2"},
+}
+piano_dtw_irregolare = p.crea_piano_confronto(
+    dati_griglia_irregolare, scelta_dtw_irregolare
+)
+assert piano_dtw_irregolare["completo"], piano_dtw_irregolare
+assert piano_dtw_irregolare["percorsi"][0]["parametri"]["finestra"] == 1
+assert piano_dtw_irregolare["percorsi"][0]["parametri"]["lambdaRitardo"] == .5
+locale_dtw_irregolare = p._calcola_matrice_specializzata(
+    dati_griglia_irregolare, scelta_dtw_irregolare,
+    piano_dtw_irregolare["percorsi"][0]
+)
+assert locale_dtw_irregolare["matrice"][0][1] > 0
+verifica_matrice_finale(
+    p.calcola_matrice(dati_griglia_irregolare, scelta_dtw_irregolare), 3
+)
+for change in [
+    {"finestreDTWGruppi": {"serie": "-1"}},
+    {"finestreDTWGruppi": {"serie": "4"}},
+    {"pesiRitardoDTWGruppi": {"serie": "0"}},
+    {"pesiRitardoDTWGruppi": {"serie": "nan"}},
+    {"scaleRitardoDTWGruppi": {"serie": "0"}},
+    {"tempiTemporaliGruppi": {"serie": "0; 1; 1"}},
+    {"tempiTemporaliGruppi": {"serie": "0; 1; 2"}},
+    {"unitaTemporaleGruppi": {"serie": ""}},
+]:
+    assert not p.crea_piano_confronto(
+        dati_griglia_irregolare, {**scelta_dtw_irregolare, **change}
+    )["completo"], change
+assert not p.crea_piano_confronto(
+    dati_griglia_irregolare,
+    {**scelta_pendenze, "tempiTemporaliGruppi": {}}
+)["completo"]
+
+# Se l'interpolazione è autorizzata sui timestamp irregolari,
+# l'elemento interno mancante è riempito in proporzione ai tempi.
+dati_vuoti_irregolari = p.prepara_tabella(p.leggi_csv(
+    "t1,t2,t3,id\n"
+    "0,NA,8,A\n"
+    "0,4,8,B\n"
+    "2,6,9,C"
+))
+scelta_interpolazione = {
+    **base_griglia,
+    "significatoMancanti": "sconosciuto",
+    "mancanti-gruppo-serie": "interpola_lineare",
+}
+piano_interpolazione = p.crea_piano_confronto(
+    dati_vuoti_irregolari, scelta_interpolazione
+)
+assert piano_interpolazione["completo"], piano_interpolazione
+locale_interpolazione = p._calcola_matrice_specializzata(
+    dati_vuoti_irregolari, scelta_interpolazione,
+    piano_interpolazione["percorsi"][0]
+)
+quasi_uguali(locale_interpolazione["matrice"][0][1], 2)
+verifica_matrice_finale(
+    p.calcola_matrice(dati_vuoti_irregolari, scelta_interpolazione), 3
+)
+
 print("Tutti i test Python di preprocessing sono stati superati.")

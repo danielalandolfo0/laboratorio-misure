@@ -1707,14 +1707,104 @@
           '<option value="irregolare"' + (campionamento === 'irregolare' ? ' selected' : '') +
           '>No, gli intervalli sono differenti</option>' +
           '</select></label>' +
-          '<p>Se i tempi non sono equidistanti, il sito interrompe il calcolo per questo gruppo: ' +
-          'DTW per indici e interpolazione per posizione non tengono conto degli istanti reali. ' +
-          'Occorre prima definire un ricampionamento o un allineamento temporale.</p></div>');
+          '<p>Le colonne rappresentano una griglia comune a tutte le righe. ' +
+          'Per tempi irregolari servono i timestamp effettivi. ' +
+          'Il sito non effettua ricampionamenti impliciti e non accetta ' +
+          'timestamp differenti da riga a riga in questo formato.</p></div>');
         domande.push(domandaAdattiva(
           `ritardo-${gruppo.id}`, `Nel gruppo “${escapeHtml(gruppo.nome)}”, un andamento simile può avvenire con un piccolo ritardo?`,
           "Per esempio, lo stesso picco può comparire in momenti leggermente diversi nelle due righe.",
           [["si", "Sì, il ritardo non deve renderle diverse"], ["no", "No, gli stessi eventi devono avvenire negli stessi momenti"], ["ignoto", "Non lo so"]]
         ));
+        const id = gruppo.id;
+        const ritardo = valoreRisposta(`ritardo-${id}`);
+        const misuraTempo = interpretazione.misureTemporaliGruppi?.[id] || "punto";
+        const allineamento = interpretazione.metodiAllineamentoTemporaleGruppi?.[id] || "dtw";
+        const penale = interpretazione.penalizzazioniDTWGruppi?.[id] || "no";
+        const valoreTempo = (chiave, fallback = "") => escapeHtml(
+          interpretazione[chiave]?.[id] ?? fallback
+        );
+        const selezioneTempo = (chiave, scelte, scelto) =>
+          '<select class="temporal-option" data-temporal-key="' + chiave +
+          '" data-group-id="' + escapeHtml(id) + '">' +
+          scelte.map(([v, label]) =>
+            '<option value="' + v + '"' + (scelto === v ? ' selected' : '') +
+            '>' + escapeHtml(label) + '</option>'
+          ).join('') + '</select>';
+        const inputTempo = (chiave, etichetta, suggerimento) =>
+          '<label>' + escapeHtml(etichetta) + '<input type="text" class="temporal-parameter" ' +
+          'data-temporal-key="' + chiave + '" data-group-id="' +
+          escapeHtml(id) + '" value="' + valoreTempo(chiave) +
+          '" placeholder="' + escapeHtml(suggerimento) + '"></label>';
+        domande.push('<div class="question-item"><strong>Tempi fisici del gruppo “' +
+          escapeHtml(gruppo.nome) + '”</strong><p>Se noti, indica i timestamp numerici ' +
+          'nell’ordine cronologico confermato, separati da ;. ' +
+          'Tutti i casi devono riferirsi agli stessi istanti. Per dati irregolari ' +
+          'e per le pendenze i timestamp sono obbligatori. ' +
+          'Per dati regolari senza tempi il confronto non penalizzato ' +
+          'usa gli indici 0, 1, 2, ... come passi, non come tempi reali.</p>' +
+          inputTempo("tempiTemporaliGruppi",
+            "Timestamp, uno per colonna", "es. 0; 1; 3; 8") +
+          '<label>Unità dei timestamp, se indicati' +
+          selezioneTempo("unitaTemporaleGruppi",
+            [["", "Scegli le unità"], ["secondi", "Secondi"], ["minuti", "Minuti"],
+             ["ore", "Ore"], ["giorni", "Giorni"], ["altre", "Altre unità coerenti"]],
+            interpretazione.unitaTemporaleGruppi?.[id] || "") + '</label></div>');
+        if (ritardo === "no") {
+          domande.push('<div class="question-item"><label><strong>Come confrontare ' +
+            'le variazioni senza consentire ritardi?</strong>' +
+            selezioneTempo("misureTemporaliGruppi",
+              [["punto", "Valori agli stessi istanti (punto a punto)"],
+               ["pendenze", "Variazioni per unità di tempo (pendenze)"]],
+              misuraTempo) + '</label><p>Le pendenze richiedono i timestamp ' +
+            'reali e non distinguono serie che differiscono soltanto ' +
+            'per una costante additiva.</p></div>');
+        }
+        if (ritardo === "si") {
+          domande.push('<div class="question-item"><label><strong>Quale ' +
+            'allineamento vuoi usare?</strong>' +
+            selezioneTempo("metodiAllineamentoTemporaleGruppi",
+              [["dtw", "DTW: minimo esatto del costo medio per cammino"],
+               ["lcss", "LCSS: sottosequenza comune entro tolleranze"]],
+              allineamento) + '</label></div>');
+          if (allineamento === "dtw") {
+            domande.push('<div class="question-item"><strong>Parametri DTW</strong>' +
+              '<label>Costo locale tra due valori' +
+              selezioneTempo("costiDTWGruppi",
+                [["assoluto", "Scarto assoluto |u−v|"],
+                 ["quadratico", "Scarto quadratico |u−v|²"]],
+                interpretazione.costiDTWGruppi?.[id] || "assoluto") + '</label>' +
+              inputTempo("finestreDTWGruppi",
+                "Finestra massima |indice i−indice j| (vuoto = nessun vincolo)",
+                "es. 1") +
+              '<p>La finestra è simmetrica e deve permettere almeno un cammino. ' +
+              'Un valore 0 consente solo la diagonale.</p>' +
+              '<label>Penalizzare anche lo sfasamento nei tempi reali?' +
+              selezioneTempo("penalizzazioniDTWGruppi",
+                [["no", "No: costo soltanto sui valori"],
+                 ["si", "Sì: aggiungo λ·|t−s|/τ"]],
+                penale) + '</label>' +
+              (penale === "si"
+                ? inputTempo("pesiRitardoDTWGruppi",
+                    "Peso dello sfasamento λ (≥0; >0 se irregolare)", "es. 2") +
+                  inputTempo("scaleRitardoDTWGruppi",
+                    "Scala temporale τ (>0; stessa unità dei timestamp)", "es. 1")
+                : "") +
+              '<p>Se i tempi sono irregolari, la penalità è necessaria: ' +
+              'un allineamento per soli indici ignorerebbe le durate effettive. ' +
+              'Nessun peso o scala viene impostato automaticamente.</p></div>');
+          } else if (allineamento === "lcss") {
+            domande.push('<div class="question-item"><strong>Parametri LCSS</strong>' +
+              inputTempo("tolleranzeValoreLCSSGruppi",
+                "Tolleranza sui valori εv (≥0)", "es. 0.5") +
+              inputTempo("tolleranzeTempoLCSSGruppi",
+                "Tolleranza sugli istanti εt (≥0)", "es. 2") +
+              '<p>Due osservazioni possono coincidere soltanto se ' +
+              'rientrano in entrambe le tolleranze. ' +
+              'Con tempi regolari non specificati, εt è misurata in passi; ' +
+              'in caso contrario, nell’unità dichiarata.</p></div>');
+          }
+        }
       }
       if (gruppo.tipo === "distribuzione") {
         domande.push(domandaAdattiva(
@@ -1751,7 +1841,8 @@
       // una misura locale differente. La semantica viene confermata prima.
       const misuraPerCoordinate = gruppo.tipo === "coordinate"
         || (gruppo.tipo === "ripetute" && valoreRisposta(`somiglianza-${gruppo.id}`) === "valori_vicini")
-        || (gruppo.tipo === "tempo" && valoreRisposta(`ritardo-${gruppo.id}`) === "no")
+        || (gruppo.tipo === "tempo" && valoreRisposta(`ritardo-${gruppo.id}`) === "no" &&
+            (interpretazione.misureTemporaliGruppi?.[gruppo.id] || "punto") === "punto")
         || (gruppo.tipo === "parti" && valoreRisposta(`totale-${gruppo.id}`) === "no");
       const metodiPreliminari = membri.map(profilo =>
         risultato.colonne.find(colonna => colonna.nome === profilo.nome)
@@ -2103,9 +2194,22 @@
       nascondiPiano();
       return;
     }
+    if (evento.target.matches(".temporal-parameter")) {
+      const key = evento.target.dataset.temporalKey;
+      const id = evento.target.dataset.groupId;
+      if (!interpretazione[key]) interpretazione[key] = {};
+      interpretazione[key][id] = evento.target.value;
+      annullaScelteNormalizzazione();
+      nascondiPiano();
+      return;
+    }
     if (!evento.target.matches(".temporal-order-input")) return;
     if (!interpretazione.ordiniTemporaliGruppi) interpretazione.ordiniTemporaliGruppi = {};
-    interpretazione.ordiniTemporaliGruppi[evento.target.dataset.groupId] = evento.target.value;
+    const id = evento.target.dataset.groupId;
+    if (interpretazione.ordiniTemporaliGruppi[id] !== evento.target.value) {
+      if (interpretazione.tempiTemporaliGruppi) delete interpretazione.tempiTemporaliGruppi[id];
+    }
+    interpretazione.ordiniTemporaliGruppi[id] = evento.target.value;
     annullaScelteNormalizzazione();
     nascondiPiano();
   });
@@ -2118,11 +2222,35 @@
     );
     if (nomi.length < 2) return;
     if (!interpretazione.ordiniTemporaliGruppi) interpretazione.ordiniTemporaliGruppi = {};
+    if (interpretazione.ordiniTemporaliGruppi[id] !== nomi.join("; ")) {
+      if (interpretazione.tempiTemporaliGruppi) delete interpretazione.tempiTemporaliGruppi[id];
+    }
     interpretazione.ordiniTemporaliGruppi[id] = nomi.join("; ");
     annullaScelteNormalizzazione();
     disegnaQuestionario();
   });
   $("adaptive-questions").addEventListener("change", evento => {
+    if (evento.target.matches(".temporal-parameter")) {
+      const key = evento.target.dataset.temporalKey;
+      const id = evento.target.dataset.groupId;
+      if (!interpretazione[key]) interpretazione[key] = {};
+      interpretazione[key][id] = evento.target.value;
+      annullaScelteNormalizzazione();
+      nascondiPiano();
+      return;
+    }
+    if (evento.target.matches(".temporal-option")) {
+      const key = evento.target.dataset.temporalKey;
+      const id = evento.target.dataset.groupId;
+      if (!interpretazione[key]) interpretazione[key] = {};
+      interpretazione[key][id] = evento.target.value;
+      if (key === "misureTemporaliGruppi" && evento.target.value === "pendenze"
+          && interpretazione.misureGruppi) delete interpretazione.misureGruppi[id];
+      annullaScelteNormalizzazione();
+      annullaConfermeCompatibilita();
+      disegnaQuestionario();
+      return;
+    }
     if (evento.target.matches(".set-setting")) {
       if (!interpretazione.configurazioniInsiemi) interpretazione.configurazioniInsiemi = {};
       const nome = evento.target.dataset.setColumn;
@@ -2293,8 +2421,17 @@
   });
   function invalidaConfermaTemporale(idGruppo) {
     if (!idGruppo) return;
-    if (interpretazione.ordiniTemporaliGruppi) delete interpretazione.ordiniTemporaliGruppi[idGruppo];
-    if (interpretazione.campionamentiTemporaliGruppi) delete interpretazione.campionamentiTemporaliGruppi[idGruppo];
+    for (const chiave of [
+      "ordiniTemporaliGruppi", "campionamentiTemporaliGruppi",
+      "tempiTemporaliGruppi", "unitaTemporaleGruppi",
+      "misureTemporaliGruppi", "metodiAllineamentoTemporaleGruppi",
+      "costiDTWGruppi", "finestreDTWGruppi",
+      "penalizzazioniDTWGruppi", "pesiRitardoDTWGruppi",
+      "scaleRitardoDTWGruppi", "tolleranzeValoreLCSSGruppi",
+      "tolleranzeTempoLCSSGruppi"
+    ]) {
+      if (interpretazione[chiave]) delete interpretazione[chiave][idGruppo];
+    }
   }
   $("group-assignment-body").addEventListener("change", evento => {
     if (!evento.target.matches(".group-assignment")) return;
