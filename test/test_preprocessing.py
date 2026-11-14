@@ -1885,7 +1885,7 @@ try:
     )
     assert False, "log(1+x) deve essere rifiutato sui dati negativi"
 except ValueError as errore:
-    assert "non negativi" in str(errore) or "maggiore" in str(errore)
+    assert "non negativi" in str(errore) or "maggior" in str(errore)
 
 # Conferma che il metodo robusto esplicito non diventi z-score.
 preparata_robusta = p.prepara_tabella(
