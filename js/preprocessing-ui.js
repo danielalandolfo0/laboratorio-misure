@@ -681,6 +681,18 @@
     "Se non vuoi tenere conto di queste relazioni, valuta Euclidea o Manhattan.",
     "d(x,y)=\\sqrt{(x-y)^\\top S^{-1}(x-y)}"
   ],
+  "mahalanobis_ridge": [
+    "Considera le relazioni fra le colonne aggiungendo una quantità positiva λ alla diagonale della covarianza.",
+    "Il risultato dipende da λ e dalle unità dei valori originali: aumentare λ attenua l'effetto delle correlazioni.",
+    "Se non vuoi modificare la covarianza, puoi rivedere le colonne; l'alternativa con pseudoinversa scarta le direzioni a varianza nulla.",
+    "d(x,y)=\\sqrt{(x-y)^\\top(S+\\lambda I)^{-1}(x-y)}"
+  ],
+  "mahalanobis_pinv": [
+    "Confronta le righe nelle direzioni della covarianza che superano la soglia relativa scelta.",
+    "Le direzioni scartate non contribuiscono: la distanza può essere zero tra vettori diversi (pseudometrica).",
+    "La regolarizzazione conserva invece tutte le direzioni, ma richiede λ positivo.",
+    "d(x,y)=\\sqrt{(x-y)^\\top S^+(x-y)}"
+  ],
   "canberra": [
     "Confronta gli scarti in proporzione alla grandezza dei valori di ciascuna colonna.",
     "Valori vicini a zero possono fare incidere molto anche differenze assolute piccole.",
@@ -762,7 +774,7 @@
     const scelta = interpretazione.gestioneDipendenzaLineare || "";
     return `<div class="question-item">
       <label for="numeric-dependency-choice"><strong>Alcune colonne riportano informazioni già contenute in altre. Come vuoi procedere?</strong></label>
-      <p>Non è un errore del file. Se mantieni tutte le colonne, questa informazione ripetuta può influenzare più volte il risultato. Mahalanobis classica non può essere calcolata su queste colonne perché la covarianza è singolare.</p>
+      <p>Non è un errore del file. Se mantieni tutte le colonne, questa informazione ripetuta può influenzare più volte il risultato. Mahalanobis classica non può essere calcolata con covarianza singolare; nel menu della misura puoi scegliere esplicitamente la regolarizzazione (λ positivo) o la pseudoinversa (soglia relativa), senza che il sito decida per te.</p>
       <select id="numeric-dependency-choice">
         <option value=""${scelta === "" ? " selected" : ""}>Devo ancora decidere</option>
         <option value="mantieni"${scelta === "mantieni" ? " selected" : ""}>Voglio mantenere tutte le colonne e accetto questo effetto</option>
@@ -779,7 +791,10 @@
       ["chebyshev", "Conta la maggiore differenza (Chebyshev)"], ["minkowski", "Regola l’importanza degli scarti (Minkowski)"],
       ["weighted_minkowski", "Dai importanza diversa alle colonne (Minkowski pesata)"],
       ["weighted_chebyshev", "Conta la maggiore differenza ponderata (Chebyshev pesata)"],
-      ["mahalanobis", "Considera come le colonne variano insieme (Mahalanobis)"], ["canberra", "Confronta gli scarti relativi (Canberra)"],
+      ["mahalanobis", "Mahalanobis classica (covarianza invertibile)"],
+      ["mahalanobis_ridge", "Mahalanobis regolarizzata: mantieni tutte le direzioni (avanzato)"],
+      ["mahalanobis_pinv", "Mahalanobis con pseudoinversa: ignora direzioni dipendenti (avanzato)"],
+      ["canberra", "Confronta gli scarti relativi (Canberra)"],
       ["bray_curtis", "Confronta quantità complessive (Bray–Curtis)"], ["chi_square", "Dai rilievo alle componenti piccole (chi-quadrato)"]
     ];
     const scelta = interpretazione.misuraNumericaManuale || "automatico";
@@ -794,6 +809,8 @@
       <p>Non serve conoscere il nome delle misure: scegli l’obiettivo che preferisci. Il sito verifica se è compatibile con i dati.</p>
       ${esponente ? `<label for="numeric-measure-q">Quanto vuoi dare rilievo alle differenze grandi? (q ≥ 1)</label><p>Con 1 sommi tutte le differenze; con 2 quelle grandi hanno maggiore influenza. Per altre scelte serve un valore almeno pari a 1.</p><input id="numeric-measure-q" type="number" min="1" step="0.5" value="${escapeHtml(interpretazione.ordineMisuraManuale || "2")}">` : ""}
       ${pesata ? `<label for="numeric-measure-weights">Quanto conta ogni colonna? ${colonne.map(escapeHtml).join(", ")}</label><input id="numeric-measure-weights" type="text" value="${escapeHtml(interpretazione.pesiMisuraManuale || colonne.map(() => "1").join("; "))}"><small>Inserisci un numero positivo per colonna, separando con punto e virgola. Usa 1 per tutte se devono avere la stessa importanza.</small>` : ""}
+      ${scelta === "mahalanobis_ridge" ? `<label for="numeric-measure-lambda">Regolarizzazione λ (numero strettamente positivo)</label><input id="numeric-measure-lambda" type="text" inputmode="decimal" value="${escapeHtml(interpretazione.lambdaMahalanobis ?? "")}" placeholder="es. 1"><small>Il sito calcola S + λI sulle coordinate originali. λ ha le unità al quadrato dei dati; non viene scelto automaticamente. Se λ è troppo piccolo, il calcolo resta bloccato.</small>` : ""}
+      ${scelta === "mahalanobis_pinv" ? `<label for="numeric-measure-tolerance">Soglia relativa della pseudoinversa (tra 1e-12 e 0.1)</label><input id="numeric-measure-tolerance" type="text" inputmode="decimal" value="${escapeHtml(interpretazione.tolleranzaPseudoinversa ?? "")}" placeholder="es. 1e-10"><small>Gli autovalori non superiori a questa frazione del massimo sono scartati. La matrice può descrivere una pseudometrica: scarti in direzioni scartate contano zero.</small>` : ""}
       <button class="secondary-action" id="apply-numeric-measure" type="button">Applica misura</button>
     </div>`;
   }
@@ -1905,8 +1922,16 @@
     delete interpretazione.confermaValoriOriginaliNumerici;
     const q = $("numeric-measure-q");
     const pesi = $("numeric-measure-weights");
+    const lambda = $("numeric-measure-lambda");
+    const tolleranza = $("numeric-measure-tolerance");
     if (q) interpretazione.ordineMisuraManuale = q.value;
     if (pesi) interpretazione.pesiMisuraManuale = pesi.value;
+    if (interpretazione.misuraNumericaManuale === "mahalanobis_ridge") {
+      interpretazione.lambdaMahalanobis = lambda.value;
+    }
+    if (interpretazione.misuraNumericaManuale === "mahalanobis_pinv") {
+      interpretazione.tolleranzaPseudoinversa = tolleranza.value;
+    }
     preparaPiano();
   });
   $("scaling-body").addEventListener("change", evento => {

@@ -455,7 +455,52 @@ async function testRiscalamentoNumericoInTabellaMista() {
     "La conferma deve arrivare realmente al motore di confronto.");
 }
 
+async function testMahalanobisAvanzata() {
+  const h = createHarness();
+  h.fire("csv-file", "change", {target: {files: [{
+    name: "singolare.csv", type: "text/csv", size: 100,
+    text: async () => "x,y,id\n0,0,A\n1,2,B\n2,4,C"
+  }]}});
+  await flush();
+  const piano = h.makePlan();
+  Object.assign(piano.percorsi[0], {
+    tipo: "numerico", idMisura: "mahalanobis_ridge",
+    metodo: "Mahalanobis con covarianza regolarizzata",
+    proprieta: "Metrica per S + λI definita positiva",
+    diagnosiAutomatica: {covarianzaSingolare: true, campioneLimitato: true},
+    parametri: {}
+  });
+  h.observations.planIntercept = () => Promise.resolve(piano);
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  assert.match(h.element("comparison-plan-paths").innerHTML, /value="mahalanobis_ridge"/);
+  assert.match(h.element("comparison-plan-paths").innerHTML, /value="mahalanobis_pinv"/);
+  const selezione = {id:"numeric-measure-choice", value:"mahalanobis_ridge",
+    matches:()=>false};
+  h.fire("comparison-plan-paths", "change", {target: selezione});
+  await flush();
+  assert.match(h.element("comparison-plan-paths").innerHTML, /id="numeric-measure-lambda"/);
+  h.element("numeric-measure-choice").value = "mahalanobis_ridge";
+  h.element("numeric-measure-lambda").value = "0.5";
+  h.fire("comparison-plan-paths", "click", {target: {id:"apply-numeric-measure"}});
+  await flush();
+  assert.equal(h.observations.planCalls.at(-1).interpretazione.lambdaMahalanobis, "0.5");
+  const pinv = {id:"numeric-measure-choice", value:"mahalanobis_pinv",
+    matches:()=>false};
+  h.fire("comparison-plan-paths", "change", {target: pinv});
+  await flush();
+  assert.match(h.element("comparison-plan-paths").innerHTML, /id="numeric-measure-tolerance"/);
+  h.element("numeric-measure-choice").value = "mahalanobis_pinv";
+  h.element("numeric-measure-tolerance").value = "1e-10";
+  h.fire("comparison-plan-paths", "click", {target: {id:"apply-numeric-measure"}});
+  await flush();
+  const scelta = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(scelta.misuraNumericaManuale, "mahalanobis_pinv");
+  assert.equal(scelta.tolleranzaPseudoinversa, "1e-10");
+}
+
 (async () => {
+  await testMahalanobisAvanzata();
   await testRiscalamentoNumericoInTabellaMista();
   await testGuida();
   await testStaleFiles();

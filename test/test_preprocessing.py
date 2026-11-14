@@ -750,6 +750,8 @@ raggiunte = {
     misura_da(aggregazioneScarti="minkowski", ordineMinkowski="3")["idMisura"],
     pesata["idMisura"], chebyshev_pesata["idMisura"],
     standardizzata["idMisura"], mahalanobis["idMisura"],
+    misura_da(misuraNumericaManuale="mahalanobis_ridge", lambdaMahalanobis="1")["idMisura"],
+    misura_da(misuraNumericaManuale="mahalanobis_pinv", tolleranzaPseudoinversa="1e-10")["idMisura"],
     canberra["idMisura"],
     misura_da(confrontoQuantitativo="abbondanza")["idMisura"],
     misura_da(confrontoQuantitativo="frequenze")["idMisura"],
@@ -769,7 +771,8 @@ piano_singolare = p.crea_piano_confronto(
     risposte_quantitative(dipendenzaCoordinate="si"),
 )
 assert piano_singolare["completo"] is False
-assert any("covarianza empirica non è invertibile" in avviso for avviso in piano_singolare["percorsi"][0]["avvisi"])
+assert any("Mahalanobis classica" in avviso and "covarianza" in avviso
+           for avviso in piano_singolare["percorsi"][0]["avvisi"])
 
 dati_con_negativi = p.prepara_tabella(p.leggi_csv("a,b\n-2,1\n-1,2\n1,4\n3,7"))
 piano_bray_non_valido = p.crea_piano_confronto(
@@ -2551,5 +2554,125 @@ assert piano_assente["completo"], piano_assente
 matrice_assente = p.calcola_matrice(dati_assente, base_assente)
 verifica_matrice_finale(matrice_assente, 4)
 quasi_uguali(matrice_assente["matrice"][0][2], (0.9 + 1) / 2)
+
+# Mahalanobis su covarianza singolare: nessun ripiego silenzioso.
+# Qui y=2x; la covarianza è [[1,2],[2,4]], con rango uno.
+m_sing = p.prepara_tabella(p.leggi_csv(
+    "x,y\n0,0\n1,2\n2,4"
+))
+m_base = {
+    "riga": "oggetto",
+    "confrontoQuantitativo": "assoluto",
+    "aggregazioneScarti": "quadratica",
+    "dipendenzaCoordinate": "si",
+    "importanzaCoordinate": "uguale",
+    "gestioneDipendenzaLineare": "mantieni",
+    "colonne": {"x": {"ruolo": "quantita", "usa": True},
+               "y": {"ruolo": "quantita", "usa": True}},
+}
+classica_sing = p.crea_piano_confronto(
+    m_sing, {**m_base, "misuraNumericaManuale": "mahalanobis"}
+)
+assert not classica_sing["completo"], classica_sing
+assert any("covarianza" in s for s in classica_sing["percorsi"][0]["avvisi"])
+for variante in ("mahalanobis_ridge", "mahalanobis_pinv"):
+    assert not p.crea_piano_confronto(
+        m_sing, {**m_base, "misuraNumericaManuale": variante}
+    )["completo"], variante
+
+ridge_base = {**m_base, "misuraNumericaManuale": "mahalanobis_ridge",
+              "lambdaMahalanobis": "1"}
+ridge_piano = p.crea_piano_confronto(m_sing, ridge_base)
+assert ridge_piano["completo"], ridge_piano
+assert ridge_piano["percorsi"][0]["parametri"]["lambda"] == 1
+ridge_locale = p.calcola_matrice_numerica(m_sing, ridge_base)
+quasi_uguali(ridge_locale["matrice"][0][1], math.sqrt(5 / 6))
+quasi_uguali(ridge_locale["matrice"][0][2], 2 * math.sqrt(5 / 6))
+assert ridge_locale["diagnosticaCovarianza"]["condizionamento"] < 1e8
+assert "Sλ = S + λI" in ridge_locale["nota"]
+ridge_finale = p.calcola_matrice(m_sing, ridge_base)
+quasi_uguali(ridge_finale["matrice"][0][1], 0.5)
+quasi_uguali(ridge_finale["matrice"][0][2], 1)
+assert all(0 <= v <= 1 for riga in ridge_finale["matrice"] for v in riga)
+
+pinv_base = {**m_base, "misuraNumericaManuale": "mahalanobis_pinv",
+             "tolleranzaPseudoinversa": "1e-10"}
+pinv_piano = p.crea_piano_confronto(m_sing, pinv_base)
+assert pinv_piano["completo"], pinv_piano
+assert pinv_piano["percorsi"][0]["proprieta"].startswith("Pseudometrica")
+pinv_locale = p.calcola_matrice_numerica(m_sing, pinv_base)
+quasi_uguali(pinv_locale["matrice"][0][1], 1)
+quasi_uguali(pinv_locale["matrice"][0][2], 2)
+assert pinv_locale["diagnosticaCovarianza"]["rangoEffettivo"] == 1
+assert "pseudometrica" in pinv_locale["nota"]
+
+# Caso rank 2, p=3: autovettori indipendenti e contributi ortogonali.
+m_rango2 = p.prepara_tabella(p.leggi_csv(
+    "x,y,z\n0,0,0\n2,0,2\n0,4,0\n2,4,2"
+))
+scelta_rango2 = {
+    **pinv_base,
+    "colonne": {nome: {"ruolo": "quantita", "usa": True}
+                for nome in ("x", "y", "z")},
+}
+rango2_piano = p.crea_piano_confronto(m_rango2, scelta_rango2)
+assert rango2_piano["completo"], rango2_piano
+rango2_locale = p.calcola_matrice_numerica(m_rango2, scelta_rango2)
+quasi_uguali(rango2_locale["matrice"][0][1], math.sqrt(3))
+quasi_uguali(rango2_locale["matrice"][0][2], math.sqrt(3))
+quasi_uguali(rango2_locale["matrice"][0][3], math.sqrt(6))
+assert rango2_locale["diagnosticaCovarianza"]["rangoEffettivo"] == 2
+
+# La regolarizzazione conserva le direzioni; la pseudoinversa ne tronca
+# esplicitamente alcune: un autovalore piccolo ma positivo conta solo se
+# supera ε volte il massimo autovalore.
+for parametro in ("0", "-1", "nan", "inf", "xyz"):
+    assert not p.crea_piano_confronto(
+        m_sing, {**ridge_base, "lambdaMahalanobis": parametro}
+    )["completo"], parametro
+for parametro in ("0", "1e-15", "0.5", "nan", "xyz"):
+    assert not p.crea_piano_confronto(
+        m_sing, {**pinv_base, "tolleranzaPseudoinversa": parametro}
+    )["completo"], parametro
+
+# Con meno osservazioni delle coordinate, la classica è impossibile,
+# ma le due alternative esplicite restano matematicamente definite.
+m_scarse = p.prepara_tabella(
+    p.leggi_csv("x,y,z\n0,0,0\n1,2,3"),
+    [{"tipo": "numerica", "metodo": "auto"}, {}, {}],
+)
+scarse_base = {**m_base,
+    "colonne": {nome: {"ruolo": "quantita", "usa": True}
+                for nome in ("x", "y", "z")}}
+assert not p.crea_piano_confronto(
+    m_scarse, {**scarse_base, "misuraNumericaManuale": "mahalanobis"}
+)["completo"]
+for manuale, parametro in (
+    ("mahalanobis_ridge", {"lambdaMahalanobis": "2"}),
+    ("mahalanobis_pinv", {"tolleranzaPseudoinversa": "1e-10"}),
+):
+    scelta = {**scarse_base, "misuraNumericaManuale": manuale, **parametro}
+    piano = p.crea_piano_confronto(m_scarse, scelta)
+    assert piano["completo"], piano
+    assert p.calcola_matrice(m_scarse, scelta)["matrice"][0][1] == 1
+
+# Imputazioni non consentite per nessuna variante Mahalanobis.
+m_mancanti = p.prepara_tabella(p.leggi_csv(
+    "x,y\n1,1\n2,2\n3,NA\n4,4"
+))
+for manuale, parametro in (
+    ("mahalanobis_ridge", {"lambdaMahalanobis": "1"}),
+    ("mahalanobis_pinv", {"tolleranzaPseudoinversa": "1e-10"}),
+):
+    scelta = {
+        **m_base, "misuraNumericaManuale": manuale,
+        "significatoMancanti": "sconosciuto", **parametro,
+        "mancantiNumericiPerColonna": {"y": "imputa_media"},
+    }
+    assert not p.crea_piano_confronto(m_mancanti, scelta)["completo"]
+    scelta["mancantiNumericiPerColonna"] = {"y": "escludi_riga"}
+    assert p.crea_piano_confronto(m_mancanti, scelta)["completo"]
+    matrice_locale = p.calcola_matrice_numerica(m_mancanti, scelta)
+    assert matrice_locale["indiciRighe"] == [0, 1, 3]
 
 print("Tutti i test Python di preprocessing sono stati superati.")

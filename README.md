@@ -99,6 +99,31 @@ finale contengono soltanto le righe effettivamente utilizzate. Mahalanobis con
 imputazione non viene abilitata automaticamente, perché richiede una nuova
 verifica della covarianza dopo il completamento dei dati.
 
+## Mahalanobis: covarianza singolare o instabile
+
+Il percorso numerico distingue tre operazioni:
+
+- **Classica**, d(x,y) = √((x−y)ᵀS⁻¹(x−y)): disponibile soltanto
+  con covarianza campionaria invertibile e sufficientemente condizionata.
+- **Regolarizzata**, Sλ = S + λI con **λ > 0 scelto dall'utente**,
+  sulle coordinate originali. La dimensione di λ corrisponde alle unità
+  al quadrato di tali coordinate. Il calcolo verifica il condizionamento
+  numerico della matrice regolarizzata e blocca valori di λ insufficienti.
+- **Pseudoinversa di Moore–Penrose**, costruita dalla decomposizione
+  agli autovalori della matrice simmetrica S. La soglia relativa ε,
+  scelta esplicitamente dall'utente fra 1e-12 e 0.1, determina il rango
+  numerico: si mantengono solo le direzioni con autovalore > ε·μmax.
+  Su R^p la funzione risultante può essere una **pseudometrica**.
+
+Nessuna variante è applicata automaticamente quando la covarianza è
+singolare o mal condizionata. Le varianti sono nel menu avanzato della
+misura del piano numerico. La covarianza è stimata su almeno due righe
+complete; con mancanti è ammessa, per queste varianti, soltanto l'esclusione
+delle righe incomplete per ciascuna colonna interessata. Il sistema non
+sceglie imputazioni né altera il preprocessing confermato senza avviso.
+La matrice finale continua a essere normalizzata e aggregata, se sono
+presenti più percorsi, secondo la stessa procedura già adottata.
+
 ## Quantità numeriche in un CSV misto
 
 Quando almeno due colonne quantitative indipendenti convivono con categorie,
