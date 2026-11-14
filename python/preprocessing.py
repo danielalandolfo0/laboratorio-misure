@@ -2531,9 +2531,17 @@ def _crea_percorsi(
                 metodo = "Dissimilarità di Gower classica"
                 motivo = "Combina quantità, categorie, livelli e variabili binarie con contributi confrontabili."
             personalizzati = any(
-                (ruoli[n] in {"categoria", "livello"}
-                 and (interpretazione.get("modalitaCategorieGower") or {}).get(n) == "personalizzata")
+                ((ruoli[n] == "categoria" or (
+                    ruoli[n] == "livello" and (
+                        (interpretazione.get("ordinePerColonna") or {}).get(
+                            n, interpretazione.get("ordineLivelli")
+                        ) == "no"
+                    )
+                )) and (interpretazione.get("modalitaCategorieGower") or {}).get(n) == "personalizzata")
                 or (ruoli[n] == "livello"
+                    and (interpretazione.get("ordinePerColonna") or {}).get(
+                        n, interpretazione.get("ordineLivelli")
+                    ) == "si"
                     and (interpretazione.get("modalitaIntervalliGower") or {}).get(n) == "personalizzati")
                 for n in standard
             )
@@ -3120,6 +3128,8 @@ def _categorie_nominali_gower(
     })
     if any(v is ASSENZA_GOWER for v in valori):
         categorie.append(ASSENZA_GOWER)
+    if len(categorie) <= 1:
+        return {}
     if len(categorie) > 16:
         raise ValueError(
             f"Per “{nome}” sono presenti {len(categorie)} categorie. "

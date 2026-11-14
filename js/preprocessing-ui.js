@@ -1099,7 +1099,7 @@
         const politica = interpretazione.mancantiPerColonna?.[nome] || "";
         const comeAssenza = (risultato.colonne.find(c => c.nome === nome)?.mancanti > 0) &&
           (politica === "assenza" || (!politica && rispostaMancanti === "assenza"));
-        const livelli = [...distinti].sort((a,b) => a.localeCompare(b, "it"));
+        const livelli = [...distinti].sort();
         if (comeAssenza) livelli.push(null);
         elementi += configuraNominali(nome, livelli);
       }
@@ -1113,7 +1113,7 @@
           const politica = interpretazione.mancantiPerColonna?.[nome] || "";
           const comeAssenza = (risultato.colonne.find(c => c.nome === nome)?.mancanti > 0) &&
             (politica === "assenza" || (!politica && rispostaMancanti === "assenza"));
-          const livelliNominali = [...distinti].sort((a,b) => a.localeCompare(b, "it"));
+          const livelliNominali = [...distinti].sort();
           if (comeAssenza) livelliNominali.push(null);
           elementi += configuraNominali(nome, livelliNominali);
         }

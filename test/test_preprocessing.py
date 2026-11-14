@@ -2392,8 +2392,8 @@ verifica_matrice_finale(matrice_personalizzata, 5)
 quasi_uguali(matrice_personalizzata["matrice"][0][1], (.25 + .4) / 2)
 quasi_uguali(matrice_personalizzata["matrice"][1][2], (.75 + .8) / 2)
 quasi_uguali(matrice_personalizzata["matrice"][0][3], .4 / 2)
-assert "contributi personalizzati" in matrice_personalizzata["contributi"][0]["metodo"]
-assert "intervalli personalizzati" in matrice_personalizzata["contributi"][0]["nota"].lower()
+assert "contributi personalizzati" in matrice_personalizzata["metodo"]
+assert "intervalli personalizzati" in matrice_personalizzata["nota"].lower()
 matrice_default = p.calcola_matrice(
     dati_nominale_ordinale, base_nominale_ordinale
 )
