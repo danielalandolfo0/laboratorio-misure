@@ -11,6 +11,7 @@
   let vista = "lavoro";
   let pianoCorrente = null;
   let matriceCorrente = null;
+  let rapportoCoppieNonConfrontabili = null;
   let versioneDiagnosi = 0;
   let proposteGruppiCorrenti = [];
   let riscalamentoConfermato = false;
@@ -51,6 +52,91 @@
   function nascondiErrore() {
     $("csv-error").textContent = "";
     $("csv-error").style.display = "none";
+  }
+
+  function elencoProblemiHtml(problemi) {
+    if (!problemi?.length) return "";
+    return '<ul class="problem-report-list">' +
+      problemi.map(problema =>
+        '<li><strong>' + escapeHtml(problema.nome || "Configurazione") +
+        '</strong>' +
+        (problema.colonne?.length
+          ? '<span class="problem-report-columns">Colonne: ' +
+            escapeHtml(problema.colonne.join(", ")) + '</span>'
+          : '') +
+        '<p>' + escapeHtml(problema.messaggio || "") + '</p>' +
+        (problema.decisioniPossibili?.length
+          ? '<p><strong>Possibili decisioni:</strong> ' +
+            problema.decisioniPossibili.map(escapeHtml).join(" ") + '</p>'
+          : '') + '</li>'
+      ).join("") + '</ul>';
+  }
+
+  function azzeraProblemiCalcolo() {
+    rapportoCoppieNonConfrontabili = null;
+    $("comparison-calculation-problems-body").innerHTML = "";
+    $("comparison-calculation-problems").hidden = true;
+    $("download-uncovered-pairs").hidden = true;
+  }
+
+  function disegnaProblemiCalcolo(rapporto) {
+    azzeraProblemiCalcolo();
+    if (!rapporto || !Array.isArray(rapporto.bloccanti)) return;
+    const coppie = rapporto.coppieNonConfrontabili || [];
+    const etichette = rapporto.etichette || [];
+    const esempioCoppie = coppie.slice(0, 12).map(([i, j]) =>
+      '<li>Riga ' + escapeHtml(String(i)) + ' (' +
+      escapeHtml(etichette[i - 1] ?? String(i)) + ') e riga ' +
+      escapeHtml(String(j)) + ' (' +
+      escapeHtml(etichette[j - 1] ?? String(j)) + ')</li>'
+    ).join("");
+    $("comparison-calculation-problems-body").innerHTML =
+      '<h5>Rapporto dei problemi riscontrati durante il calcolo</h5>' +
+      '<p><strong>' + escapeHtml(String(rapporto.numeroBloccanti || 0)) +
+      ' problemi bloccanti.</strong> La matrice non è stata generata: ' +
+      'il sito non sostituisce distanze non definite con numeri arbitrari.</p>' +
+      elencoProblemiHtml(rapporto.bloccanti) +
+      (coppie.length
+        ? '<p><strong>Tutte le coppie non confrontabili: ' +
+          escapeHtml(String(coppie.length)) +
+          '.</strong> Eccone fino a 12; il CSV contiene l’elenco completo ' +
+          'con gli indici originali e le etichette.</p><ul>' +
+          esempioCoppie + '</ul>'
+        : '') +
+      '<p>Per proseguire rivedi le scelte pertinenti e prepara nuovamente ' +
+      'il piano. Nessuna correzione viene applicata automaticamente.</p>';
+    if (coppie.length) {
+      rapportoCoppieNonConfrontabili = {coppie, etichette};
+      $("download-uncovered-pairs").hidden = false;
+    }
+    $("comparison-calculation-problems").hidden = false;
+  }
+
+  function scaricaCoppieNonConfrontabili() {
+    if (!rapportoCoppieNonConfrontabili?.coppie?.length) return;
+    const {coppie, etichette} = rapportoCoppieNonConfrontabili;
+    const cellaCsv = valore => {
+      // Le etichette importate non possono diventare formule nel foglio CSV.
+      let testo = String(valore);
+      if (/^[\s]*[=+@-]/.test(testo)) testo = "'" + testo;
+      return '"' + testo.replace(/"/g, '""') + '"';
+    };
+    const righe = ['riga_1;riga_2;etichetta_1;etichetta_2'];
+    for (const [i, j] of coppie) {
+      righe.push([i, j, etichette[i - 1] ?? "", etichette[j - 1] ?? ""]
+        .map(cellaCsv).join(";"));
+    }
+    const url = URL.createObjectURL(new Blob(
+      ["\uFEFF" + righe.join("\r\n")],
+      {type: "text/csv;charset=utf-8"}
+    ));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "coppie_non_confrontabili.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   function disegnaMetodi() {
@@ -334,6 +420,7 @@
     $("calculate-gower").textContent = "Calcola la matrice finale";
     $("download-gower").disabled = true;
     $("download-report").disabled = true;
+    azzeraProblemiCalcolo();
     aggiornaVisibilitaTrasformazione();
     aggiornaGuida();
   }
@@ -835,6 +922,7 @@
   }
 
   function disegnaPiano(piano) {
+    azzeraProblemiCalcolo();
     pianoCorrente = piano;
     matriceCorrente = null;
     $("gower-result").hidden = true;
@@ -1008,9 +1096,32 @@
       (percorso.avvisi || []).map(avviso => `${percorso.titolo}: ${avviso}`)
     );
     const avvisi = [...piano.avvisi, ...avvisiBlocchi, ...avvisiPercorsi];
-    $("comparison-plan-warnings").innerHTML = avvisi.length
-      ? `<p><strong>Che cosa controllare prima del calcolo:</strong></p><ul>${avvisi.map(avviso => `<li>${escapeHtml(avviso)}</li>`).join("")}</ul>`
-      : "";
+    const rapporto = piano.rapportoProblemi;
+    if (rapporto) {
+      $("comparison-plan-warnings").innerHTML =
+        '<h5>Rapporto complessivo del piano</h5>' +
+        '<p><strong>' + escapeHtml(String(rapporto.numeroBloccanti)) +
+        ' problemi bloccanti</strong> e ' +
+        escapeHtml(String(rapporto.numeroAvvisi)) + ' avvisi informativi. ' +
+        (rapporto.calcoloConsentito
+          ? 'Il piano può essere calcolato; gli avvisi non bloccano.'
+          : 'Completa le decisioni richieste prima di calcolare.') + '</p>' +
+        (rapporto.bloccanti.length
+          ? '<h6>Da risolvere prima del calcolo</h6>' +
+            elencoProblemiHtml(rapporto.bloccanti)
+          : '') +
+        (rapporto.nonBloccanti.length
+          ? '<details><summary>Osservazioni che non impediscono il calcolo (' +
+            escapeHtml(String(rapporto.numeroAvvisi)) + ')</summary>' +
+            elencoProblemiHtml(rapporto.nonBloccanti) + '</details>'
+          : '');
+    } else {
+      $("comparison-plan-warnings").innerHTML = avvisi.length
+        ? '<p><strong>Che cosa controllare prima del calcolo:</strong></p><ul>' +
+          avvisi.map(avviso => '<li>' + escapeHtml(avviso) + '</li>').join("") +
+          '</ul>'
+        : "";
+    }
     const semantica = piano.diagnosticaMancantiSemantici;
     const totaliMancanti = semantica?.attiva
       ? (" Marcatori confermati: " +
@@ -1186,6 +1297,7 @@
           versioneConfigurazione !== versionePiano ||
           versioneFile !== versioneDati) return;
       matriceCorrente = risposta;
+      azzeraProblemiCalcolo();
       nascondiErrore();
       disegnaMatrice(risposta);
     } catch (errore) {
@@ -1196,6 +1308,7 @@
       $("gower-result").hidden = true;
       $("download-gower").disabled = true;
       $("download-report").disabled = true;
+      disegnaProblemiCalcolo(errore.rapportoProblemi);
       mostraErrore(errore.message);
     } finally {
       if (versione === versioneMatrice) {
@@ -2480,6 +2593,7 @@
   $("confirm-numeric-scaling").addEventListener("click", confermaRiscalamentoNumerico);
   $("prepare-comparison-plan").addEventListener("click", preparaPiano);
   $("calculate-gower").addEventListener("click", calcolaMatrice);
+  $("download-uncovered-pairs").addEventListener("click", scaricaCoppieNonConfrontabili);
   $("download-gower").addEventListener("click", scaricaMatrice);
   $("download-report").addEventListener("click", scaricaRapporto);
   $("comparison-plan-paths").addEventListener("change", evento => {
