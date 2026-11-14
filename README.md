@@ -37,9 +37,9 @@ Applicazione didattica per calcolare, confrontare e visualizzare distanze e diss
 ## Fase 7: rapporto cumulativo dei problemi
 
 Il piano preliminare espone un campo strutturato
-\`piano.rapportoProblemi\` che raccoglie **tutti i problemi individuati
+`piano.rapportoProblemi` che raccoglie **tutti i problemi individuati
 in questa fase**, senza fermarsi alla prima incompatibilità. Ogni voce
-specifica gravità (\`bloccante\` o \`avviso\`), ambito (generale,
+specifica gravità (`bloccante` o `avviso`), ambito (generale,
 caratteristica o percorso), nome, colonne coinvolte, spiegazione e
 decisioni possibili. Gli avvisi relativi a percorsi pronti non
 impediscono il calcolo; le questioni aperte, le scelte non confermate
@@ -57,15 +57,15 @@ La pagina ne mostra soltanto le prime 12 per leggibilità e permette
 di scaricare **tutte** le coppie in un CSV separato, con le etichette
 protette dall'interpretazione come formule di un foglio di calcolo.
 
-Il file \`coppie_non_confrontabili.csv\` **non è una matrice di
+Il file `coppie_non_confrontabili.csv` **non è una matrice di
 dissimilarità**, ma un elenco diagnostico per risolvere i problemi.
 La matrice finale resta assente finché almeno una coppia non può
 essere confrontata. Nessuna cella indefinita è riempita con zero
 e nessun blocco o peso viene modificato implicitamente.
 
 La risposta JSON del motore, in caso di calcolo non riuscito per
-incompatibilità rilevate, conserva \`errore\` e
-\`rapportoProblemi\`. In caso di calcolo riuscito, il rapporto completo
+incompatibilità rilevate, conserva `errore` e
+`rapportoProblemi`. In caso di calcolo riuscito, il rapporto completo
 riproducibile contiene il piano con il suo rapporto di pre-validazione
 e la normale diagnostica non bloccante del risultato. La gestione
 strutturata di questi casi non sostituisce i controlli ordinari sugli
