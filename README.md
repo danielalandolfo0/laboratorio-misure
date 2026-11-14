@@ -635,6 +635,59 @@ disponibile, il calcolo finale viene bloccato e il sito indica le coppie di
 righe prive di un contributo valido. Non viene mai esportata una matrice finale
 contenente celle vuote o valori non numerici.
 
+
+### Estensione temporale: griglia fisica, pendenze, DTW e LCSS
+
+Nel percorso per serie temporali univariate, **le colonne rappresentano
+istanti comuni a tutte le righe**: l'utente conferma l'ordine e dichiara
+campionamento regolare o irregolare. Per il campionamento irregolare
+sono obbligatori i timestamp numerici **strettamente crescenti**, uno
+per colonna, e un'unità. Le serie con timestamp differenti per ogni
+riga non sono ancora rappresentabili in questo formato e non vengono
+interpolate o allineate implicitamente. Per il campionamento regolare
+senza timestamp il confronto DTW non penalizzato usa soltanto gli indici
+(0,1,...), dichiarati come *passi*.
+
+Se i ritardi **non** devono essere tollerati, l'utente può scegliere
+il confronto punto a punto oppure la distanza sulle **pendenze**:
+\[
+d_{\rm STS}(x,y)
+=\sqrt{\sum_{r=1}^{T-1}
+ \left(\frac{(x_{r+1}-x_r)-(y_{r+1}-y_r)}
+ {t_{r+1}-t_r}\right)^2}.
+\]
+Per le pendenze i timestamp fisici sono obbligatori. Si tratta di una
+pseudometrica: due profili che differiscono di una costante hanno
+distanza nulla.
+
+Se è consentito un allineamento, si sceglie **DTW** oppure **LCSS**.
+Per DTW restano vincolanti la minimizzazione esatta del rapporto
+costo/lunghezza del cammino e i passi (1,0), (0,1), (1,1).
+L'utente può scegliere il costo assoluto o quadratico e una finestra
+di Sakoe–Chiba \(|i-j|\le w\), oppure nessuna finestra; il vincolo è
+simmetrico. La penalità facoltativa per tempi differenti ha costo
+\[
+c_\lambda((t,u),(s,v))=|u-v|+\lambda |t-s|/\tau
+\]
+(nella versione a costo assoluto), con \(\lambda\ge0\), \(\tau>0\)
+confermati; sui timestamp irregolari \(\lambda>0\) è richiesto
+per non ignorare l'informazione fisica. Con costo quadratico il primo
+termine è \(|u-v|^2\). Non si sceglie alcun peso in automatico.
+
+Per LCSS occorre dichiarare due tolleranze finite e non negative
+\(\epsilon_v\) e \(\epsilon_t\). Due punti possono essere abbinati
+se i rispettivi valori distano non più di \(\epsilon_v\) e i timestamp
+non più di \(\epsilon_t\); si calcola \(1-LCSS/\min(m,n)\).
+Nel formato CSV attuale le lunghezze dei vettori coincidono, poiché
+la griglia di colonne è comune. LCSS può annullarsi per serie diverse
+entro tolleranza ed è una dissimilarità, non necessariamente una metrica.
+
+L'interpolazione esplicita dei vuoti **interni**, quando scelta, usa
+gli effettivi timestamp (non più le posizioni degli indici). I vuoti
+agli estremi restano esclusi. Ogni percorso contribuisce alla stessa
+matrice normalizzata in \([0,1]\), senza sostituzioni arbitrarie per
+coppie non confrontabili.
+
 Nei gruppi temporali l'utente deve confermare esplicitamente
 l'**ordine cronologico** (elencando tutte e sole le colonne del gruppo)
 e dichiarare che gli intervalli temporali sono **regolari**. L'ordine

@@ -859,9 +859,38 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
         elif tipo_gruppo == "tempo":
             risposta = interpretazione.get(f"ritardo-{gruppo.get('id')}", "")
             if risposta == "si":
-                misura, motivo = "Dynamic Time Warping", "Permette di allineare andamenti simili che avvengono con un piccolo ritardo."
+                modi = interpretazione.get("metodiAllineamentoTemporaleGruppi") or {}
+                scelta_allineamento = modi.get(id_gruppo, "dtw") if isinstance(modi, dict) else ""
+                if scelta_allineamento == "dtw":
+                    misura, motivo = "Dynamic Time Warping", (
+                        "Confronta cammini monotoni a costo medio minimo esatto; "
+                        "un eventuale scarto fra timestamp richiede un costo temporale dichiarato."
+                    )
+                elif scelta_allineamento == "lcss":
+                    misura, motivo = "Dissimilarità LCSS normalizzata", (
+                        "Conta gli eventi simili che possono essere allineati in ordine "
+                        "entro tolleranze dichiarate su valore e tempo."
+                    )
+                else:
+                    misura, motivo = "Da decidere", "Scegli DTW oppure LCSS."
+                    stato = "da_completare"
+                    avvisi.append("Scegli la modalità di allineamento temporale.")
             elif risposta == "no":
-                misura, motivo = "Distanza punto per punto", "Confronta soltanto osservazioni rilevate negli stessi istanti."
+                modi = interpretazione.get("misureTemporaliGruppi") or {}
+                scelta_temporale = modi.get(id_gruppo, "punto") if isinstance(modi, dict) else ""
+                if scelta_temporale == "punto":
+                    misura, motivo = "Distanza punto per punto", (
+                        "Confronta osservazioni che corrispondono agli stessi istanti condivisi."
+                    )
+                elif scelta_temporale == "pendenze":
+                    misura, motivo = "Distanza sulle pendenze", (
+                        "Confronta variazioni divise per gli intervalli fisici tra istanti: "
+                        "due serie che differiscono per una costante additiva hanno distanza zero."
+                    )
+                else:
+                    misura, motivo = "Da decidere", "Scegli confronto punto per punto oppure sulle pendenze."
+                    avvisi.append("Scegli la misura temporale senza allineamento.")
+                    stato = "da_completare"
             else:
                 misura, motivo = "Da decidere", "Occorre sapere se piccoli ritardi temporali debbano essere tollerati."
                 avvisi.append(f"Rispondi alla domanda sul ritardo nel gruppo “{nome}”.")
@@ -955,7 +984,11 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
         confronto_coordinate = (
             tipo_gruppo == "coordinate"
             or (tipo_gruppo == "ripetute" and interpretazione.get(f"somiglianza-{id_gruppo}") == "valori_vicini")
-            or (tipo_gruppo == "tempo" and interpretazione.get(f"ritardo-{id_gruppo}") == "no")
+            or (
+                tipo_gruppo == "tempo"
+                and interpretazione.get(f"ritardo-{id_gruppo}") == "no"
+                and (interpretazione.get("misureTemporaliGruppi") or {}).get(id_gruppo, "punto") == "punto"
+            )
             or (tipo_gruppo == "parti" and interpretazione.get(f"totale-{id_gruppo}") == "no")
         )
         if scelta and not confronto_coordinate:
@@ -1039,22 +1072,119 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
         else:
             colonne_nell_ordine = specificato
         campionamento_temporale = campionamenti.get(id_gruppo, "")
-        if campionamento_temporale == "regolare":
-            motivo += " L'ordine cronologico e la regolarita' degli intervalli sono stati confermati dall'utente."
-        elif campionamento_temporale == "irregolare":
-            avvisi.append(
-                "I tempi di osservazione non sono equidistanti. Il confronto per indici "
-                "e l'interpolazione lineare per posizione non preservano i tempi reali. "
-                "Serve una scelta esplicita di ricampionamento o allineamento temporale "
-                "non ancora disponibile in questo percorso."
-            )
+        if campionamento_temporale not in {"regolare", "irregolare"}:
+            avvisi.append("Conferma se il campionamento è regolare o irregolare.")
             stato = "da_completare"
         else:
-            avvisi.append(
-                "Indica se gli intervalli tra gli istanti di osservazione sono regolari. "
-                "Il sito non puo' dedurlo dai soli valori delle colonne."
+            testo_tempi = (interpretazione.get("tempiTemporaliGruppi") or {}).get(id_gruppo, "")
+            unita = (interpretazione.get("unitaTemporaleGruppi") or {}).get(id_gruppo, "")
+            richiede_tempi = (
+                campionamento_temporale == "irregolare"
+                or misura == "Distanza sulle pendenze"
+                or (
+                    misura == "Dynamic Time Warping"
+                    and (interpretazione.get("penalizzazioniDTWGruppi") or {}).get(id_gruppo) == "si"
+                )
             )
-            stato = "da_completare"
+            if testo_tempi and not isinstance(testo_tempi, str):
+                avvisi.append("Indica i timestamp come lista numerica.")
+                stato = "da_completare"
+            elif not testo_tempi and richiede_tempi:
+                avvisi.append(
+                    "Per questo confronto servono i timestamp numerici, comuni a tutte "
+                    "le righe, nell'ordine confermato delle colonne."
+                )
+                stato = "da_completare"
+            elif testo_tempi:
+                try:
+                    tempi = _leggi_griglia_temporale(testo_tempi, len(membri))
+                    if campionamento_temporale == "regolare" and not _passi_temporali_regolari(tempi):
+                        raise ValueError(
+                            "I timestamp dichiarati regolari non sono equidistanti. "
+                            "Correggi la dichiarazione del campionamento."
+                        )
+                    if campionamento_temporale == "irregolare" and _passi_temporali_regolari(tempi):
+                        raise ValueError(
+                            "I timestamp sono equidistanti: correggi la dichiarazione 'irregolare'."
+                        )
+                    if not unita:
+                        raise ValueError("Indica l'unità dei timestamp.")
+                    parametri["tempi"] = tempi
+                    parametri["unitaTempo"] = unita
+                except ValueError as errore:
+                    avvisi.append(str(errore))
+                    stato = "da_completare"
+            elif campionamento_temporale == "regolare":
+                # Qui e solo qui gli indici hanno significato di griglia:
+                # non sono spacciati per tempi fisici.
+                parametri["tempi"] = [float(i) for i in range(len(membri))]
+                parametri["unitaTempo"] = "passi"
+            parametri["campionamento"] = campionamento_temporale
+            if campionamento_temporale == "irregolare" and "tempi" in parametri:
+                motivo += " Tutte le righe condividono i timestamp fisici esplicitamente dichiarati."
+            if misura == "Dynamic Time Warping":
+                costo = (interpretazione.get("costiDTWGruppi") or {}).get(id_gruppo, "assoluto")
+                if costo not in {"assoluto", "quadratico"}:
+                    avvisi.append("Scegli costo locale assoluto oppure quadratico per DTW.")
+                    stato = "da_completare"
+                else:
+                    parametri["costoLocale"] = costo
+                finestra_raw = (interpretazione.get("finestreDTWGruppi") or {}).get(id_gruppo, "")
+                if not isinstance(finestra_raw, str) or (
+                    finestra_raw.strip()
+                    and (not finestra_raw.strip().isdigit()
+                         or int(finestra_raw.strip()) >= len(membri))
+                ):
+                    avvisi.append(
+                        "La finestra DTW deve essere vuota (nessun vincolo) oppure "
+                        "un intero da 0 al numero di istanti meno uno."
+                    )
+                    stato = "da_completare"
+                elif finestra_raw.strip():
+                    parametri["finestra"] = int(finestra_raw.strip())
+                politica = (interpretazione.get("penalizzazioniDTWGruppi") or {}).get(id_gruppo, "no")
+                if politica not in {"si", "no"}:
+                    avvisi.append("Scegli se applicare la penalità sullo sfasamento temporale.")
+                    stato = "da_completare"
+                elif politica == "si":
+                    try:
+                        lam = float(str((interpretazione.get("pesiRitardoDTWGruppi") or {}).get(id_gruppo, "")).replace(",", "."))
+                        tau = float(str((interpretazione.get("scaleRitardoDTWGruppi") or {}).get(id_gruppo, "")).replace(",", "."))
+                    except (ValueError, TypeError):
+                        lam, tau = math.nan, math.nan
+                    if not math.isfinite(lam) or lam < 0 or (campionamento_temporale == "irregolare" and lam == 0):
+                        avvisi.append(
+                            "Indica un peso λ finito e non negativo; con tempi irregolari "
+                            "richiediamo λ > 0 per non ignorare le distanze temporali."
+                        )
+                        stato = "da_completare"
+                    elif not math.isfinite(tau) or tau <= 0:
+                        avvisi.append("Indica una scala temporale τ finita e strettamente positiva.")
+                        stato = "da_completare"
+                    else:
+                        parametri["lambdaRitardo"] = lam
+                        parametri["tauRitardo"] = tau
+                elif campionamento_temporale == "irregolare":
+                    avvisi.append(
+                        "La DTW con timestamp irregolari richiede una penalità temporale "
+                        "esplicita; la DTW sui soli indici non considera gli intervalli reali."
+                    )
+                    stato = "da_completare"
+            elif misura == "Dissimilarità LCSS normalizzata":
+                try:
+                    eps = float(str((interpretazione.get("tolleranzeValoreLCSSGruppi") or {}).get(id_gruppo, "")).replace(",", "."))
+                    tol_t = float(str((interpretazione.get("tolleranzeTempoLCSSGruppi") or {}).get(id_gruppo, "")).replace(",", "."))
+                except (ValueError, TypeError):
+                    eps, tol_t = math.nan, math.nan
+                if not all(math.isfinite(v) and v >= 0 for v in (eps, tol_t)):
+                    avvisi.append("Per LCSS indica tolleranze finite e non negative su valori e tempo.")
+                    stato = "da_completare"
+                else:
+                    parametri["tolleranzaValori"] = eps
+                    parametri["tolleranzaTempo"] = tol_t
+            elif misura == "Distanza sulle pendenze" and "tempi" not in parametri:
+                avvisi.append("Le pendenze richiedono timestamp numerici reali, non indici presunti.")
+                stato = "da_completare"
 
     return {"nome": nome, "colonne": colonne_nell_ordine, "interpretazione": etichetta,
             "misura": misura, "motivo": motivo, "stato": stato, "avvisi": avvisi,
@@ -1083,6 +1213,8 @@ MISURE_SPECIALIZZATE_CALCOLABILI = {
     "Dissimilarità di Spearman",
     "Dissimilarità di Kendall τ-b",
     "Dynamic Time Warping",
+    "Dissimilarità LCSS normalizzata",
+    "Distanza sulle pendenze",
     "Distanza punto per punto",
     "Distanza composizionale di Aitchison",
     "Distanza di Hellinger",
@@ -4550,7 +4682,106 @@ def _kendall_tau_b(x: list[float], y: list[float]) -> float | None:
     return max(-1.0, min(1.0, (concordanti - discordanti) / denominatore))
 
 
-def _distanza_dtw(x: list[float], y: list[float]) -> float:
+
+
+def _leggi_griglia_temporale(testo: str, numero: int) -> list[float]:
+    """Coordinate fisiche della stessa griglia per tutte le osservazioni."""
+    parti = [s.strip() for s in testo.split(";")]
+    if len(parti) != numero or any(not s for s in parti):
+        raise ValueError(
+            f"I timestamp devono essere esattamente {numero} numeri, "
+            "separati da punto e virgola, uno per ogni colonna nell'ordine confermato."
+        )
+    try:
+        tempi = [float(s.replace(",", ".")) for s in parti]
+    except ValueError as errore:
+        raise ValueError("I timestamp devono essere numeri finiti.") from errore
+    if any(not math.isfinite(t) for t in tempi):
+        raise ValueError("I timestamp devono essere numeri finiti.")
+    if any(b <= a for a, b in zip(tempi, tempi[1:])):
+        raise ValueError("I timestamp devono essere strettamente crescenti.")
+    return tempi
+
+
+def _passi_temporali_regolari(tempi: list[float]) -> bool:
+    intervalli = [b - a for a, b in zip(tempi, tempi[1:])]
+    return all(math.isclose(d, intervalli[0], rel_tol=1e-9,
+                            abs_tol=1e-10 * abs(intervalli[0]))
+               for d in intervalli[1:])
+
+
+def _distanza_pendenze(
+    x: list[float], y: list[float], tempi: list[float],
+) -> float:
+    if len(x) != len(y) or len(x) != len(tempi) or len(x) < 2:
+        raise ValueError("Le pendenze richiedono almeno due valori sulla stessa griglia.")
+    if any(not math.isfinite(v) for v in [*x, *y, *tempi]):
+        raise ValueError("Le serie e i tempi devono essere finiti.")
+    if any(b <= a for a, b in zip(tempi, tempi[1:])):
+        raise ValueError("La griglia temporale non è strettamente crescente.")
+    return math.sqrt(math.fsum(
+        (((x[i+1] - x[i]) - (y[i+1] - y[i])) / (tempi[i+1] - tempi[i])) ** 2
+        for i in range(len(x) - 1)
+    ))
+
+
+def _distanza_lcss(
+    x: list[float], y: list[float], tempi_x: list[float], tempi_y: list[float],
+    tolleranza_valori: float, tolleranza_tempo: float,
+) -> float:
+    n, m = len(x), len(y)
+    if not n or not m or len(tempi_x) != n or len(tempi_y) != m:
+        raise ValueError("LCSS richiede serie non vuote con timestamp corrispondenti.")
+    if n * m > 2_000_000:
+        raise ValueError("Le sequenze sono troppo lunghe per LCSS esatta nel browser.")
+    if not all(math.isfinite(v) for v in [*x, *y, *tempi_x, *tempi_y]):
+        raise ValueError("LCSS richiede valori e istanti finiti.")
+    if not all(math.isfinite(v) and v >= 0 for v in (tolleranza_valori, tolleranza_tempo)):
+        raise ValueError("Le tolleranze LCSS devono essere finite e non negative.")
+    prev = [0] * (m + 1)
+    for i in range(1, n + 1):
+        curr = [0] * (m + 1)
+        for j in range(1, m + 1):
+            if (abs(x[i-1] - y[j-1]) <= tolleranza_valori
+                    and abs(tempi_x[i-1] - tempi_y[j-1]) <= tolleranza_tempo):
+                curr[j] = prev[j-1] + 1
+            else:
+                curr[j] = max(prev[j], curr[j-1])
+        prev = curr
+    return 1 - prev[m] / min(n, m)
+
+
+def _interpola_vuoti_temporali(
+    valori: list[float | None], tempi: list[float],
+) -> list[float] | None:
+    """Solo vuoti interni: interpolazione lineare sui timestamp effettivi."""
+    if len(valori) != len(tempi) or not valori or valori[0] is None or valori[-1] is None:
+        return None
+    risultato = list(valori)
+    i = 1
+    while i < len(risultato) - 1:
+        if risultato[i] is not None:
+            i += 1
+            continue
+        sx = i - 1
+        dx = i
+        while dx < len(risultato) and risultato[dx] is None:
+            dx += 1
+        if dx == len(risultato):
+            return None
+        if tempi[dx] <= tempi[sx]:
+            raise ValueError("I timestamp non sono strettamente crescenti.")
+        for j in range(i, dx):
+            quota = (tempi[j] - tempi[sx]) / (tempi[dx] - tempi[sx])
+            risultato[j] = (1 - quota) * float(risultato[sx]) + quota * float(risultato[dx])
+        i = dx + 1
+    return [float(x) for x in risultato]
+
+
+def _distanza_dtw(
+    x: list[float], y: list[float],
+    parametri: dict[str, Any] | None = None,
+) -> float:
     """Minimo ESATTO del costo medio per passo, non costo totale diviso per la lunghezza.
 
     Per ogni cella e lunghezza di cammino conserva il costo totale minimo.
@@ -4560,7 +4791,28 @@ def _distanza_dtw(x: list[float], y: list[float]) -> float:
         raise ValueError("La DTW richiede due serie temporali non vuote.")
     if any(not math.isfinite(v) for v in [*x, *y]):
         raise ValueError("La DTW richiede valori numerici finiti.")
+    parametri = parametri or {}
     n, m = len(x), len(y)
+    costo_tipo = parametri.get("costoLocale", "assoluto")
+    if costo_tipo not in {"assoluto", "quadratico"}:
+        raise ValueError("Costo locale DTW non riconosciuto.")
+    finestra = parametri.get("finestra")
+    if finestra is not None and (
+        type(finestra) is not int or finestra < abs(n - m)
+    ):
+        raise ValueError(
+            "La finestra DTW deve essere un intero non negativo e consentire "
+            "un cammino fra le due estremità."
+        )
+    peso_ritardo = parametri.get("lambdaRitardo")
+    tau = parametri.get("tauRitardo")
+    tempi = parametri.get("tempi", [])
+    if peso_ritardo is not None:
+        if (not math.isfinite(peso_ritardo) or peso_ritardo < 0
+                or not isinstance(tau, (int, float))
+                or not math.isfinite(tau) or tau <= 0
+                or len(tempi) != n or len(tempi) != m):
+            raise ValueError("La penalità DTW richiede λ≥0, τ>0 e timestamp completi.")
     if n * m * (n + m) > 4_000_000:
         raise ValueError(
             "Le serie sono troppo lunghe per la DTW esatta a costo medio nel browser. "
@@ -4573,7 +4825,12 @@ def _distanza_dtw(x: list[float], y: list[float]) -> float:
     ]
     for i in range(n):
         for j in range(m):
-            costo_locale = abs(x[i] - y[j])
+            if finestra is not None and abs(i - j) > finestra:
+                continue
+            scarto = abs(x[i] - y[j])
+            costo_locale = scarto if costo_tipo == "assoluto" else scarto ** 2
+            if peso_ritardo is not None:
+                costo_locale += peso_ritardo * abs(tempi[i] - tempi[j]) / tau
             if i == 0 and j == 0:
                 tabella[i][j][1] = costo_locale
                 continue
@@ -4696,7 +4953,15 @@ def _distanza_specializzata(
         correlazione = _kendall_tau_b(x, y)
         return None if correlazione is None else (1.0 - correlazione) / 2.0
     if metodo == "Dynamic Time Warping":
-        return _distanza_dtw(x, y)
+        return _distanza_dtw(x, y, parametri)
+    if metodo == "Distanza sulle pendenze":
+        return _distanza_pendenze(x, y, (parametri or {}).get("tempi", []))
+    if metodo == "Dissimilarità LCSS normalizzata":
+        params = parametri or {}
+        tempi = params.get("tempi", [])
+        return _distanza_lcss(
+            x, y, tempi, tempi, params["tolleranzaValori"], params["tolleranzaTempo"]
+        )
     if metodo == "Distanza composizionale di Aitchison":
         if any(valore <= 0 for valore in [*x, *y]):
             raise ValueError("La distanza di Aitchison richiede componenti strettamente positive.")
@@ -4803,7 +5068,12 @@ def _calcola_matrice_specializzata(
             elif strategia == "pairwise":
                 vettori.append(list(vettore))
             elif strategia == "interpola_lineare":
-                vettori.append(_interpola_vuoti_interni(vettore))
+                if percorso.get("tipoGruppo") == "tempo":
+                    vettori.append(_interpola_vuoti_temporali(
+                        vettore, percorso.get("parametri", {}).get("tempi", [])
+                    ))
+                else:
+                    vettori.append(_interpola_vuoti_interni(vettore))
             elif strategia in {"imputa_mediana", "imputa_media", "zero"}:
                 completato: list[float] = []
                 for nome, valore in zip(nomi, vettore):
@@ -4900,7 +5170,8 @@ def _calcola_matrice_specializzata(
                 "Dissimilarità coseno", "Dissimilarità di Pearson", "Dissimilarità di Spearman"
             } else 1.0 if metodo in {
                 "Dissimilarità di Kendall τ-b", "Distanza di Hellinger",
-                "Distanza di Jensen–Shannon"
+                "Distanza di Jensen–Shannon",
+                "Dissimilarità LCSS normalizzata"
             } else None
         )
 
@@ -4945,11 +5216,34 @@ def _calcola_matrice_specializzata(
             "riga; nessun pseudoconteggio applicato."
         )
     if percorso.get("tipoGruppo") == "tempo":
+        params = percorso.get("parametri", {})
         nota += (
             " Ordine temporale confermato: "
             + " → ".join(percorso["colonne"])
-            + ". Campionamento regolare dichiarato dall'utente."
+            + f". Campionamento {params.get('campionamento')} "
+            + f"su griglia comune ({params.get('unitaTempo', 'non specificata')}): "
+            + "; ".join(format(t, ".9g") for t in params.get("tempi", []))
+            + ". Nessun ricampionamento implicito."
         )
+        if metodo == "Dynamic Time Warping":
+            nota += (
+                " DTW: minimo esatto del rapporto costo/lunghezza, "
+                f"costo locale {params.get('costoLocale', 'assoluto')}; "
+                f"finestra {params.get('finestra', 'nessuna')}, "
+                f"penalità temporale λ={params.get('lambdaRitardo', 'assente')} "
+                f"e τ={params.get('tauRitardo', 'assente')}."
+            )
+        elif metodo == "Dissimilarità LCSS normalizzata":
+            nota += (
+                f" LCSS: tolleranza valori={params.get('tolleranzaValori')}, "
+                f"tolleranza temporale={params.get('tolleranzaTempo')}; "
+                "dissimilarità 1 - LCSS/min(m,n)."
+            )
+        elif metodo == "Distanza sulle pendenze":
+            nota += (
+                " La distanza sulle pendenze annulla traslazioni verticali "
+                "costanti ed è una pseudometrica sullo spazio dei profili."
+            )
     if percorso["mancanti"]["presenza"]:
         nota += " " + percorso["mancanti"]["descrizione"]
     if percorso["tipo"] == "gruppo" and metodo == "Distanza composizionale di Aitchison":
