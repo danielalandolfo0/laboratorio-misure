@@ -2827,4 +2827,198 @@ assert not p.crea_piano_confronto(
        "misureTestualiPerColonna": {"codice": "damerau_strano"}}
 )["completo"]
 
+# Insiemi multietichetta: ordine non significativo, ripetizioni esplicite,
+# Jaccard / Dice con scala teorica e un'unica matrice mista.
+dati_insiemi = p.prepara_tabella(p.leggi_csv(
+    "etichette,categoria,id\n"
+    "rosso|blu,x,A\n"
+    "rosso|verde,x,B\n"
+    "[],y,C\n"
+    "[],y,D"
+))
+base_insiemi = {
+    "riga": "oggetto",
+    "colonne": {
+        "etichette": {"ruolo": "insieme", "usa": True},
+        "categoria": {"ruolo": "categoria", "usa": True},
+        "id": {"ruolo": "identificativo", "usa": False},
+    },
+    "configurazioniInsiemi": {
+        "etichette": {
+            "conferma": "si",
+            "separatore": "|",
+            "maiuscole": "distingui",
+            "ripetizioni": "deduplica",
+            "misura": "jaccard",
+        }
+    },
+}
+for nome_misura, ab in [("jaccard", 2 / 3), ("dice", 1 / 2)]:
+    configurazione = {**base_insiemi, "configurazioniInsiemi": {
+        "etichette": {**base_insiemi["configurazioniInsiemi"]["etichette"],
+                     "misura": nome_misura}
+    }}
+    piano = p.crea_piano_confronto(dati_insiemi, configurazione)
+    assert piano["completo"], piano
+    assert [percorso["tipo"] for percorso in piano["percorsi"]] == [
+        "gower", "separato"
+    ]
+    confronto = piano["percorsi"][1]
+    assert confronto["normalizzazione"]["limiteTeorico"] == 1
+    assert confronto["colonne"] == ["etichette"]
+    locale = p._calcola_matrice_specializzata(
+        dati_insiemi, configurazione, confronto
+    )
+    quasi_uguali(locale["matrice"][0][1], ab)
+    quasi_uguali(locale["matrice"][0][2], 1)
+    quasi_uguali(locale["matrice"][2][3], 0)
+    matrice = p.calcola_matrice(dati_insiemi, configurazione)
+    verifica_matrice_finale(matrice, 4)
+    quasi_uguali(matrice["matrice"][0][1], ab / 2)
+    quasi_uguali(matrice["matrice"][0][2], 1)
+    quasi_uguali(matrice["matrice"][2][3], 0)
+    assert len(matrice["contributi"]) == 2
+
+set_pesati = {**base_insiemi, "pesiPercorsi": {
+    "percorso-1": "1", "percorso-2": "3"
+}}
+quasi_uguali(p.calcola_matrice(dati_insiemi, set_pesati)["matrice"][0][1], 1 / 2)
+
+# Condizioni di codifica: [] è osservato, la cella vuota e NA sono mancanti.
+dati_mancanti_insiemi = p.prepara_tabella(p.leggi_csv(
+    "etichette,categoria\n"
+    "a|b,x\n"
+    "NA,x\n"
+    "[],y"
+))
+set_mancanti = {
+    **base_insiemi,
+    "significatoMancanti": "sconosciuto",
+}
+assert not p.crea_piano_confronto(dati_mancanti_insiemi, set_mancanti)["completo"]
+for strategia in ["escludi_percorso", "insieme_vuoto"]:
+    scelta = {**set_mancanti, "mancantiSpecializzatiPerColonna": {
+        "etichette": strategia
+    }}
+    piano = p.crea_piano_confronto(dati_mancanti_insiemi, scelta)
+    assert piano["completo"], piano
+    globale = p.calcola_matrice(dati_mancanti_insiemi, scelta)
+    verifica_matrice_finale(globale, 3)
+    if strategia == "escludi_percorso":
+        quasi_uguali(globale["matrice"][0][1], 0)  # Solo categoria valida
+        quasi_uguali(globale["matrice"][1][2], 1)
+    else:
+        quasi_uguali(globale["matrice"][0][1], .5)
+        quasi_uguali(globale["matrice"][1][2], .5)
+
+assert p._leggi_insieme_etichette("[]",
+    base_insiemi["configurazioniInsiemi"]["etichette"], "non_necessaria") == frozenset()
+assert p._leggi_insieme_etichette("a|a|b",
+    base_insiemi["configurazioniInsiemi"]["etichette"], "non_necessaria") == frozenset({"a","b"})
+assert p._distanza_insiemi(frozenset(), frozenset(), "jaccard") == 0
+assert p._distanza_insiemi(frozenset(), frozenset(), "dice") == 0
+assert p._distanza_insiemi(frozenset(["a"]), frozenset(), "dice") == 1
+case = {**base_insiemi["configurazioniInsiemi"]["etichette"], "maiuscole": "ignora"}
+assert p._leggi_insieme_etichette("Roma|roma", case, "non_necessaria") == frozenset({"roma"})
+dati_case = p.prepara_tabella(p.leggi_csv("etichette,id\nRoma|roma,A\nroma,B\n[] ,C"))
+risposte_case = {
+    **base_insiemi,
+    "configurazioniInsiemi": {"etichette": case}
+}
+assert p.crea_piano_confronto(dati_case, risposte_case)["completo"]
+assert p.calcola_matrice(dati_case, risposte_case)["matrice"][0][1] == 0
+dati_case_distinte = p.prepara_tabella(p.leggi_csv("etichette,id\nRoma|roma,A\nroma,B\n[],C"))
+risposte_case_distinte = base_insiemi
+assert p.crea_piano_confronto(dati_case_distinte, risposte_case_distinte)["completo"]
+quasi_uguali(p.calcola_matrice(dati_case_distinte,
+    risposte_case_distinte)["matrice"][0][1], .5)
+
+for mutazione in [
+    {"conferma": ""},
+    {"separatore": ""},
+    {"maiuscole": ""},
+    {"ripetizioni": "no"},
+    {"misura": ""},
+]:
+    scelta = {**base_insiemi, "configurazioniInsiemi": {
+        "etichette": {**base_insiemi["configurazioniInsiemi"]["etichette"],
+                     **mutazione}
+    }}
+    assert not p.crea_piano_confronto(dati_insiemi, scelta)["completo"], mutazione
+dati_malformati = p.prepara_tabella(p.leggi_csv(
+    "etichette,id\nuno||due,A\nuno|due,B\n[],C"
+))
+piano_malformato = p.crea_piano_confronto(dati_malformati, base_insiemi)
+assert not piano_malformato["completo"]
+assert any("etichette vuote" in avviso
+           for percorso in piano_malformato["percorsi"]
+           for avviso in percorso["avvisi"])
+
+# Grandezze periodiche: arco minimo, mai distanza lineare tra 23 e 0.
+dati_ciclici = p.prepara_tabella(p.leggi_csv(
+    "ora,categoria,id\n23,x,A\n0,x,B\n12,y,C\n1,y,D"
+))
+base_cicli = {
+    "riga": "oggetto",
+    "colonne": {
+        "ora": {"ruolo": "ciclica", "usa": True},
+        "categoria": {"ruolo": "categoria", "usa": True},
+        "id": {"ruolo": "identificativo", "usa": False},
+    },
+    "configurazioniCicliche": {
+        "ora": {"periodo": "24", "unita": "ore"}
+    },
+}
+piano_cicli = p.crea_piano_confronto(dati_ciclici, base_cicli)
+assert piano_cicli["completo"], piano_cicli
+assert [percorso["tipo"] for percorso in piano_cicli["percorsi"]] == [
+    "gower", "separato"
+]
+locale_ciclica = p._calcola_matrice_specializzata(
+    dati_ciclici, base_cicli, piano_cicli["percorsi"][1]
+)
+quasi_uguali(locale_ciclica["matrice"][0][1], 1 / 12)
+quasi_uguali(locale_ciclica["matrice"][0][2], 11 / 12)
+quasi_uguali(locale_ciclica["matrice"][1][2], 1)
+assert piano_cicli["percorsi"][1]["normalizzazione"]["limiteTeorico"] == 1
+globale_ciclica = p.calcola_matrice(dati_ciclici, base_cicli)
+verifica_matrice_finale(globale_ciclica, 4)
+quasi_uguali(globale_ciclica["matrice"][0][1], 1 / 24)
+quasi_uguali(globale_ciclica["matrice"][0][2], 23 / 24)
+quasi_uguali(globale_ciclica["matrice"][1][2], 1)
+for periodo in ("0", "-24", "inf", "NaN", "parole", ""):
+    risposte = {**base_cicli,
+                "configurazioniCicliche": {"ora": {"periodo": periodo, "unita": "ore"}}}
+    assert not p.crea_piano_confronto(dati_ciclici, risposte)["completo"], periodo
+assert not p.crea_piano_confronto(dati_ciclici,
+    {**base_cicli, "configurazioniCicliche": {
+        "ora": {"periodo": "24", "unita": ""}}
+    })["completo"]
+for csv in ["ora,categoria\n24,x\n0,y", "ora,categoria\n-1,x\n0,y",
+            "ora,categoria\nabc,x\n0,y"]:
+    bad = p.prepara_tabella(p.leggi_csv(csv))
+    piano = p.crea_piano_confronto(bad, base_cicli)
+    assert not piano["completo"], (csv, piano)
+
+# Un valore mancante nel ciclo richiede un'esclusione esplicita; Gower
+# può mantenere confrontabili le coppie senza quel contributo.
+dati_ciclo_mancanti = p.prepara_tabella(p.leggi_csv(
+    "ora,categoria\n23,x\nNA,x\n0,y"
+))
+base_ciclo_mancanti = {**base_cicli, "significatoMancanti": "sconosciuto"}
+assert not p.crea_piano_confronto(
+    dati_ciclo_mancanti, base_ciclo_mancanti
+)["completo"]
+risposte_ciclo_mancanti = {**base_ciclo_mancanti,
+    "mancantiSpecializzatiPerColonna": {"ora": "escludi_percorso"}}
+assert p.crea_piano_confronto(
+    dati_ciclo_mancanti, risposte_ciclo_mancanti
+)["completo"]
+matrice_ciclo_mancanti = p.calcola_matrice(
+    dati_ciclo_mancanti, risposte_ciclo_mancanti
+)
+verifica_matrice_finale(matrice_ciclo_mancanti, 3)
+assert matrice_ciclo_mancanti["matrice"][0][1] == 0
+assert matrice_ciclo_mancanti["matrice"][1][2] == 1
+
 print("Tutti i test Python di preprocessing sono stati superati.")
