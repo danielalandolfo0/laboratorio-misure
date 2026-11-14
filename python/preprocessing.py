@@ -4466,6 +4466,9 @@ def _valida_matrice_finale(
         avvisi.append("Tutte le dissimilarita' tra righe distinte sono nulle.")
     return {
         "coppieTotali": len(coppie),
+        # Se esistessero coppie non disponibili, il validatore avrebbe
+        # gia' bloccato la matrice finale prima di questo punto.
+        "coppieNonDisponibili": 0,
         "coppieZeroDistinte": zeri,
         "gruppiProfiliIdentici": gruppi_profili_uguali,
         "avvisi": avvisi,
