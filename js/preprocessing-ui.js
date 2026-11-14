@@ -1106,15 +1106,17 @@
       const tipi = membri.map(nome => risultato.colonne.find(colonna => colonna.nome === nome)?.tipo);
       const tutteNumeriche = tipi.length >= 2 && tipi.every(tipo =>
         tipo === "numerica" || tipo === "numerica_costante" ||
-        (gruppo.tipo === "distribuzione" && tipo === "binaria")
+        (["distribuzione", "tempo_coppie"].includes(gruppo.tipo) && tipo === "binaria")
       );
       const tutteQuantitative = tutteNumeriche && membri.every(nome => interpretazione.colonne[nome]?.ruolo === "quantita");
       const tutteBinarie = membri.length >= 2 && membri.every((nome, indice) =>
         ["binaria", "non_numerica", "numerica_costante"].includes(tipi[indice]) &&
         ["binaria", "presenza"].includes(interpretazione.colonne[nome]?.ruolo)
       );
-      const nota = membri.length < 2
-        ? "Assegna almeno due colonne a questo gruppo."
+      const nota = membri.length < (gruppo.tipo === "tempo_coppie" ? 4 : 2)
+        ? (gruppo.tipo === "tempo_coppie"
+          ? "Assegna almeno quattro colonne (due coppie tempo-valore)."
+          : "Assegna almeno due colonne a questo gruppo.")
         : gruppo.tipo === "vettore_binario" && !tutteBinarie
           ? "Per questo gruppo servono risposte binarie o presenze, con stati 0/1 oppure sì/no."
           : !tutteQuantitative && !["altro", "vettore_binario"].includes(gruppo.tipo)
@@ -1126,7 +1128,8 @@
           <option value="altro"${gruppo.tipo === "altro" ? " selected" : ""}>Da specificare</option>
           <option value="ripetute"${gruppo.tipo === "ripetute" ? " selected" : ""}>Misurazioni dello stesso profilo</option>
           <option value="coordinate"${gruppo.tipo === "coordinate" ? " selected" : ""}>Coordinate quantitative da confrontare insieme</option>
-          <option value="tempo"${gruppo.tipo === "tempo" ? " selected" : ""}>Osservazioni successive nel tempo</option>
+          <option value="tempo"${gruppo.tipo === "tempo" ? " selected" : ""}>Serie con gli stessi istanti per tutte le righe</option>
+          <option value="tempo_coppie"${gruppo.tipo === "tempo_coppie" ? " selected" : ""}>Serie con istanti diversi per ogni riga (coppie tempo-valore)</option>
           <option value="parti"${gruppo.tipo === "parti" ? " selected" : ""}>Parti dello stesso totale (Aitchison)</option>
           <option value="distribuzione"${gruppo.tipo === "distribuzione" ? " selected" : ""}>Distribuzione di probabilità o istogramma</option>
           <option value="vettore_binario"${gruppo.tipo === "vettore_binario" ? " selected" : ""}>Insieme di presenze/assenze da confrontare come vettore binario</option>
@@ -1644,7 +1647,7 @@
       const tipi = membri.map(profilo => risultato.colonne.find(colonna => colonna.nome === profilo.nome)?.tipo);
       const valido = membri.length >= 2 && membri.every((profilo, indice) =>
         (["numerica", "numerica_costante"].includes(tipi[indice]) ||
-          (gruppo.tipo === "distribuzione" && tipi[indice] === "binaria")) &&
+          (["distribuzione", "tempo_coppie"].includes(gruppo.tipo) && tipi[indice] === "binaria")) &&
           interpretazione.colonne[profilo.nome]?.ruolo === "quantita");
       if (gruppo.tipo === "vettore_binario") {
         const binarie = membri.length >= 2 && membri.every((profilo, indice) =>
@@ -2428,7 +2431,7 @@
       "costiDTWGruppi", "finestreDTWGruppi",
       "penalizzazioniDTWGruppi", "pesiRitardoDTWGruppi",
       "scaleRitardoDTWGruppi", "tolleranzeValoreLCSSGruppi",
-      "tolleranzeTempoLCSSGruppi"
+      "tolleranzeTempoLCSSGruppi", "coppieTemporaliGruppi"
     ]) {
       if (interpretazione[chiave]) delete interpretazione[chiave][idGruppo];
     }
