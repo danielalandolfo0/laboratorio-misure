@@ -907,12 +907,34 @@
     const esponente = ["minkowski", "weighted_minkowski"].includes(scelta);
     const pesata = ["weighted_minkowski", "weighted_chebyshev"].includes(scelta);
     const colonne = percorso.colonne;
+    const sceltaDoppioZero = interpretazione.convenzioneBrayCurtisZero || "";
+    const opzioniDoppioZero = [
+      ["", "Scegli esplicitamente"],
+      ["zero", "Considerale uguali: distanza zero, contributo valido"],
+      ["indefinita", "Lascia il confronto non definito; servirà un altro blocco"]
+    ];
+    const brayInfo = percorso.idMisura === "bray_curtis" &&
+      percorso.coppieBrayDoppioZero > 0
+      ? '<label for="bray-zero-convention"><strong>Come confrontare due righe ' +
+        'che contengono solo zeri?</strong></label>' +
+        '<p>Bray–Curtis produce 0/0 in ' +
+        escapeHtml(String(percorso.coppieBrayDoppioZero)) +
+        ' coppie. La formula non definisce questa distanza; ' +
+        'la scelta non viene applicata automaticamente.</p>' +
+        '<select id="bray-zero-convention">' +
+        opzioniDoppioZero.map(([valore, etichetta]) =>
+          '<option value="' + valore + '"' +
+          (sceltaDoppioZero === valore ? ' selected' : '') + '>' +
+          escapeHtml(etichetta) + '</option>'
+        ).join('') + '</select>'
+      : "";
     return `<div class="numeric-measure-editor">
       <label for="numeric-measure-choice"><strong>Come vuoi confrontare le righe?</strong></label>
       <select id="numeric-measure-choice">
         ${opzioni.map(([id, nome]) => `<option value="${id}"${id === scelta ? " selected" : ""}>${escapeHtml(nome)}</option>`).join("")}
       </select>
       <p>Non serve conoscere il nome delle misure: scegli l’obiettivo che preferisci. Il sito verifica se è compatibile con i dati.</p>
+      ${brayInfo}
       ${esponente ? `<label for="numeric-measure-q">Quanto vuoi dare rilievo alle differenze grandi? (q ≥ 1)</label><p>Con 1 sommi tutte le differenze; con 2 quelle grandi hanno maggiore influenza. Per altre scelte serve un valore almeno pari a 1.</p><input id="numeric-measure-q" type="number" min="1" step="0.5" value="${escapeHtml(interpretazione.ordineMisuraManuale || "2")}">` : ""}
       ${pesata ? `<label for="numeric-measure-weights">Quanto conta ogni colonna? ${colonne.map(escapeHtml).join(", ")}</label><input id="numeric-measure-weights" type="text" value="${escapeHtml(interpretazione.pesiMisuraManuale || colonne.map(() => "1").join("; "))}"><small>Inserisci un numero positivo per colonna, separando con punto e virgola. Usa 1 per tutte se devono avere la stessa importanza.</small>` : ""}
       ${scelta === "mahalanobis_ridge" ? `<label for="numeric-measure-lambda">Regolarizzazione λ (numero strettamente positivo)</label><input id="numeric-measure-lambda" type="text" inputmode="decimal" value="${escapeHtml(interpretazione.lambdaMahalanobis ?? "")}" placeholder="es. 1"><small>Il sito calcola S + λI sulle coordinate originali. λ ha le unità al quadrato dei dati; non viene scelto automaticamente. Se λ è troppo piccolo, il calcolo resta bloccato.</small>` : ""}
@@ -2640,6 +2662,11 @@
     preparaPiano();
   });
   $("comparison-plan-paths").addEventListener("change", evento => {
+    if (evento.target.id === "bray-zero-convention") {
+      interpretazione.convenzioneBrayCurtisZero = evento.target.value;
+      preparaPiano();
+      return;
+    }
     if (evento.target.id !== "numeric-measure-choice") return;
     interpretazione.misuraNumericaManuale = evento.target.value;
     annullaScelteNormalizzazione();
@@ -2659,6 +2686,11 @@
     const pesi = $("numeric-measure-weights");
     const lambda = $("numeric-measure-lambda");
     const tolleranza = $("numeric-measure-tolerance");
+    if (pianoCorrente?.percorsi.some(
+      p => p.idMisura === "bray_curtis" && p.coppieBrayDoppioZero > 0
+    )) {
+      interpretazione.convenzioneBrayCurtisZero = $("bray-zero-convention").value;
+    }
     if (q) interpretazione.ordineMisuraManuale = q.value;
     if (pesi) interpretazione.pesiMisuraManuale = pesi.value;
     if (interpretazione.misuraNumericaManuale === "mahalanobis_ridge") {
