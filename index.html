@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Laboratorio interattivo per preparare dati tabellari e comprendere misure tra vettori, dati binari e stringhe.">
   <title>Laboratorio delle misure</title>
-  <link rel="stylesheet" href="css/stile.css?v=20261104-aggregate1">
+  <link rel="stylesheet" href="css/stile.css?v=20261114-guidance1">
   <script>
     if ("scrollRestoration" in history) history.scrollRestoration = "manual";
     window.addEventListener("pageshow", () => {
@@ -61,6 +61,12 @@
         <p class="section-label">Passo successivo</p>
         <h3 id="interpretation-title">Che cosa rappresentano i dati?</h3>
         <p>Le risposte servono a capire quali colonne confrontare e che cosa debba significare “somiglianza”. Le ipotesi ricavate dalla tabella possono sempre essere corrette.</p>
+        <details class="comparison-glossary">
+          <summary>Come leggere le domande senza conoscere le formule?</summary>
+          <p><strong>Caratteristica:</strong> una colonna del CSV. <strong>Gruppo:</strong> più colonne che descrivono lo stesso aspetto, per esempio una sequenza temporale. <strong>Dissimilarità:</strong> valori piccoli indicano righe simili, valori grandi righe diverse.</p>
+          <p><strong>Riscalamento:</strong> cambia i valori numerici prima di alcune misure; è diverso dalla normalizzazione finale delle distanze. <strong>Peso:</strong> stabilisce quanto conta una caratteristica o un gruppo. <strong>Percorso:</strong> un criterio per confrontare un insieme di colonne; i percorsi contribuiscono a un'unica matrice.</p>
+          <p>Le misure avanzate sono opzionali. Se il significato dei valori è incerto, non confermare interpretazioni che non conosci: il sito segnalerà quando mancano informazioni per calcolare.</p>
+        </details>
 
         <div class="question-grid">
           <div class="question-item">
@@ -79,6 +85,7 @@
         </div>
 
         <h4>Controlla il significato delle colonne</h4>
+        <p>Verifica che cosa contiene ogni colonna. Un identificativo di riga va normalmente escluso dal confronto; le colonne testuali, invece, vanno incluse esplicitamente se desideri confrontarle.</p>
         <div class="data-table-wrap">
           <table class="data-table meaning-table">
             <thead><tr><th>Colonna</th><th>Che cosa contiene?</th><th>Usarla per confrontare le righe?</th></tr></thead>
@@ -90,7 +97,7 @@
           <div class="grouping-heading">
             <div>
               <h4>Ci sono colonne da leggere insieme?</h4>
-              <p>Lascia indipendenti le caratteristiche separate. Crea invece un gruppo per misurazioni che formano un unico profilo, una sequenza temporale o le parti di un totale.</p>
+              <p>Lascia indipendenti le colonne che descrivono aspetti distinti. Crea un gruppo per coordinate dello stesso oggetto, misurazioni nel tempo, parti di una composizione o intervalli di un istogramma; le altre colonne restano indipendenti.</p>
             </div>
             <button class="secondary-action" id="add-column-group" type="button">Crea un gruppo</button>
           </div>
@@ -110,11 +117,17 @@
         <div id="numeric-preliminary-content" aria-live="polite"></div>
       </section>
 
+      <section class="comparison-guide" id="comparison-guide" aria-labelledby="comparison-guide-heading">
+        <h4 id="comparison-guide-heading">Indicazione per proseguire</h4>
+        <p id="comparison-guide-phase" class="comparison-guide-phase" aria-live="polite"></p>
+        <p id="comparison-guide-explanation"></p>
+        <button class="secondary-action" id="comparison-guide-next" type="button">Vai alla prossima scelta</button>
+      </section>
       <div class="adaptive-questions" id="adaptive-questions"></div>
 
       <div class="scaling-wrap" id="scaling-wrap" hidden>
         <h3>Riscalamento delle variabili numeriche</h3>
-        <p>Controlla la trasformazione proposta per ciascuna variabile selezionata. Puoi modificarla prima della conferma; la matrice trasformata comparirà solo dopo.</p>
+        <p>Controlla la trasformazione proposta per ogni quantità selezionata. La tabella trasformata comparirà solo dopo la conferma; alcuni confronti richiedono invece i valori originali.</p>
         <p>Il sito suggerisce come rendere confrontabili le colonne. Puoi lasciare le scelte proposte oppure cambiarle. Nessuna trasformazione modifica il file originale.</p>
         <details class="scaling-explanation">
           <summary>Vuoi sapere come funzionano i diversi riscalamenti?</summary>
@@ -318,7 +331,7 @@
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
   <script defer src="js/preprocessing-python.js?v=20261104-specialized1"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261114-e2e1"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261114-guidance1"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>

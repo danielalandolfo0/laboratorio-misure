@@ -190,6 +190,15 @@ header p {
 .meaning-table { min-width: 680px; }
 .comparison-toggle { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: .78rem; }
 .comparison-toggle input { width: 18px; height: 18px; margin: 0; box-shadow: none; }
+.comparison-glossary { max-width: 820px; margin: 14px 0 4px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; background: rgba(255,255,255,.28); }
+.comparison-glossary summary { cursor: pointer; font-size: .84rem; font-weight: 650; }
+.comparison-glossary p { margin: 9px 0 0; font-size: .78rem; color: var(--muted); }
+.comparison-guide { margin: 20px 0 10px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.5); }
+.comparison-guide h4 { margin: 0 0 6px; font-size: .86rem; }
+.comparison-guide-phase { margin: 0 0 7px; font-weight: 680; font-size: .92rem; }
+.comparison-guide > p:not(.comparison-guide-phase) { margin: 0 0 12px; color: var(--muted); font-size: .8rem; }
+.comparison-guide .secondary-action { margin: 0; width: auto; }
+.comparison-guide [hidden] { display: none !important; }
 .adaptive-questions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
 .adaptive-questions:empty { display: none; }
 .grouping-wrap { margin-top: 24px; }
@@ -611,6 +620,7 @@ footer { padding: 0 0 36px; color: var(--muted); font-size: 0.78rem; }
   .rank-order-row { grid-template-columns: 1fr; }
   .question-grid-two,
   .adaptive-questions { grid-template-columns: 1fr; }
+  .comparison-guide .secondary-action { width: 100%; }
   .grouping-heading { align-items: stretch; flex-direction: column; }
   .grouping-heading .secondary-action { width: 100%; }
   .group-config { grid-template-columns: 1fr; }
