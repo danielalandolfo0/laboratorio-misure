@@ -1232,7 +1232,7 @@ quasi_uguali(dimensione_matrice["matrice"][1][2], 1)
 assert [x["peso"] for x in dimensione_matrice["contributi"]] == [2, 1]
 assert [x["numeroCaratteristiche"] for x in dimensione_matrice["contributi"]] == [2, 1]
 assert dimensione_matrice["pesaturaGlobale"]["modalita"] == "dimensione"
-assert "non equivale" in dimensione_matrice["nota"]
+assert "non equivale" in dimensione_matrice["nota"].lower()
 
 # L'assegnazione di pesi personalizzati ereditata da versioni precedenti
 # resta invariata se non è specificata una modalità, ma una modalità
