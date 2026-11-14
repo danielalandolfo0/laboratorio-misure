@@ -636,6 +636,58 @@ righe prive di un contributo valido. Non viene mai esportata una matrice finale
 contenente celle vuote o valori non numerici.
 
 
+### Serie temporali con timestamp differenti per riga
+
+Il percorso **Serie con istanti diversi per ogni riga (coppie tempo-valore)**
+permette di confrontare serie univariate i cui istanti e numeri di
+campioni non coincidono. Ogni riga del CSV rappresenta ancora un solo
+oggetto; le osservazioni temporali sono registrate in coppie di colonne:
+
+```csv
+id,t1,v1,t2,v2,t3,v3,categoria
+A,0,0,1,2,3,0,x
+B,0,0,2,2,4,0,x
+C,0,1,3,1,NA,NA,y
+```
+
+Nel questionario si assegnano t1, v1, t2, v2, t3, v3 a un solo gruppo
+di serie per riga, con ruolo **quantità numerica**. La corrispondenza
+viene dichiarata esplicitamente come t1:v1; t2:v2; t3:v3.
+Non è dedotta automaticamente dalle intestazioni. La stessa unità
+di tempo deve essere indicata per tutte le righe, e i timestamp devono
+essere numerici, finiti e **strettamente crescenti in ogni riga**.
+Il sito non applica alcun ricampionamento o cambiamento di unità implicito.
+
+Le righe possono avere lunghezze diverse: una coppia con entrambi i
+campi mancanti è omessa soltanto dopo conferma della politica
+**ignora slot vuoto**. Una coppia con solo il tempo o solo il valore
+mancante non viene completata: si corregge il CSV oppure si sceglie
+di escludere l'intera serie temporale di quella riga. Una serie priva
+di campioni non viene posta arbitrariamente a distanza zero.
+
+Le misure disponibili per questo gruppo sono **DTW a costo medio minimo**
+e **LCSS**. Per DTW si sceglie lo scarto assoluto o quadratico, una
+finestra facoltativa simmetrica |i−j| ≤ w e se il ritardo temporale
+fisico debba contribuire al costo. Con scelta affermativa si richiedono
+λ > 0 e τ > 0 dichiarati e il costo locale aggiunge λ|t−s|/τ.
+Con scelta negativa i timestamp servono solo per ordinare gli eventi,
+e non influenzano il costo: questa esclusione deve essere esplicita.
+Una finestra che impedisce il cammino tra serie di lunghezze differenti
+blocca il piano prima del calcolo.
+
+Per LCSS si dichiarano una tolleranza finita non negativa per i valori
+e una per i tempi, entrambe applicate agli istanti specifici delle
+singole righe. Si usa la dissimilarità
+1−LCSS(x,y)/min(m_x,m_y), appartenente a [0,1] quando entrambe
+le serie sono non vuote. Non è in generale una metrica.
+
+**I timestamp individuali non sono una griglia comune.** Il percorso
+di serie su griglia condivisa (punto-a-punto, pendenze, DTW, LCSS)
+rimane disponibile come opzione separata e non viene alterato.
+Il gruppo temporale rappresenta un solo contributo disgiunto,
+aggregabile con altre caratteristiche in **una sola matrice finale**.
+
+File di collaudo: examples/collaudo/serie_timestamp_per_riga.csv
 ### Estensione temporale: griglia fisica, pendenze, DTW e LCSS
 
 Nel percorso per serie temporali univariate, **le colonne rappresentano
