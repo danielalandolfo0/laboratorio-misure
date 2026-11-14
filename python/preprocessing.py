@@ -820,9 +820,56 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
                     else:
                         parametri["pesi"] = pesi
 
-    return {"nome": nome, "colonne": membri, "interpretazione": etichetta, "misura": misura,
-            "motivo": motivo, "stato": stato, "avvisi": avvisi,
-            "idMisura": id_misura, "parametri": parametri}
+    colonne_nell_ordine = list(membri)
+    campionamento_temporale: str | None = None
+    if tipo_gruppo == "tempo" and len(membri) >= 2:
+        ordini = interpretazione.get("ordiniTemporaliGruppi") or {}
+        campionamenti = interpretazione.get("campionamentiTemporaliGruppi") or {}
+        if not isinstance(ordini, dict) or not isinstance(campionamenti, dict):
+            raise ValueError("La configurazione temporale per i gruppi non e' valida.")
+        ordine_grezzo = ordini.get(id_gruppo, "")
+        if not isinstance(ordine_grezzo, str):
+            raise ValueError(f"Specifica l'ordine temporale del gruppo “{nome}” come elenco.")
+        specificato = [val.strip() for val in ordine_grezzo.split(";")]
+        if not ordine_grezzo.strip():
+            avvisi.append(
+                "Conferma esplicitamente l'ordine cronologico delle colonne del gruppo. "
+                "La posizione nel CSV non viene interpretata automaticamente come tempo."
+            )
+            stato = "da_completare"
+        elif (len(specificato) != len(membri)
+              or len(set(specificato)) != len(specificato)
+              or set(specificato) != set(membri)):
+            avvisi.append(
+                "L'ordine temporale deve elencare tutte e sole le colonne del gruppo, "
+                "ciascuna una volta, separate da punto e virgola."
+            )
+            stato = "da_completare"
+        else:
+            colonne_nell_ordine = specificato
+        campionamento_temporale = campionamenti.get(id_gruppo, "")
+        if campionamento_temporale == "regolare":
+            motivo += " L'ordine cronologico e la regolarita' degli intervalli sono stati confermati dall'utente."
+        elif campionamento_temporale == "irregolare":
+            avvisi.append(
+                "I tempi di osservazione non sono equidistanti. Il confronto per indici "
+                "e l'interpolazione lineare per posizione non preservano i tempi reali. "
+                "Serve una scelta esplicita di ricampionamento o allineamento temporale "
+                "non ancora disponibile in questo percorso."
+            )
+            stato = "da_completare"
+        else:
+            avvisi.append(
+                "Indica se gli intervalli tra gli istanti di osservazione sono regolari. "
+                "Il sito non puo' dedurlo dai soli valori delle colonne."
+            )
+            stato = "da_completare"
+
+    return {"nome": nome, "colonne": colonne_nell_ordine, "interpretazione": etichetta,
+            "misura": misura, "motivo": motivo, "stato": stato, "avvisi": avvisi,
+            "idMisura": id_misura, "parametri": parametri,
+            "ordineTemporale": colonne_nell_ordine if tipo_gruppo == "tempo" else None,
+            "campionamentoTemporale": campionamento_temporale}
 
 
 RUOLI_GOWER = {"quantita", "livello", "presenza", "binaria", "categoria", "data"}
@@ -2160,6 +2207,8 @@ def _crea_percorsi(
             "idGruppo": gruppo.get("id"), "tipoGruppo": gruppo.get("tipo", "altro"),
             "metodo": blocco["misura"],
             "idMisura": blocco.get("idMisura"), "parametri": blocco.get("parametri", {}),
+            "ordineTemporale": blocco.get("ordineTemporale"),
+            "campionamentoTemporale": blocco.get("campionamentoTemporale"),
             "motivo": blocco["motivo"], "stato": blocco["stato"],
             "avvisi": list(blocco.get("avvisi", [])),
         })
@@ -3232,6 +3281,12 @@ def _calcola_matrice_specializzata(
         + ("le trasformazioni numeriche confermate." if percorso["preelaborazione"]["usaTabellaTrasformata"]
            else "i valori originali.")
     )
+    if percorso.get("tipoGruppo") == "tempo":
+        nota += (
+            " Ordine temporale confermato: "
+            + " → ".join(percorso["colonne"])
+            + ". Campionamento regolare dichiarato dall'utente."
+        )
     if percorso["mancanti"]["presenza"]:
         nota += " " + percorso["mancanti"]["descrizione"]
     if percorso["tipo"] == "gruppo" and metodo == "Distanza composizionale di Aitchison":

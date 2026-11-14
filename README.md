@@ -165,8 +165,15 @@ disponibile, il calcolo finale viene bloccato e il sito indica le coppie di
 righe prive di un contributo valido. Non viene mai esportata una matrice finale
 contenente celle vuote o valori non numerici.
 
-Nei gruppi temporali, l’interpolazione lineare è applicata soltanto ai vuoti
-interni compresi tra due osservazioni; una serie priva del primo o dell’ultimo
+Nei gruppi temporali l'utente deve confermare esplicitamente
+l'**ordine cronologico** (elencando tutte e sole le colonne del gruppo)
+e dichiarare che gli intervalli temporali sono **regolari**. L'ordine
+non viene dedotto dal CSV e, se viene cambiato, determina effettivamente
+l'ordine delle coordinate usato dalla DTW e dal confronto punto per punto.
+Se gli istanti non sono equidistanti, il percorso si interrompe e chiede
+un ricampionamento o un allineamento esplicito (non ancora disponibile).
+L'interpolazione lineare e' applicata soltanto ai vuoti interni in una
+serie con campionamento regolare; una serie priva del primo o dell'ultimo
 valore non viene estrapolata. Nei profili numerici, media e mediana sono stimate
 separatamente per colonna. Nei percorsi testuali una casella vuota può essere
 esclusa dal solo percorso oppure interpretata come stringa vuota, ma soltanto

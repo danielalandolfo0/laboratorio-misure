@@ -794,6 +794,8 @@ risposte_con_gruppo = {
     "gruppi": [{"id": "gruppo-1", "nome": "Serie", "tipo": "tempo"}],
     "assegnazioni": {"a": "gruppo-1", "b": "gruppo-1"},
     "ritardo-gruppo-1": "si",
+    "ordiniTemporaliGruppi": {"gruppo-1": "a; b"},
+    "campionamentiTemporaliGruppi": {"gruppo-1": "regolare"},
 }
 piano_con_gruppo = p.crea_piano_confronto(dati_con_gruppo, risposte_con_gruppo)
 assert piano_con_gruppo["conteggioPercorsi"] == 2
@@ -912,6 +914,8 @@ risposte_tempo_mancanti = {
     "gruppi": [{"id": "tempo", "nome": "Serie", "tipo": "tempo"}],
     "assegnazioni": {nome: "tempo" for nome in ("t0", "t1", "t2")},
     "ritardo-tempo": "si",
+    "ordiniTemporaliGruppi": {"tempo": "t0; t1; t2"},
+    "campionamentiTemporaliGruppi": {"tempo": "regolare"},
 }
 assert p.crea_piano_confronto(
     dati_tempo_mancanti, risposte_tempo_mancanti
@@ -1334,6 +1338,8 @@ risposte_blocchi_eterogenei = {
         **{nome: "coordinate" for nome in ("c1", "c2")},
     },
     "ritardo-tempo": "si",
+    "ordiniTemporaliGruppi": {"tempo": "t1; t2; t3"},
+    "campionamentiTemporaliGruppi": {"tempo": "regolare"},
     "somiglianza-profilo": "andamento",
     "misureGruppi": {"coordinate": "weighted_minkowski"},
     "ordiniGruppi": {"coordinate": "3"},
@@ -1488,5 +1494,69 @@ assert any(
 assert not p._proponi_gruppi_numerici(
     ["x1", "x_1"], {"relazioniCoppie": []}
 )
+
+
+# Le serie temporali non possono usare implicitamente l'ordine del CSV.
+senza_conferma_tempo = {
+    **risposte_blocchi_eterogenei,
+    "ordiniTemporaliGruppi": {},
+}
+piano_senza_ordine = p.crea_piano_confronto(
+    dati_blocchi_eterogenei, senza_conferma_tempo
+)
+assert not piano_senza_ordine["completo"]
+assert any("ordine cronologico" in avviso for avviso in
+           next(percorso for percorso in piano_senza_ordine["percorsi"]
+                if percorso["tipoGruppo"] == "tempo")["avvisi"])
+for ordine_inesatto in ("t1; t2; t2", "t1; t2", "t1; t2; estranea"):
+    piano_invalido = p.crea_piano_confronto(
+        dati_blocchi_eterogenei,
+        {**risposte_blocchi_eterogenei,
+         "ordiniTemporaliGruppi": {"tempo": ordine_inesatto}},
+    )
+    assert not piano_invalido["completo"], ordine_inesatto
+assert not p.crea_piano_confronto(
+    dati_blocchi_eterogenei,
+    {**risposte_blocchi_eterogenei,
+     "campionamentiTemporaliGruppi": {"tempo": "irregolare"}},
+)["completo"]
+assert not p.crea_piano_confronto(
+    dati_blocchi_eterogenei,
+    {**risposte_blocchi_eterogenei,
+     "campionamentiTemporaliGruppi": {}},
+)["completo"]
+
+# Cambiare l'ordine dei tempi modifica davvero i vettori e la DTW locale,
+# non soltanto la descrizione del percorso nel piano.
+dati_ordine = p.prepara_tabella(p.leggi_csv(
+    "t1,t2,t3\n0,10,0\n0,0,10\n10,0,0"
+))
+base_ordine = {
+    "riga": "oggetto",
+    "colonne": {nome: {"ruolo": "quantita", "usa": True}
+                for nome in ("t1", "t2", "t3")},
+    "gruppi": [{"id": "serie", "nome": "Serie", "tipo": "tempo"}],
+    "assegnazioni": {nome: "serie" for nome in ("t1", "t2", "t3")},
+    "ritardo-serie": "si",
+    "campionamentiTemporaliGruppi": {"serie": "regolare"},
+    "ordiniTemporaliGruppi": {"serie": "t1; t2; t3"},
+}
+piano_ordine = p.crea_piano_confronto(dati_ordine, base_ordine)
+assert piano_ordine["completo"], piano_ordine
+percorso_ordine = piano_ordine["percorsi"][0]
+assert percorso_ordine["colonne"] == ["t1", "t2", "t3"]
+matrice_ordine = p._calcola_matrice_specializzata(
+    dati_ordine, base_ordine, percorso_ordine
+)["matrice"]
+altra_configurazione = {
+    **base_ordine, "ordiniTemporaliGruppi": {"serie": "t2; t1; t3"}
+}
+piano_altro_ordine = p.crea_piano_confronto(dati_ordine, altra_configurazione)
+assert piano_altro_ordine["completo"], piano_altro_ordine
+assert piano_altro_ordine["percorsi"][0]["colonne"] == ["t2", "t1", "t3"]
+matrice_altro_ordine = p._calcola_matrice_specializzata(
+    dati_ordine, altra_configurazione, piano_altro_ordine["percorsi"][0]
+)["matrice"]
+assert abs(matrice_ordine[0][1] - matrice_altro_ordine[0][1]) > 1e-10
 
 print("Tutti i test Python di preprocessing sono stati superati.")

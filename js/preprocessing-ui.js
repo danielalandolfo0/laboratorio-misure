@@ -117,7 +117,8 @@
 
   function disegnaTabella() {
     const selezionate = vista === "lavoro"
-      ? colonneNumericheSelezionate().map(c => c.nome)
+      ? (pianoCorrente?.anteprimaNumerica?.colonne ||
+          colonneNumericheDaRiscalare().map(c => c.nome))
       : risultato.originale.intestazioni;
     const indici = selezionate.map(nome => risultato.originale.intestazioni.indexOf(nome));
     const righe = vista === "lavoro" && pianoCorrente?.anteprimaNumerica
@@ -132,7 +133,7 @@
     ).join("");
     const origine = vista === "originale"
       ? "Valori originali."
-      : "Valori trasformati secondo il riscalamento confermato nel piano di confronto.";
+      : "Anteprima delle trasformazioni numeriche confermate. I blocchi di forma e DTW usano i valori originali; i blocchi di coordinate usano le trasformazioni quando previste nel piano.";
     const totaleRighe = risultato.originale.righe.length;
     $("preview-caption").textContent = `${origine} ${limiteRighe} di ${totaleRighe} righe${limiteColonne < selezionate.length ? ` e ${limiteColonne} di ${selezionate.length} colonne` : ""}.`;
     $("view-original").classList.toggle("active", vista === "originale");
@@ -1108,11 +1109,38 @@
         "Le colonne formano un unico profilo: scegli quale aspetto deve contare.",
         [["valori_vicini", "Quando hanno valori vicini"], ["proporzioni", "Quando mantengono proporzioni simili"], ["andamento", "Quando crescono e diminuiscono nello stesso modo"], ["ordine", "Quando ordinano le caratteristiche nello stesso modo"], ["ignoto", "Non lo so"]]
       ));
-      if (gruppo.tipo === "tempo") domande.push(domandaAdattiva(
-        `ritardo-${gruppo.id}`, `Nel gruppo “${escapeHtml(gruppo.nome)}”, un andamento simile può avvenire con un piccolo ritardo?`,
-        "Per esempio, lo stesso picco può comparire in momenti leggermente diversi nelle due righe.",
-        [["si", "Sì, il ritardo non deve renderle diverse"], ["no", "No, gli stessi eventi devono avvenire negli stessi momenti"], ["ignoto", "Non lo so"]]
-      ));
+      if (gruppo.tipo === "tempo") {
+        const ordine = interpretazione.ordiniTemporaliGruppi?.[gruppo.id] || "";
+        const campionamento = interpretazione.campionamentiTemporaliGruppi?.[gruppo.id] || "";
+        domande.push('<div class="question-item"><strong>Conferma la successione temporale del gruppo “' +
+          escapeHtml(gruppo.nome) + '”</strong>' +
+          '<p>Le colonne devono essere elencate dalla misurazione più antica alla più recente. ' +
+          'Il sito non presume che l’ordine del file sia quello cronologico.</p>' +
+          '<p>Colonne del gruppo: ' + membri.map(profilo => escapeHtml(profilo.nome)).join(', ') + '</p>' +
+          '<label>Ordine temporale (separa i nomi con ;)' +
+          '<input type="text" class="temporal-order-input" data-group-id="' + escapeHtml(gruppo.id) +
+          '" value="' + escapeHtml(ordine) + '" placeholder="' +
+          escapeHtml(membri.map(profilo => profilo.nome).join('; ')) +
+          '"></label>' +
+          '<button type="button" class="secondary-action temporal-order-from-csv" data-group-id="' +
+          escapeHtml(gruppo.id) + '">Confermo che l’ordine nel file è cronologico</button>' +
+          '<label>Gli intervalli di tempo tra queste misurazioni sono uguali?' +
+          '<select class="temporal-spacing-select" data-group-id="' + escapeHtml(gruppo.id) + '">' +
+          '<option value=""' + (!campionamento ? ' selected' : '') + '>Devo ancora confermarlo</option>' +
+          '<option value="regolare"' + (campionamento === 'regolare' ? ' selected' : '') +
+          '>Sì, le misurazioni sono equidistanti nel tempo</option>' +
+          '<option value="irregolare"' + (campionamento === 'irregolare' ? ' selected' : '') +
+          '>No, gli intervalli sono differenti</option>' +
+          '</select></label>' +
+          '<p>Se i tempi non sono equidistanti, il sito interrompe il calcolo per questo gruppo: ' +
+          'DTW per indici e interpolazione per posizione non tengono conto degli istanti reali. ' +
+          'Occorre prima definire un ricampionamento o un allineamento temporale.</p></div>');
+        domande.push(domandaAdattiva(
+          `ritardo-${gruppo.id}`, `Nel gruppo “${escapeHtml(gruppo.nome)}”, un andamento simile può avvenire con un piccolo ritardo?`,
+          "Per esempio, lo stesso picco può comparire in momenti leggermente diversi nelle due righe.",
+          [["si", "Sì, il ritardo non deve renderle diverse"], ["no", "No, gli stessi eventi devono avvenire negli stessi momenti"], ["ignoto", "Non lo so"]]
+        ));
+      }
       if (gruppo.tipo === "parti") domande.push(domandaAdattiva(
         `totale-${gruppo.id}`, `Le colonne del gruppo “${escapeHtml(gruppo.nome)}” sono parti di un unico totale?`,
         "Per esempio, percentuali, quote o quantità la cui somma ha un significato preciso.",
@@ -1349,6 +1377,24 @@
     interpretazione.riscalamentoConfermato = false;
     disegnaQuestionario();
   });
+  $("adaptive-questions").addEventListener("input", evento => {
+    if (!evento.target.matches(".temporal-order-input")) return;
+    if (!interpretazione.ordiniTemporaliGruppi) interpretazione.ordiniTemporaliGruppi = {};
+    interpretazione.ordiniTemporaliGruppi[evento.target.dataset.groupId] = evento.target.value;
+    nascondiPiano();
+  });
+  $("adaptive-questions").addEventListener("click", evento => {
+    const pulsante = evento.target.closest(".temporal-order-from-csv");
+    if (!pulsante) return;
+    const id = pulsante.dataset.groupId;
+    const nomi = risultato.originale.intestazioni.filter(nome =>
+      interpretazione.colonne[nome]?.usa && interpretazione.assegnazioni[nome] === id
+    );
+    if (nomi.length < 2) return;
+    if (!interpretazione.ordiniTemporaliGruppi) interpretazione.ordiniTemporaliGruppi = {};
+    interpretazione.ordiniTemporaliGruppi[id] = nomi.join("; ");
+    disegnaQuestionario();
+  });
   $("adaptive-questions").addEventListener("change", evento => {
     if (evento.target.matches(".specialized-missing-setting")) {
       if (!interpretazione.mancantiSpecializzatiPerColonna) {
@@ -1357,6 +1403,12 @@
       interpretazione.mancantiSpecializzatiPerColonna[
         evento.target.dataset.specializedMissingColumn
       ] = evento.target.value;
+      disegnaQuestionario();
+      return;
+    }
+    if (evento.target.matches(".temporal-spacing-select")) {
+      if (!interpretazione.campionamentiTemporaliGruppi) interpretazione.campionamentiTemporaliGruppi = {};
+      interpretazione.campionamentiTemporaliGruppi[evento.target.dataset.groupId] = evento.target.value;
       disegnaQuestionario();
       return;
     }
@@ -1449,11 +1501,21 @@
     creaGruppo();
     disegnaQuestionario();
   });
+  function invalidaConfermaTemporale(idGruppo) {
+    if (!idGruppo) return;
+    if (interpretazione.ordiniTemporaliGruppi) delete interpretazione.ordiniTemporaliGruppi[idGruppo];
+    if (interpretazione.campionamentiTemporaliGruppi) delete interpretazione.campionamentiTemporaliGruppi[idGruppo];
+  }
   $("group-assignment-body").addEventListener("change", evento => {
     if (!evento.target.matches(".group-assignment")) return;
     const nome = evento.target.dataset.groupColumn;
+    const precedenteGruppo = interpretazione.assegnazioni[nome];
     let gruppoId = evento.target.value;
     if (gruppoId === "__nuovo__") gruppoId = creaGruppo().id;
+    if (gruppoId !== precedenteGruppo) {
+      invalidaConfermaTemporale(precedenteGruppo);
+      invalidaConfermaTemporale(gruppoId);
+    }
     if (gruppoId) interpretazione.assegnazioni[nome] = gruppoId;
     else delete interpretazione.assegnazioni[nome];
     riscalamentoConfermato = false;
@@ -1467,6 +1529,7 @@
     if (!gruppo) return;
     if (evento.target.matches(".group-name")) gruppo.nome = evento.target.value.trim() || gruppo.nome;
     if (evento.target.matches(".group-type")) {
+      if (gruppo.tipo !== evento.target.value) invalidaConfermaTemporale(gruppo.id);
       gruppo.tipo = evento.target.value;
       if (interpretazione.misureGruppi) delete interpretazione.misureGruppi[gruppo.id];
     }
@@ -1487,6 +1550,7 @@
     const pulsante = evento.target.closest(".remove-group");
     if (!pulsante) return;
     const gruppoId = pulsante.closest(".group-config").dataset.groupId;
+    invalidaConfermaTemporale(gruppoId);
     interpretazione.gruppi = interpretazione.gruppi.filter(gruppo => gruppo.id !== gruppoId);
     Object.keys(interpretazione.assegnazioni).forEach(nome => {
       if (interpretazione.assegnazioni[nome] === gruppoId) delete interpretazione.assegnazioni[nome];
