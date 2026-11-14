@@ -273,4 +273,96 @@ assert piano_originale["completo"], piano_originale
 assert not piano_originale["percorsi"][2]["preelaborazione"]["usaTabellaTrasformata"]
 assert p.calcola_matrice(tabella, senza_scale)["matrice"] != finale["matrice"]
 
+
+# La rimozione di un gruppo non autorizza a convertire una sua colonna
+# in caratteristica indipendente in modo silenzioso.
+orfano = copy.deepcopy(risposte)
+orfano["assegnazioni"]["categoria"] = "gruppo-rimosso"
+piano_orfano = p.crea_piano_confronto(tabella, orfano)
+assert not piano_orfano["completo"]
+assert not piano_orfano["rapportoProblemi"]["calcoloConsentito"]
+assert piano_orfano["rapportoProblemi"]["numeroBloccanti"] >= 1
+assert any(
+    "categoria" in errore["messaggio"]
+    and "gruppo-rimosso" in errore["messaggio"]
+    and errore["ambito"] == "generale"
+    for errore in piano_orfano["rapportoProblemi"]["bloccanti"]
+)
+try:
+    p.calcola_matrice(tabella, orfano)
+    raise AssertionError("Una colonna assegnata a un gruppo inesistente non può essere calcolata.")
+except ValueError as errore:
+    assert "Completa" in str(errore)
+
+# Più problemi indipendenti nello stesso CSV: Gower personalizzata
+# non valida; Hamming a lunghezze diverse; distribuzioni non
+# normalizzate; conferma delle coordinate originali mancante;
+# peso non positivo; scala robusta configurata con riga fuori CSV;
+# assegnazione obsoleta a un gruppo eliminato.
+righe_malformate = raw.replace(
+    "basso,rosso,1,10,1,0,0,AAA,A",
+    "basso,rosso,1,10,2,0,0,AAAA,A",
+)
+assert righe_malformate != raw
+tabella_malformata = p.prepara_tabella(p.leggi_csv(righe_malformate), scelte)
+multi = copy.deepcopy(risposte)
+multi["assegnazioni"]["categoria"] = "gruppo-rimosso"
+multi["dissimilaritaCategorieGower"]["categoria"]["coppie"]["0:1"] = "1.5"
+multi["confermeValoriOriginaliGruppi"] = {}
+multi["righeAnomaleNormalizzazione"]["percorso-3"] = "99"
+multi["pesiPercorsi"]["percorso-4"] = "0"
+piano_multi = p.crea_piano_confronto(tabella_malformata, multi)
+assert not piano_multi["completo"]
+assert len(piano_multi["percorsi"]) == 4
+assert not any(x["calcolo"]["disponibile"] for x in piano_multi["percorsi"])
+assert set(x["tipo"] for x in piano_multi["percorsi"]) == {"gower", "separato", "gruppo"}
+rapporto_multi = piano_multi["rapportoProblemi"]
+assert not rapporto_multi["calcoloConsentito"]
+assert rapporto_multi["numeroBloccanti"] == len(rapporto_multi["bloccanti"])
+assert rapporto_multi["numeroBloccanti"] >= 6
+assert len({x["idPercorso"] for x in rapporto_multi["bloccanti"] if x["idPercorso"]}) >= 4
+messaggi_multi = " ".join(x["messaggio"] for x in rapporto_multi["bloccanti"]).casefold()
+for frammento in (
+    "gruppo-rimosso", "hamming", "somma", "99", "strettamente positivo",
+):
+    assert frammento in messaggi_multi, (frammento, rapporto_multi)
+assert all(x["decisioniPossibili"] for x in rapporto_multi["bloccanti"])
+try:
+    p.calcola_matrice(tabella_malformata, multi)
+    raise AssertionError("Un piano con incompatibilità simultanee non deve produrre la matrice.")
+except ValueError as errore:
+    assert "Completa" in str(errore)
+# L'API JSON restituisce il rapporto intero e non solo la prima anomalia.
+import json
+rapporto_api = json.loads(p.crea_piano_json(
+    righe_malformate, json.dumps(scelte), json.dumps(multi)
+))
+assert rapporto_api["ok"], rapporto_api
+assert rapporto_api["piano"]["rapportoProblemi"] == rapporto_multi
+
+# Anche quando si risolve una sola questione, le altre restano bloccanti.
+parziale = copy.deepcopy(multi)
+del parziale["assegnazioni"]["categoria"]
+piano_parziale = p.crea_piano_confronto(tabella_malformata, parziale)
+assert not piano_parziale["completo"]
+assert piano_parziale["rapportoProblemi"]["numeroBloccanti"] >= 5
+assert "gruppo-rimosso" not in str(piano_parziale["rapportoProblemi"])
+
+# Dopo risposte coerenti si ottiene una sola matrice, senza mutare
+# i blocchi, i pesi e la formula di riferimento già verificati sopra.
+piano_ripristinato = p.crea_piano_confronto(tabella, risposte)
+assert piano_ripristinato["completo"]
+assert piano_ripristinato["rapportoProblemi"]["numeroBloccanti"] == 0
+assert p.calcola_matrice(tabella, risposte)["matrice"] == finale["matrice"]
+
+# Configurazioni strutturali corrotte non devono generare eccezioni
+# inattese quali AttributeError: l'API segnala un errore leggibile.
+for gruppi_non_validi in ([None], ["sconosciuto"], "non-una-lista"):
+    risposta = json.loads(p.crea_piano_json(
+        raw, json.dumps(scelte),
+        json.dumps({**risposte, "gruppi": gruppi_non_validi}),
+    ))
+    assert risposta["ok"] is False
+    assert "gruppo" in risposta["errore"].lower()
+
 print("Collaudo di integrazione a quattro percorsi superato.")
