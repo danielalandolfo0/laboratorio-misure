@@ -154,7 +154,12 @@ def statistiche(valori: list[float]) -> dict[str, float | int]:
     estremi = sum(valore < minimo_tukey or valore > massimo_tukey for valore in valori)
     zeri = sum(valore == 0 for valore in valori)
     massimo_assoluto = max(abs(valore) for valore in valori)
+    # Indice di Bowley, in [-1,1], robusto rispetto alle code estreme.
+    # Un IQR nullo non autorizza a imputare una asimmetria pari a zero.
+    bowley = (q3 + q1 - 2 * mediana) / iqr if iqr > 0 else None
     return {
+        "asimmetriaBowley": bowley,
+        "numeroOsservati": len(valori),
         "media": media,
         "deviazione": deviazione,
         "mediana": mediana,
@@ -1141,6 +1146,31 @@ def _diagnosi_numerica(
                 coppia_correlata = [nome_x, nome_y]
 
     righe_complete = _righe_complete_numeriche(non_costanti, analisi_per_nome)
+    colonne_asimmetriche = [
+        {
+            "nome": nome,
+            "asimmetriaBowley": analisi_per_nome[nome]["statistiche"]["asimmetriaBowley"],
+            "numeroOsservati": analisi_per_nome[nome]["statistiche"]["numeroOsservati"],
+        }
+        for nome in nomi
+        if (
+            analisi_per_nome[nome].get("statistiche", {}).get("numeroOsservati", 0) >= 8
+            and analisi_per_nome[nome].get("statistiche", {}).get("asimmetriaBowley") is not None
+            and abs(analisi_per_nome[nome]["statistiche"]["asimmetriaBowley"]) >= 0.3
+        )
+    ]
+    # Diagnosi esplorativa multivariata: separata dal calcolo delle misure.
+    # L'assenza di candidati non equivale a certificare assenza di anomalie.
+    diagnosi_multivariata: dict[str, Any] = {
+        "stato": "non_valutabile",
+        "metodo": "Mahalanobis quadrata con covarianza campionaria; limite superiore Q3 + 1,5 IQR",
+        "colonne": list(non_costanti),
+        "numeroValutate": len(righe_complete),
+        "soglia": None,
+        "numeroCandidati": 0,
+        "candidati": [],
+        "motivo": "",
+    }
     covarianza_utilizzabile = False
     covarianza_singolare = False
     condizionamento: float | None = None
@@ -1212,6 +1242,81 @@ def _diagnosi_numerica(
                     "La covarianza è invertibile e sufficientemente ben condizionata."
                 )
 
+    if len(non_costanti) < 2:
+        diagnosi_multivariata["motivo"] = (
+            "Servono almeno due colonne quantitative non costanti."
+        )
+    elif colonne_costanti:
+        diagnosi_multivariata["motivo"] = (
+            "Sono presenti colonne costanti: la covarianza completa e' singolare. "
+            "Non si stimano anomalie multivariate da questo modello."
+        )
+    elif campione_limitato or len(righe_complete) < 12:
+        diagnosi_multivariata["motivo"] = (
+            f"Solo {len(righe_complete)} righe complete per {len(non_costanti)} colonne. "
+            "Il campione e' troppo piccolo rispetto alla dimensione per questa "
+            "segnalazione esplorativa (richieste almeno max(12,5p) righe complete)."
+        )
+    elif not covarianza_utilizzabile:
+        diagnosi_multivariata["motivo"] = (
+            "Covarianza singolare o mal condizionata: non si calcolano "
+            "punteggi multivariati potenzialmente instabili."
+        )
+    else:
+        # Usa le stesse righe complete della covarianza; la posizione nel CSV
+        # e' l'indice tra le righe dati, a partire da 1 (non la riga header).
+        riferimento = analisi_per_nome[non_costanti[0]]["valoriNumerici"]
+        indici_completi = [
+            indice + 1 for indice in range(len(riferimento))
+            if all(
+                isinstance(analisi_per_nome[nome]["valoriNumerici"][indice], (int, float))
+                for nome in non_costanti
+            )
+        ]
+        medie_z = [
+            sum(vettore[j] for vettore in standardizzate) / len(standardizzate)
+            for j in range(len(non_costanti))
+        ]
+        punteggi = []
+        for indice_riga, vettore in zip(indici_completi, standardizzate):
+            centrato = [vettore[j] - medie_z[j] for j in range(len(non_costanti))]
+            quadrato = sum(
+                centrato[a] * inversa[a][b] * centrato[b]
+                for a in range(len(non_costanti)) for b in range(len(non_costanti))
+            )
+            punteggi.append((indice_riga, max(0.0, quadrato)))
+        ordinati_punteggi = sorted(punteggio for _, punteggio in punteggi)
+        q1_md = quantile(ordinati_punteggi, 0.25)
+        q3_md = quantile(ordinati_punteggi, 0.75)
+        if (q1_md is not None and q3_md is not None
+                and q3_md > q1_md + 1e-12
+                and all(math.isfinite(s) for s in ordinati_punteggi)):
+            soglia_md = q3_md + 1.5 * (q3_md - q1_md)
+            candidati = sorted(
+                (
+                    {"riga": i, "punteggio": score}
+                    for i, score in punteggi if score > soglia_md
+                ),
+                key=lambda candidato: candidato["punteggio"], reverse=True,
+            )
+            diagnosi_multivariata.update({
+                "stato": "valutata",
+                "soglia": soglia_md,
+                "numeroCandidati": len(candidati),
+                "candidati": candidati[:20],
+                "motivo": (
+                    "I punteggi di Mahalanobis sono stimati dalla stessa covarianza "
+                    "campionaria: possibili effetti di mascheramento e instabilita'. "
+                    "La soglia e' esplorativa, non un test con livello di significativita' "
+                    "fissato. Nessuna riga viene rimossa."
+                ),
+            })
+        else:
+            diagnosi_multivariata["motivo"] = (
+                "Punteggi multivariati non finiti o dispersione interquartilica "
+                "dei punteggi nulla: criterio esplorativo non applicabile."
+            )
+
     correlazioni_forti = correlazione_massima >= 0.8
     politica_senza_outlier = "maxabs_automatico" if matrice_sparsa else "zscore_automatico"
     if colonne_outlier:
@@ -1264,6 +1369,8 @@ def _diagnosi_numerica(
 
     return {
         "outlier": bool(colonne_outlier),
+        "colonneAsimmetriche": colonne_asimmetriche,
+        "diagnosiMultivariata": diagnosi_multivariata,
         "robustoApplicabile": robusto_applicabile,
         "colonneOutlier": colonne_outlier,
         "colonneEstremeNonRobuste": colonne_estreme_non_robuste,
@@ -2476,9 +2583,16 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
             peso = 1.0
         percorso["pesoAggregazione"] = peso
     incluse_con_estremi = any(analisi_per_nome[n].get("statistiche", {}).get("estremi", 0) > 0 for n in incluse)
-    if incluse_con_estremi and interpretazione.get("significatoEstremi") in {None, "", "ignoto"}:
+    incluse_con_candidati_multivariati = any(
+        percorso["tipo"] == "numerico"
+        and percorso.get("diagnosiAutomatica", {}).get(
+            "diagnosiMultivariata", {}
+        ).get("numeroCandidati", 0) > 0
+        for percorso in percorsi
+    )
+    if (incluse_con_estremi or incluse_con_candidati_multivariati) and interpretazione.get("significatoEstremi") in {None, "", "ignoto"}:
         avvisi.append("Indica se i valori molto lontani dagli altri sono plausibili.")
-    elif incluse_con_estremi and interpretazione.get("significatoEstremi") in {"errori", "controllare"}:
+    elif (incluse_con_estremi or incluse_con_candidati_multivariati) and interpretazione.get("significatoEstremi") in {"errori", "controllare"}:
         avvisi.append("Controlla i valori estremi prima di calcolare le distanze.")
 
     for percorso in percorsi:

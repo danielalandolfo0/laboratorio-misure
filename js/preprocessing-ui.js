@@ -257,6 +257,8 @@
         Array.isArray(proposta.colonne) && proposta.colonne.length >= 2
       );
       const estreme = risposta.colonne.filter(c => c.statistiche.estremi > 0);
+      const asimmetriche = d.colonneAsimmetriche || [];
+      const multivariata = d.diagnosiMultivariata || {};
       const range = risposta.colonne.map(c => ({
         nome: c.nome,
         ampiezza: c.statistiche.massimo - c.statistiche.minimo,
@@ -287,11 +289,51 @@
       }
       const riga = (titolo, descrizione) =>
         '<div class="question-item"><strong>' + escapeHtml(titolo) + '</strong><p>' + escapeHtml(descrizione) + '</p></div>';
+      const asimmetria = asimmetriche.length
+        ? "Possibile asimmetria quartilica in: " +
+          asimmetriche.map(c => c.nome + " (Bowley = " +
+            formatoNumero(c.asimmetriaBowley) + ")").join("; ") +
+          ". Non indica necessariamente dati errati: valuta se conta la differenza " +
+          "assoluta o quella relativa e se una trasformazione sarebbe coerente con il dominio."
+        : "Non emergono asimmetrie quartiliche marcate secondo il criterio " +
+          "esplorativo, oppure le colonne sono troppo piccole o hanno IQR nullo.";
+      const multivariati = multivariata.stato !== "valutata"
+        ? "Controllo multivariato non eseguibile: " + (multivariata.motivo || "dati insufficienti") +
+          " Nessuna conclusione sull'assenza di anomalie."
+        : multivariata.numeroCandidati
+          ? "Possibili osservazioni insolite nella combinazione delle colonne: " +
+            multivariata.candidati.map(c => "riga dati " + c.riga +
+              " (punteggio " + formatoNumero(c.punteggio) + ")").join("; ") +
+            (multivariata.numeroCandidati > multivariata.candidati.length
+              ? "; altri " + (multivariata.numeroCandidati - multivariata.candidati.length) +
+                " candidati non elencati" : "") +
+            ". Controlla il significato delle righe: non sono state escluse."
+          : "Non risultano candidati oltre la soglia multivariata esplorativa. " +
+            "Non è una garanzia di assenza di anomalie.";
       const spiegazioni = [
         riga("Ci sono valori molto diversi dagli altri?", outlier),
+        riga("Le distribuzioni sono asimmetriche?", asimmetria),
+        riga("Ci sono osservazioni insolite considerando più colonne insieme?", multivariati),
         riga("Le colonne hanno dispersioni simili?", scale),
         riga("Alcune colonne cambiano insieme?", andamento)
       ];
+      if (multivariata.numeroCandidati > 0 && !estreme.length) {
+        const scelta = interpretazione.significatoEstremi || "";
+        spiegazioni.push(
+          '<div class="question-item"><label><strong>Le righe segnalate nel confronto ' +
+          'multivariato rappresentano osservazioni reali?</strong>' +
+          '<select class="multivariate-extremes-choice">' +
+          '<option value=""' + (!scelta || scelta === "ignoto" ? " selected" : "") +
+          '>Devo ancora verificarlo</option>' +
+          '<option value="reali"' + (scelta === "reali" ? " selected" : "") +
+          '>Sì, sono osservazioni reali: mantienile</option>' +
+          '<option value="controllare"' + (scelta === "controllare" ? " selected" : "") +
+          '>Le devo controllare prima del calcolo</option>' +
+          '<option value="errori"' + (scelta === "errori" ? " selected" : "") +
+          '>Potrebbero essere errori: fermati</option>' +
+          '</select></label></div>'
+        );
+      }
       if (d.covarianzaSingolare) {
         spiegazioni.push(riga("Alcune informazioni si ripetono?",
           "La matrice delle relazioni lineari non è invertibile: alcune colonne dipendono linearmente dalle altre. È opportuno verificare se mantenerle tutte."));
@@ -307,6 +349,15 @@
         '<p>Correlazioni: ' + (coppie.length
           ? coppie.map(c => escapeHtml(c.colonne.join(" / ") + ": r = " + formatoNumero(c.correlazione) + " (" + c.coppieComplete + " coppie)")).join("; ")
           : "nessuna coppia confrontabile") + '.</p>' +
+        '<p>Asimmetria quartilica di Bowley = (Q3 + Q1 − 2·mediana)/IQR, ' +
+        'non definita per IQR = 0. La soglia esplorativa |Bowley| ≥ 0,3 ' +
+        'si applica con almeno 8 osservazioni.</p>' +
+        '<p>Outlier multivariati: su almeno max(12, 5p) righe complete, ' +
+        'se la covarianza delle p colonne non è singolare o mal condizionata, ' +
+        'si calcola la distanza di Mahalanobis quadrata dalla media campionaria. ' +
+        'Possibili anomalie oltre Q3 + 1,5·IQR dei punteggi. ' +
+        'La covarianza stimata sui medesimi dati può mascherare anomalie. ' +
+        'Non è un test statistico con probabilità di falso positivo controllata.</p>' +
         '<p>' + escapeHtml(d.motivoCovarianza || "") + '</p></details>';
 
       const proposteHtml = proposteGruppiCorrenti.length
@@ -395,7 +446,15 @@
     if (diagnosi.famigliaId === "quantitativo") {
       elementi.push(["Valori estremi", indicatori.outlier
         ? `Rilevati in: ${(indicatori.colonneOutlier || []).join(", ")}`
-        : "Nessun outlier rilevante"]);
+        : "Nessun outlier univariato rilevante"]);
+      elementi.push(["Asimmetria quartilica", (indicatori.colonneAsimmetriche || []).length
+        ? indicatori.colonneAsimmetriche.map(v => v.nome + ": " +
+          formatoNumero(v.asimmetriaBowley)).join("; ")
+        : "Nessuna marcata, o diagnosi non disponibile"]);
+      elementi.push(["Osservazioni multivariate", indicatori.diagnosiMultivariata?.stato === "valutata"
+        ? indicatori.diagnosiMultivariata.numeroCandidati +
+          " possibili anomalie su " + indicatori.diagnosiMultivariata.numeroValutate + " righe complete"
+        : "Non valutabile: " + (indicatori.diagnosiMultivariata?.motivo || "dati insufficienti")]);
       elementi.push(["Dispersioni", `Rapporto massimo/minimo ${formatoNumero(indicatori.rapportoDispersioni)} · ${indicatori.dispersioniSimili ? "simili" : "differenti"}`]);
       elementi.push(["Zeri", indicatori.matriceSparsa
         ? "Almeno l’80% dei valori è zero: proposta max-abs"
@@ -1548,6 +1607,11 @@
   $("row-meaning").addEventListener("change", evento => {
     interpretazione.riga = evento.target.value;
     nascondiPiano();
+  });
+  $("numeric-preliminary-content").addEventListener("change", evento => {
+    if (!evento.target.matches(".multivariate-extremes-choice")) return;
+    interpretazione.significatoEstremi = evento.target.value;
+    disegnaQuestionario();
   });
   $("numeric-preliminary-content").addEventListener("click", evento => {
     const pulsante = evento.target.closest(".apply-group-proposal");

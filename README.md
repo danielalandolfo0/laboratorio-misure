@@ -199,6 +199,35 @@ Le incompatibilita' non producono sostituzioni silenziose di misura o di
 preprocessing. Le conferme vengono invalidate quando cambia il metodo
 di riscalamento, la composizione dei gruppi o il confronto richiesto.
 
+### Asimmetria e possibili outlier multivariati
+
+La diagnostica numerica preliminare distingue gli indicatori su singole
+colonne dalla ricerca di osservazioni anomale considerando insieme piu'
+coordinate:
+
+- L'**asimmetria quartilica di Bowley** e'
+  `(Q3 + Q1 - 2 mediana)/(Q3-Q1)`, disponibile solo se `IQR>0`.
+  Il sito segnala valori con `|Bowley| >= 0,3` e almeno otto
+  osservazioni, senza interpretare l'asimmetria come un errore ne'
+  imporre una trasformazione logaritmica.
+- Con almeno `max(12,5p)` righe complete per `p` coordinate
+  quantitative non costanti e covarianza invertibile e numericamente
+  ben condizionata, il sito calcola la **distanza di Mahalanobis quadrata**
+  di ogni riga dalla media. Segnala come possibili anomalie le righe con
+  punteggio maggiore di `Q3 + 1,5 IQR` dei punteggi. La soglia e'
+  esplorativa e non corrisponde a un test statistico con livello
+  controllato. La stima classica puo' essere distorta dagli stessi
+  outlier che si cercano (mascheramento).
+- Se le condizioni non sono soddisfatte, lo stato e' **non valutabile**,
+  mai "nessuna anomalia". Le righe con mancanti non partecipano alla
+  stima congiunta. I numeri di riga si riferiscono ai dati CSV, a
+  partire da 1, senza contare l'intestazione.
+
+Se esistono candidati multivariati, l'utente deve confermare che siano
+osservazioni reali, oppure controllare il file. La conferma non elimina,
+non modifica e non trascura automaticamente alcuna riga; i percorsi
+di distanza restano quelli scelti separatamente.
+
 ## Matrice complessiva con più percorsi
 
 Ogni percorso produce prima la propria matrice. Gower, i confronti 0/1 e le

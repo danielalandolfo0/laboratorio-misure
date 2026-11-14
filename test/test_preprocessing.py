@@ -1766,4 +1766,56 @@ assert piano_relativa_confermata["completo"], piano_relativa_confermata
 assert not piano_relativa_confermata["percorsi"][0]["preelaborazione"]["usaTabellaTrasformata"]
 assert piano_relativa_confermata["percorsi"][0]["compatibilitaPreelaborazione"]["confermata"]
 
+
+# La diagnostica non deve modificare riscalamenti o selezionare
+# automaticamente una misura diversa.
+stats_asimmetriche = p.statistiche([float(i**3) for i in range(1, 41)])
+assert stats_asimmetriche["numeroOsservati"] == 40
+assert stats_asimmetriche["asimmetriaBowley"] > .3
+stats_simmetriche = p.statistiche([float(i) for i in range(-20, 21)])
+quasi_uguali(stats_simmetriche["asimmetriaBowley"], 0)
+assert p.statistiche([4, 4, 4, 4])["asimmetriaBowley"] is None
+
+# Outlier soltanto multivariato: la singola coordinata non e' estrema,
+# ma (9,1) si discosta nettamente dalla relazione fra le due colonne.
+csv_joint = (
+    "x,y\n"
+    + "".join(
+        f"{i / 3},{i / 3 + ((i % 3) - 1) * .15}\n" for i in range(1, 31)
+    )
+    + "9,1\n"
+)
+tabella_joint = p.prepara_tabella(p.leggi_csv(csv_joint))
+diagnosi_joint = p._diagnosi_numerica(
+    ["x", "y"], {c["nome"]: c for c in tabella_joint["colonne"]}
+)
+assert diagnosi_joint["diagnosiMultivariata"]["stato"] == "valutata", diagnosi_joint
+assert diagnosi_joint["diagnosiMultivariata"]["numeroCandidati"] >= 1
+assert any(c["riga"] == 31 for c in diagnosi_joint["diagnosiMultivariata"]["candidati"])
+assert diagnosi_joint["diagnosiMultivariata"]["soglia"] > 0
+assert not any(c["statistiche"]["estremi"] for c in tabella_joint["colonne"])
+risposte_joint = risposte_quantitative(
+    significatoEstremi="reali",
+    gestioneDipendenzaLineare="mantieni",
+)
+piano_joint = p.crea_piano_confronto(tabella_joint, risposte_joint)
+assert piano_joint["completo"], piano_joint
+assert p.crea_piano_confronto(
+    tabella_joint, {**risposte_joint, "significatoEstremi": ""}
+)["completo"] is False
+assert p.crea_piano_confronto(
+    tabella_joint, {**risposte_joint, "significatoEstremi": "controllare"}
+)["completo"] is False
+
+# La mancata applicabilita' dell'analisi congiunta non viene spacciata
+# per assenza di anomalie (campione piccolo o covarianza singolare).
+diagnosi_poche = p._diagnosi_numerica(
+    ["a", "b"], {c["nome"]: c for c in scale_simili["colonne"]}
+)
+assert diagnosi_poche["diagnosiMultivariata"]["stato"] == "non_valutabile"
+diagnosi_singolare = p._diagnosi_numerica(
+    ["a", "b"], {c["nome"]: c for c in scale_diverse["colonne"]}
+)
+assert diagnosi_singolare["diagnosiMultivariata"]["stato"] == "non_valutabile"
+
 print("Tutti i test Python di preprocessing sono stati superati.")
