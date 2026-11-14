@@ -3921,9 +3921,15 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
     risposte_colonne = interpretazione.get("colonne", {})
     assegnazioni = interpretazione.get("assegnazioni", {})
     gruppi = interpretazione.get("gruppi", [])
-    gruppi_per_id = {gruppo.get("id"): gruppo for gruppo in gruppi}
-    if not all(isinstance(gruppo, dict) and gruppo.get("id") for gruppo in gruppi):
-        raise ValueError("Ogni gruppo deve avere un identificativo valido.")
+    if not isinstance(risposte_colonne, dict) or not isinstance(assegnazioni, dict):
+        raise ValueError("Le risposte sulle colonne e le assegnazioni devono essere oggetti validi.")
+    if (
+        not isinstance(gruppi, list)
+        or not all(isinstance(gruppo, dict) and isinstance(gruppo.get("id"), str)
+                   and gruppo["id"].strip() for gruppo in gruppi)
+    ):
+        raise ValueError("Ogni gruppo deve avere un identificativo testuale non vuoto.")
+    gruppi_per_id = {gruppo["id"]: gruppo for gruppo in gruppi}
     if len(gruppi_per_id) != len(gruppi):
         raise ValueError("I gruppi devono avere identificativi distinti.")
     incluse: list[str] = []
@@ -4040,6 +4046,17 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
             percorso.setdefault("avvisi", []).append(str(errore))
 
     avvisi: list[str] = []
+    # Un'assegnazione rimasta dopo l'eliminazione di un gruppo non può
+    # trasformarsi tacitamente in un confronto indipendente. Il piano
+    # resta visibile per la correzione, ma il calcolo è bloccato.
+    for nome in incluse:
+        id_richiesto = assegnazioni.get(nome)
+        if id_richiesto and id_richiesto not in gruppi_per_id:
+            avvisi.append(
+                f"La colonna “{nome}” è assegnata al gruppo inesistente "
+                f"“{id_richiesto}”. Riassegnala a un gruppo presente oppure "
+                "conferma che debba essere indipendente, togliendo l'assegnazione."
+            )
     standard_indipendenti = [
         nome for nome in indipendenti if ruoli[nome] in RUOLI_GOWER
     ]
