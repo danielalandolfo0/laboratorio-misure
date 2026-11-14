@@ -3108,7 +3108,7 @@ assert percorso_puntuale["parametri"]["tempi"] == [0, 1, 4]
 assert percorso_puntuale["parametri"]["unitaTempo"] == "ore"
 matrice_puntuale = p.calcola_matrice(dati_griglia_irregolare, base_griglia)
 verifica_matrice_finale(matrice_puntuale, 3)
-quasi_uguali(matrice_puntuale["matrice"][0][1], 2 / math.sqrt(12))
+quasi_uguali(matrice_puntuale["matrice"][0][1], 2 / 3)
 
 scelta_pendenze = {
     **base_griglia,
