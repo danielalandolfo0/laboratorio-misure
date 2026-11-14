@@ -917,6 +917,7 @@ RUOLI_GOWER = {"quantita", "livello", "presenza", "binaria", "categoria", "data"
 MISURE_SPECIALIZZATE_CALCOLABILI = {
     "Uguale o diverso",
     "Distanza di Levenshtein normalizzata",
+    "Distanza di Hamming normalizzata",
     "Distanza tra coordinate",
     "Dissimilarità coseno",
     "Dissimilarità di Pearson",
