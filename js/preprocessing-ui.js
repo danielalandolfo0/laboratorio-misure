@@ -1040,9 +1040,46 @@
   function disegnaDiagnosticaFinale(risposta) {
     const contenitore = $("gower-diagnostics");
     const analisi = risposta.diagnosticaFinale?.sensibilitaPesi;
+    const distribuzione = risposta.diagnosticaFinale?.distribuzioneDissimilarita;
+    const presentazioneDistribuzione = distribuzione?.numeroCoppie > 0
+      ? '<section class="final-distribution" aria-label="Distribuzione delle dissimilarità">' +
+        '<h6>Distribuzione delle dissimilarità finali</h6>' +
+        '<p>Si considera una volta ogni coppia di righe distinte (' +
+        escapeHtml(String(distribuzione.numeroCoppie)) +
+        ' confronti), senza contare la diagonale né duplicare le coppie simmetriche. ' +
+        'I valori sono descrittivi: non modificano la matrice.</p>' +
+        '<p>Minimo: <strong>' + escapeHtml(formatoNumero(distribuzione.minimo)) +
+        '</strong>; massimo: <strong>' + escapeHtml(formatoNumero(distribuzione.massimo)) +
+        '</strong>; media: <strong>' + escapeHtml(formatoNumero(distribuzione.media)) +
+        '</strong>; mediana: <strong>' + escapeHtml(formatoNumero(distribuzione.mediana)) +
+        '</strong>; primo e terzo quartile: <strong>' +
+        escapeHtml(formatoNumero(distribuzione.primoQuartile)) + '</strong> e <strong>' +
+        escapeHtml(formatoNumero(distribuzione.terzoQuartile)) + '</strong>.</p>' +
+        '<ul class="final-distribution-list">' +
+        (distribuzione.intervalli || []).map(voce => {
+          const percentuale = Math.max(0, Math.min(
+            100, 100 * Number(voce.frazione)
+          ));
+          const intervallo = '[' + formatoNumero(voce.inizio) + '; ' +
+            formatoNumero(voce.fine) + (voce.fineInclusa ? ']' : ')');
+          return '<li><span class="final-distribution-range">' +
+            escapeHtml(intervallo) + '</span>' +
+            '<span class="final-distribution-track" aria-hidden="true">' +
+            '<span style="width: ' + percentuale + '%"></span></span>' +
+            '<span class="final-distribution-count">' +
+            escapeHtml(String(voce.coppie)) + ' (' +
+            escapeHtml(formatoNumero(percentuale)) + '%)</span></li>';
+        }).join('') +
+        '</ul>' +
+        '<p>Coppie a distanza zero: ' +
+        escapeHtml(String(distribuzione.coppieZero)) +
+        '; coppie a distanza uno: ' + escapeHtml(String(distribuzione.coppieUno)) +
+        ' (con tolleranza numerica 10⁻¹²). I quartili sono calcolati con ' +
+        'interpolazione lineare sui confronti ordinati.</p></section>'
+      : '';
     if (!analisi?.perBlocco?.length) {
-      contenitore.innerHTML = "";
-      contenitore.hidden = true;
+      contenitore.innerHTML = presentazioneDistribuzione;
+      contenitore.hidden = !presentazioneDistribuzione;
       return;
     }
     const nulle = analisi.blocchiSempreNulli || [];
@@ -1062,7 +1099,7 @@
         ' Questi zeri sono contributi validi e restano nel denominatore.</p>'
       : '<p>Nessun blocco ha distanza nulla su tutti i confronti locali disponibili.</p>';
     if (analisi.numeroBlocchi === 1) {
-      contenitore.innerHTML =
+      contenitore.innerHTML = presentazioneDistribuzione +
         '<h6>Influenza dei pesi e dei blocchi</h6>' +
         '<p>È presente un unico blocco: moltiplicarne il peso per un ' +
         'fattore positivo non cambia la matrice. Non si può rimuoverlo ' +
@@ -1086,7 +1123,7 @@
         ' (' + escapeHtml(String(rim.coppieConfrontabili)) + ' coppie)</td><td>' +
         escapeHtml(String(rim.coppieSenzaAltroContributo)) + '</td></tr>';
     }).join("");
-    contenitore.innerHTML =
+    contenitore.innerHTML = presentazioneDistribuzione +
       '<h6>Influenza dei pesi e dei blocchi</h6>' +
       '<p>Analisi non bloccante: si varia <strong>un solo peso globale per volta</strong> ' +
       'a metà o al doppio, mantenendo fisse le misure e le normalizzazioni locali. ' +
