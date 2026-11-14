@@ -1303,6 +1303,93 @@ async function testRapportoCumulativoProblemi() {
   assert.equal(h.element("gower-result").hidden, false);
 }
 
+async function testAssegnazioniGruppiObsolete() {
+  const h = createHarness();
+  h.fire("load-example-csv", "click");
+  await flush();
+  h.fire("row-meaning", "change", {value: "oggetto"});
+
+  h.fire("group-assignment-body", "change", {
+    target: h.customTarget(
+      ".group-assignment", {groupColumn: "misura_A"}, "gruppo-scomparso"
+    )
+  });
+  await flush();
+  const selezione = h.element("group-assignment-body").innerHTML;
+  assert.match(selezione, /gruppo-scomparso/);
+  assert.match(selezione, /Assegnazione non valida/);
+  assert.match(selezione, /gruppo-scomparso" selected disabled/);
+  const riepilogo = h.element("group-summary").innerHTML;
+  assert.match(riepilogo, /Assegnazioni da correggere prima del calcolo/);
+  assert.match(riepilogo, /misura_A → gruppo-scomparso/);
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  assert.equal(
+    h.observations.planCalls.at(-1).interpretazione.assegnazioni.misura_A,
+    "gruppo-scomparso",
+    "La struttura obsoleta deve restare visibile e non essere corretta implicitamente."
+  );
+
+  h.fire("group-assignment-body", "change", {
+    target: h.customTarget(
+      ".group-assignment", {groupColumn: "misura_A"}, ""
+    )
+  });
+  await flush();
+  assert.doesNotMatch(h.element("group-summary").innerHTML, /Assegnazioni da correggere/);
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  assert.equal(
+    h.observations.planCalls.at(-1).interpretazione.assegnazioni.misura_A,
+    undefined,
+    "Soltanto una nuova decisione esplicita rende la colonna indipendente."
+  );
+}
+
+async function testProblemiSimultaneiNeiBlocchi() {
+  const h = createHarness();
+  h.fire("load-example-csv", "click");
+  await flush();
+  h.fire("row-meaning", "change", {value: "oggetto"});
+  const piano = h.makePlan();
+  piano.completo = false;
+  piano.conteggioPercorsi = 3;
+  const modello = piano.percorsi[0];
+  piano.percorsi = ["Gower", "Sequenze", "Distribuzioni"].map((nome, i) => ({
+    ...modello, idPercorso: "percorso-" + (i + 1),
+    titolo: nome, stato: "da_completare",
+    calcolo: {disponibile: false, descrizione: "Correggi le risposte"}
+  }));
+  const errori = [
+    {ambito: "generale", nome: "Assegnazione", colonne: ["categoria"],
+      messaggio: "Gruppo non trovato", decisioniPossibili: ["Riassegna"]},
+    {ambito: "percorso", idPercorso: "percorso-1", nome: "Gower",
+      colonne: ["categoria"], messaggio: "Dissimilarità nominale non valida",
+      decisioniPossibili: ["Conferma"]},
+    {ambito: "percorso", idPercorso: "percorso-2", nome: "Sequenze",
+      colonne: ["codice"], messaggio: "Lunghezze Hamming differenti",
+      decisioniPossibili: ["Scegli una misura"]},
+    {ambito: "percorso", idPercorso: "percorso-3", nome: "Distribuzioni",
+      colonne: ["p1", "p2"], messaggio: "Somma delle probabilità diversa da 1",
+      decisioniPossibili: ["Rivedi le masse"]}
+  ];
+  piano.rapportoProblemi = {
+    fase: "piano", calcoloConsentito: false,
+    numeroBloccanti: errori.length, numeroAvvisi: 0,
+    bloccanti: errori, nonBloccanti: []
+  };
+  h.observations.planIntercept = () => Promise.resolve(piano);
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  const html = h.element("comparison-plan-warnings").innerHTML;
+  assert.match(html, /4 problemi bloccanti/);
+  for (const errore of errori) {
+    assert.ok(html.includes(errore.messaggio), errore.messaggio);
+  }
+  assert.equal(h.element("gower-actions").hidden, true);
+  assert.equal(h.observations.matrixCalls.length, 0);
+}
+
 async function testConfermaBrayDoppioZero() {
   const h = createHarness();
   h.fire("load-example-csv", "click");
@@ -1359,6 +1446,8 @@ async function testConfermaBrayDoppioZero() {
 }
 
 (async () => {
+  await testAssegnazioniGruppiObsolete();
+  await testProblemiSimultaneiNeiBlocchi();
   await testConfermaBrayDoppioZero();
   await testRapportoCumulativoProblemi();
   await testDiagnosticaSensibilitaPesi();
