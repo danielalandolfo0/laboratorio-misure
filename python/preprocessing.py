@@ -658,7 +658,11 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
     avvisi: list[str] = []
     stato = "pronto"
     etichetta = {"ripetute": "Misurazioni dello stesso profilo", "tempo": "Osservazioni successive nel tempo",
-                 "parti": "Parti dello stesso totale", "altro": "Gruppo di caratteristiche"}.get(tipo_gruppo, "Gruppo di caratteristiche")
+                 "parti": "Parti dello stesso totale", "coordinate": "Coordinate quantitative da confrontare insieme",
+                 "altro": "Gruppo di caratteristiche"}.get(tipo_gruppo, "Gruppo di caratteristiche")
+    id_gruppo = str(gruppo.get("id", ""))
+    id_misura: str | None = None
+    parametri: dict[str, Any] = {}
 
     if len(membri) < 2:
         misura, motivo = "Da completare", "Un gruppo deve contenere almeno due colonne."
@@ -668,9 +672,14 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
         tipi = {analisi_per_nome[m]["tipo"] for m in membri if m in analisi_per_nome}
         numerico = bool(tipi) and tipi <= {"numerica", "numerica_costante"}
         quantitativo = numerico and all(ruoli.get(m) == "quantita" for m in membri)
-        if tipo_gruppo in {"ripetute", "tempo", "parti"} and not quantitativo:
+        if tipo_gruppo in {"ripetute", "tempo", "parti", "coordinate"} and not quantitativo:
             misura, motivo = "Da decidere", "Questa struttura richiede quantità numeriche, non codici o livelli ordinali."
             avvisi.append("Controlla il significato e il tipo delle colonne del gruppo.")
+            stato = "da_completare"
+        elif tipo_gruppo == "coordinate":
+            misura, motivo = "Da decidere", (
+                "Scegli esplicitamente la misura per questo gruppo di coordinate quantitative."
+            )
             stato = "da_completare"
         elif tipo_gruppo == "ripetute":
             risposta = interpretazione.get(f"somiglianza-{gruppo.get('id')}", "")
@@ -738,8 +747,82 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
             avvisi.append("Descrivi il gruppo con una delle interpretazioni disponibili.")
             stato = "da_completare"
 
+        # Le misure dei gruppi sono indipendenti dalla scelta per le colonne
+        # quantitative non raggruppate. Non e' permessa una scelta incompatibile
+        # con il significato dichiarato del gruppo.
+        mappe = interpretazione.get("misureGruppi") or {}
+        if not isinstance(mappe, dict):
+            raise ValueError("Le misure dei gruppi non sono configurate correttamente.")
+        scelta = str(mappe.get(id_gruppo) or "")
+        scelte_coordinate = {
+            "euclidean": "Distanza euclidea",
+            "manhattan": "Distanza di Manhattan",
+            "chebyshev": "Distanza di Chebyshev",
+            "minkowski": "Distanza di Minkowski",
+            "weighted_minkowski": "Distanza di Minkowski pesata",
+        }
+        confronto_coordinate = (
+            tipo_gruppo == "coordinate"
+            or (tipo_gruppo == "ripetute" and interpretazione.get(f"somiglianza-{id_gruppo}") == "valori_vicini")
+            or (tipo_gruppo == "tempo" and interpretazione.get(f"ritardo-{id_gruppo}") == "no")
+            or (tipo_gruppo == "parti" and interpretazione.get(f"totale-{id_gruppo}") == "no")
+        )
+        if scelta and not confronto_coordinate:
+            avvisi.append(
+                "La misura selezionata non e' compatibile con lo scopo dichiarato "
+                "per questo gruppo. Rivedi la scelta o l'interpretazione."
+            )
+            stato = "da_completare"
+        elif confronto_coordinate and quantitativo:
+            if not scelta and tipo_gruppo == "coordinate":
+                avvisi.append("Scegli una misura per questo gruppo di coordinate.")
+            elif scelta and scelta not in scelte_coordinate:
+                avvisi.append("La misura del gruppo non e' riconosciuta o non e' compatibile.")
+                stato = "da_completare"
+            else:
+                # Per i profili gia' guidati e le serie sincronizzate si
+                # conserva il precedente comportamento euclideo finche'
+                # l'utente non indica una misura diversa.
+                id_misura = scelta or "euclidean"
+                misura = scelte_coordinate[id_misura]
+                motivo = (
+                    "Confronta gli scarti fra le coordinate del solo gruppo, "
+                    "senza usare quelle degli altri blocchi."
+                )
+                stato = "pronto"
+                parametri = {}
+                if id_misura in {"minkowski", "weighted_minkowski"}:
+                    ordini = interpretazione.get("ordiniGruppi") or {}
+                    if not isinstance(ordini, dict):
+                        raise ValueError("Gli esponenti dei gruppi non sono validi.")
+                    try:
+                        q = float(str(ordini.get(id_gruppo, "2")).strip().replace(",", "."))
+                    except (TypeError, ValueError):
+                        q = math.nan
+                    if not math.isfinite(q) or q < 1:
+                        avvisi.append("Inserisci per Minkowski un esponente q finito maggiore o uguale a 1.")
+                        stato = "da_completare"
+                    else:
+                        parametri["q"] = q
+                if id_misura == "weighted_minkowski":
+                    config_pesi = interpretazione.get("pesiGruppi") or {}
+                    if not isinstance(config_pesi, dict):
+                        raise ValueError("I pesi interni dei gruppi non sono validi.")
+                    pesi = _lista_numeri_positivi(
+                        config_pesi.get(id_gruppo, "; ".join("1" for _ in membri))
+                    )
+                    if pesi is None or len(pesi) != len(membri):
+                        avvisi.append(
+                            f"Servono {len(membri)} pesi strettamente positivi, "
+                            "uno per ogni colonna del gruppo."
+                        )
+                        stato = "da_completare"
+                    else:
+                        parametri["pesi"] = pesi
+
     return {"nome": nome, "colonne": membri, "interpretazione": etichetta, "misura": misura,
-            "motivo": motivo, "stato": stato, "avvisi": avvisi}
+            "motivo": motivo, "stato": stato, "avvisi": avvisi,
+            "idMisura": id_misura, "parametri": parametri}
 
 
 RUOLI_GOWER = {"quantita", "livello", "presenza", "binaria", "categoria", "data"}
@@ -1635,7 +1718,7 @@ def _politica_mancanti(
         ammesse = {"escludi_percorso", "zero"}
         if tipo_gruppo == "tempo":
             ammesse.add("interpola_lineare")
-        elif tipo_gruppo in {"ripetute", "parti"}:
+        elif tipo_gruppo in {"ripetute", "parti", "coordinate"}:
             ammesse.update({"imputa_mediana", "imputa_media"})
         if strategia not in ammesse:
             return {
@@ -1842,10 +1925,23 @@ def _completa_specifica_percorso(
             "confrontabili; l’anteprima trasformata non entra nel calcolo."
         )
     elif tipo == "gruppo":
-        preelaborazione = _preelaborazione_originale(
-            "Il gruppo è confrontato come un unico oggetto. Un riscalamento separato "
-            "delle colonne potrebbe modificarne forma, direzione o ordinamento."
-        )
+        if (
+            percorso.get("idMisura") in {
+                "euclidean", "manhattan", "chebyshev", "minkowski", "weighted_minkowski"
+            }
+            and percorso.get("tipoGruppo") != "tempo"
+            and interpretazione.get("riscalamentoConfermato") is True
+        ):
+            preelaborazione = _preelaborazione_numerica(nomi, analisi_per_nome)
+            preelaborazione["descrizione"] = (
+                "Le trasformazioni numeriche confermate sono applicate soltanto "
+                "alle coordinate di questo gruppo."
+            )
+        else:
+            preelaborazione = _preelaborazione_originale(
+                "Il gruppo e' confrontato come un unico oggetto sui valori originali. "
+                "Riscalamenti separati potrebbero modificare forma, direzione o andamento temporale."
+            )
     else:
         preelaborazione = _preelaborazione_originale(
             "Il confronto separato usa la rappresentazione coerente con il significato "
@@ -1974,7 +2070,9 @@ def _crea_percorsi(
             "tipo": "gruppo", "titolo": blocco["nome"], "colonne": blocco["colonne"],
             "idGruppo": gruppo.get("id"), "tipoGruppo": gruppo.get("tipo", "altro"),
             "metodo": blocco["misura"],
+            "idMisura": blocco.get("idMisura"), "parametri": blocco.get("parametri", {}),
             "motivo": blocco["motivo"], "stato": blocco["stato"],
+            "avvisi": list(blocco.get("avvisi", [])),
         })
     return [
         _completa_specifica_percorso(
@@ -1994,6 +2092,10 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
     assegnazioni = interpretazione.get("assegnazioni", {})
     gruppi = interpretazione.get("gruppi", [])
     gruppi_per_id = {gruppo.get("id"): gruppo for gruppo in gruppi}
+    if not all(isinstance(gruppo, dict) and gruppo.get("id") for gruppo in gruppi):
+        raise ValueError("Ogni gruppo deve avere un identificativo valido.")
+    if len(gruppi_per_id) != len(gruppi):
+        raise ValueError("I gruppi devono avere identificativi distinti.")
     incluse: list[str] = []
     ruoli: dict[str, str] = {}
     for profilo in profili:
@@ -2027,6 +2129,9 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
         indipendenti, gruppi_con_blocco, ruoli, analisi_per_nome,
         interpretazione, blocchi_per_nome, len(risultato["originale"]["righe"]),
     )
+    colonne_percorso = [nome for percorso in percorsi for nome in percorso["colonne"]]
+    if len(colonne_percorso) != len(set(colonne_percorso)):
+        raise ValueError("Una colonna non puo' appartenere a due percorsi di confronto.")
     for indice, percorso in enumerate(percorsi, start=1):
         percorso["idPercorso"] = f"percorso-{indice}"
     # La configurazione completa di Gower viene verificata prima di
@@ -2848,8 +2953,11 @@ def _interpola_vuoti_interni(valori: list[float | None]) -> list[float] | None:
 
 
 def _distanza_specializzata(
-    x: list[float], y: list[float], metodo: str
+    x: list[float], y: list[float], metodo: str,
+    id_misura: str | None = None, parametri: dict[str, Any] | None = None,
 ) -> float | None:
+    if id_misura in {"euclidean", "manhattan", "chebyshev", "minkowski", "weighted_minkowski"}:
+        return _distanza_numerica(x, y, id_misura, parametri or {})
     if metodo in {"Distanza tra coordinate", "Distanza punto per punto"}:
         return math.sqrt(sum((a - b) ** 2 for a, b in zip(x, y)))
     if metodo == "Dissimilarità coseno":
@@ -2959,6 +3067,19 @@ def _calcola_matrice_specializzata(
                     f"Definisci come trattare i mancanti nel gruppo “{percorso['titolo']}”."
                 )
 
+        if percorso["preelaborazione"]["usaTabellaTrasformata"]:
+            metodi = {
+                passo["colonna"]: passo["metodo"]
+                for passo in percorso["preelaborazione"]["passi"]
+            }
+            vettori = [
+                None if vettore is None else [
+                    _trasforma_per_percorso(valore, analisi_per_nome[nome], metodi.get(nome, "nessuno"))
+                    for nome, valore in zip(nomi, vettore)
+                ]
+                for vettore in vettori
+            ]
+
         if metodo == "Distanza composizionale di Aitchison" and any(
             vettore is not None and any(valore == 0 for valore in vettore)
             for vettore in vettori
@@ -3004,7 +3125,10 @@ def _calcola_matrice_specializzata(
             for k in range(i + 1, n):
                 distanza = (
                     None if vettori[i] is None or vettori[k] is None
-                    else _distanza_specializzata(vettori[i], vettori[k], metodo)
+                    else _distanza_specializzata(
+                        vettori[i], vettori[k], metodo,
+                        percorso.get("idMisura"), percorso.get("parametri"),
+                    )
                 )
                 matrice[i][k] = distanza
                 matrice[k][i] = distanza
@@ -3014,7 +3138,11 @@ def _calcola_matrice_specializzata(
 
     etichette = _etichette_righe(risultato, interpretazione)
     righe_csv = [[etichetta, *riga] for etichetta, riga in zip(etichette, matrice)]
-    nota = f"Calcolata sul percorso “{percorso['titolo']}” usando i valori originali."
+    nota = (
+        f"Calcolata sul percorso “{percorso['titolo']}” usando "
+        + ("le trasformazioni numeriche confermate." if percorso["preelaborazione"]["usaTabellaTrasformata"]
+           else "i valori originali.")
+    )
     if percorso["mancanti"]["presenza"]:
         nota += " " + percorso["mancanti"]["descrizione"]
     if percorso["tipo"] == "gruppo" and metodo == "Distanza composizionale di Aitchison":
