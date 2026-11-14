@@ -270,6 +270,17 @@ header p {
 .plan-warnings p { margin: 0 0 6px; color: #76420b; font-size: .76rem; }
 .plan-warnings ul { margin: 6px 0 0; padding-left: 20px; color: var(--muted); font-size: .75rem; }
 .plan-warnings li + li { margin-top: 4px; }
+.plan-warnings h5 { margin: 10px 0 6px; font-size: .9rem; }
+.plan-warnings h6 { margin: 10px 0 5px; font-size: .83rem; }
+.plan-warnings .problem-report-list { padding-left: 19px; margin: 8px 0 12px; }
+.plan-warnings .problem-report-list li { margin: 0 0 10px; }
+.plan-warnings .problem-report-list p { margin: 3px 0; color: var(--muted); line-height: 1.5; }
+.plan-warnings .problem-report-columns { display: block; color: var(--muted); font-size: .74rem; }
+.plan-warnings details { margin: 9px 0; }
+#comparison-calculation-problems { margin: 12px 0; border-top: 1px solid var(--line); padding-top: 10px; }
+#comparison-calculation-problems[hidden] { display: none; }
+#download-uncovered-pairs { margin: 6px 0 12px; }
+
 .gower-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
 .gower-actions .data-privacy-note {
   flex-basis: 100%;
