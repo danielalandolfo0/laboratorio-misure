@@ -1774,7 +1774,7 @@ def _politica_mancanti(
         configurate = interpretazione.get("mancantiNumericiPerColonna") or {}
         if not isinstance(configurate, dict):
             raise ValueError("Le strategie per i mancanti numerici non sono valide.")
-        ammesse = {"escludi_riga", "imputa_mediana", "imputa_media", "zero"}
+        ammesse = {"escludi_riga", "imputa_mediana", "imputa_media", "zero", "pairwise"}
         strategie = {
             nome: configurate.get(nome, "")
             for nome in colonne
@@ -1796,11 +1796,27 @@ def _politica_mancanti(
                 "perColonna": strategie,
             }
 
+        # Il confronto per coordinate comuni e' definito soltanto per
+        # le distanze Minkowski (incluse euclidea/Manhattan) e Chebyshev.
+        # Non e' una surrogazione per Mahalanobis o le distanze relative.
+        if "pairwise" in strategie.values() and percorso.get("idMisura") not in {"euclidean", "manhattan", "chebyshev", "minkowski",
+               "weighted_minkowski", "weighted_chebyshev"}:
+            return {
+                "presenza": True, "strategia": "non_compatibile",
+                "descrizione": (
+                    "Il confronto sulle sole coordinate osservate da entrambe le righe "
+                    "e' disponibile per Manhattan, euclidea, Minkowski (anche pesata) "
+                    "e Chebyshev. Seleziona una di queste misure oppure scegli "
+                    "esclusione/imputazione per i mancanti."
+                ),
+                "pronta": False, "colonne": colonne, "perColonna": strategie,
+            }
         etichette = {
             "escludi_riga": "esclude le righe in cui il valore manca",
             "imputa_mediana": "sostituisce il vuoto con la mediana osservata",
             "imputa_media": "sostituisce il vuoto con la media osservata",
             "zero": "sostituisce esplicitamente il vuoto con zero",
+            "pairwise": "ignora il vuoto soltanto nelle coppie coinvolte",
         }
         colonne_esclusione = [
             nome for nome, strategia in strategie.items()
@@ -1837,6 +1853,12 @@ def _politica_mancanti(
                 "Per i mancanti numerici: "
                 + "; ".join(f"{nome}: {etichette[strategia]}" for nome, strategia in strategie.items())
                 + ". I parametri di centro e scala sono stimati sui valori osservati."
+                + (
+                    " Nei confronti a coppie si usano soltanto le coordinate comuni, "
+                    "con media pesata degli scarti elevati a q; se non ne esistono, "
+                    "il contributo di questo percorso e' non disponibile."
+                    if "pairwise" in strategie.values() else ""
+                )
             ),
             "pronta": True,
             "colonne": colonne,
@@ -1852,12 +1874,21 @@ def _politica_mancanti(
             ammesse.add("interpola_lineare")
         elif tipo_gruppo in {"ripetute", "parti", "coordinate"}:
             ammesse.update({"imputa_mediana", "imputa_media"})
+            if percorso.get("idMisura") in {"euclidean", "manhattan", "chebyshev", "minkowski",
+               "weighted_minkowski", "weighted_chebyshev"}:
+                ammesse.add("pairwise")
         if strategia not in ammesse:
             return {
                 "presenza": True,
                 "strategia": "da_definire",
                 "descrizione": (
                     f"Scegli come trattare le caselle vuote nel gruppo “{percorso['titolo']}”."
+                    + (
+                        " Il confronto pairwise non e' compatibile con la misura "
+                        "o il significato di questo gruppo: scegli Minkowski/Manhattan/"
+                        "euclidea/Chebyshev su coordinate, oppure un'altra strategia."
+                        if strategia == "pairwise" else ""
+                    )
                 ),
                 "pronta": False,
                 "colonne": colonne,
@@ -1884,6 +1915,16 @@ def _politica_mancanti(
             descrizione = (
                 "I vuoti interni alla serie sono interpolati linearmente. Una riga con "
                 "un vuoto iniziale o finale non contribuisce a questo percorso."
+            )
+        elif strategia == "pairwise":
+            righe_utilizzabili = sum(
+                any(isinstance(colonna[indice], (int, float)) for colonna in valori)
+                for indice in range(numero_istanze)
+            )
+            descrizione = (
+                "Per ogni coppia usa soltanto le coordinate osservate in entrambe "
+                "le righe; distanza non disponibile se nessuna coordinata e' comune. "
+                "Minkowski usa la media pesata degli scarti sulle coordinate comuni."
             )
         elif strategia == "imputa_mediana":
             righe_utilizzabili = numero_istanze
@@ -2799,7 +2840,7 @@ def _righe_numeriche_per_percorso(
         for passo in percorso["preelaborazione"]["passi"]
     }
     strategie = percorso.get("mancanti", {}).get("perColonna", {})
-    righe_numeriche: list[list[float]] = []
+    righe_numeriche: list[list[float | None]] = []
     indici_usati: list[int] = []
 
     for indice_riga, riga in enumerate(tabella["righe"]):
@@ -2808,7 +2849,7 @@ def _righe_numeriche_per_percorso(
             for nome, indice in zip(nomi, indici)
         ):
             continue
-        vettore: list[float] = []
+        vettore: list[float | None] = []
         for nome, indice in zip(nomi, indici):
             grezzo: Any = riga[indice]
             if mancante(grezzo):
@@ -2820,6 +2861,9 @@ def _righe_numeriche_per_percorso(
                     grezzo = stats.get("media")
                 elif strategia == "zero":
                     grezzo = 0.0
+                elif strategia == "pairwise":
+                    vettore.append(None)
+                    continue
                 else:
                     raise ValueError(
                         f"Scegli come trattare il valore mancante nella colonna “{nome}”."
@@ -2869,6 +2913,59 @@ def _covarianza(righe: list[list[float]]) -> list[list[float]]:
         sum((riga[j] - medie[j]) * (riga[k] - medie[k]) for riga in righe) / (n - 1)
         for k in range(p)
     ] for j in range(p)]
+
+
+def _distanza_coordinate_comuni(
+    x: list[float | None],
+    y: list[float | None],
+    id_misura: str,
+    parametri: dict[str, Any],
+) -> float | None:
+    """Confronta SOLO coordinate osservate da entrambe le righe.
+
+    Minkowski (anche euclidea e Manhattan) usa
+        (sum_{l in O} a_l |x_l-y_l|^q / sum_{l in O} a_l)^(1/q).
+    Le coordinate non osservate non contribuiscono e i pesi non si
+    redistribuiscono su indici differenti. Con O vuoto: None.
+    """
+    if len(x) != len(y):
+        raise ValueError("I vettori devono avere la stessa dimensione.")
+    supportate = {
+        "euclidean", "manhattan", "minkowski", "weighted_minkowski",
+        "chebyshev", "weighted_chebyshev",
+    }
+    if id_misura not in supportate:
+        raise ValueError(
+            f"Il confronto pairwise non e' disponibile per la misura {id_misura}."
+        )
+    pesata = id_misura in {"weighted_minkowski", "weighted_chebyshev"}
+    if pesata:
+        pesi = [float(v) for v in parametri.get("pesi", [])]
+        if len(pesi) != len(x) or any(not math.isfinite(v) or v <= 0 for v in pesi):
+            raise ValueError("Occorre un peso finito e strettamente positivo per coordinata.")
+    else:
+        pesi = [1.0] * len(x)
+    comuni = [i for i, (a, b) in enumerate(zip(x, y))
+              if a is not None and b is not None]
+    if not comuni:
+        return None
+    if any(not math.isfinite(float(x[i])) or not math.isfinite(float(y[i]))
+           for i in comuni):
+        raise ValueError("Le coordinate comuni devono essere numeri finiti.")
+    if id_misura in {"chebyshev", "weighted_chebyshev"}:
+        return max(pesi[i] * abs(float(x[i]) - float(y[i])) for i in comuni)
+    q = (
+        1.0 if id_misura == "manhattan"
+        else 2.0 if id_misura == "euclidean"
+        else float(parametri.get("q", 2))
+    )
+    if not math.isfinite(q) or q < 1:
+        raise ValueError("L'esponente di Minkowski deve essere finito e almeno 1.")
+    somma_pesi = sum(pesi[i] for i in comuni)
+    return (
+        sum(pesi[i] * abs(float(x[i]) - float(y[i])) ** q for i in comuni)
+        / somma_pesi
+    ) ** (1 / q)
 
 
 def _distanza_numerica(
@@ -2951,10 +3048,17 @@ def calcola_matrice_numerica(
 
     n = len(righe_numeriche)
     matrice: list[list[float | None]] = [[0.0 for _ in range(n)] for _ in range(n)]
+    usa_pairwise = "pairwise" in percorso.get("mancanti", {}).get("perColonna", {}).values()
     for i in range(n):
         for k in range(i + 1, n):
-            distanza = _distanza_numerica(
-                righe_numeriche[i], righe_numeriche[k], id_misura, parametri, fattore_cholesky
+            distanza = (
+                _distanza_coordinate_comuni(
+                    righe_numeriche[i], righe_numeriche[k], id_misura, parametri
+                ) if usa_pairwise else
+                _distanza_numerica(
+                    righe_numeriche[i], righe_numeriche[k],
+                    id_misura, parametri, fattore_cholesky
+                )
             )
             matrice[i][k] = distanza
             matrice[k][i] = distanza
@@ -3182,6 +3286,8 @@ def _calcola_matrice_specializzata(
                 vettori.append([float(valore) for valore in vettore])
             elif strategia == "escludi_percorso":
                 vettori.append(None)
+            elif strategia == "pairwise":
+                vettori.append(list(vettore))
             elif strategia == "interpola_lineare":
                 vettori.append(_interpola_vuoti_interni(vettore))
             elif strategia in {"imputa_mediana", "imputa_media", "zero"}:
@@ -3263,6 +3369,11 @@ def _calcola_matrice_specializzata(
             for k in range(i + 1, n):
                 distanza = (
                     None if vettori[i] is None or vettori[k] is None
+                    else _distanza_coordinate_comuni(
+                        vettori[i], vettori[k],
+                        percorso["idMisura"], percorso.get("parametri", {})
+                    ) if strategia == "pairwise"
+                    else None if vettori[i] is None or vettori[k] is None
                     else _distanza_specializzata(
                         vettori[i], vettori[k], metodo,
                         percorso.get("idMisura"), percorso.get("parametri"),

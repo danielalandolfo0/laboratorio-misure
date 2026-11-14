@@ -1559,4 +1559,128 @@ matrice_altro_ordine = p._calcola_matrice_specializzata(
 )["matrice"]
 assert abs(matrice_ordine[0][1] - matrice_altro_ordine[0][1]) > 1e-10
 
+
+# Confronto numerico pairwise: media pesata sui soli indici osservati
+# da entrambi. I mancanti non devono essere trasformati in zeri.
+x_pair = [1.0, None, 6.0]
+y_pair = [4.0, 3.0, 2.0]
+pesi_pair = {"q": 2, "pesi": [1, 2, 3]}
+quasi_uguali(
+    p._distanza_coordinate_comuni(x_pair, y_pair, "weighted_minkowski", pesi_pair),
+    math.sqrt((1 * 3**2 + 3 * 4**2) / 4),
+)
+quasi_uguali(
+    p._distanza_coordinate_comuni(x_pair, y_pair, "euclidean", {}),
+    math.sqrt((3**2 + 4**2) / 2),
+)
+quasi_uguali(
+    p._distanza_coordinate_comuni(x_pair, y_pair, "manhattan", {}),
+    (3 + 4) / 2,
+)
+quasi_uguali(
+    p._distanza_coordinate_comuni(x_pair, y_pair, "chebyshev", {}),
+    4,
+)
+assert p._distanza_coordinate_comuni(
+    [None, 3.0], [4.0, None], "weighted_minkowski", pesi_pair | {"pesi": [1, 2]}
+) is None
+try:
+    p._distanza_coordinate_comuni(x_pair, y_pair, "mahalanobis", {})
+    assert False, "Non consentire pairwise con Mahalanobis."
+except ValueError:
+    pass
+
+# Percorso numerico: nessun nuovo valore imputato, coppie senza
+# coordinate comuni non disponibili. La matrice finale resta completa
+# soltanto se ogni coppia ha almeno un contributo.
+csv_pair = (
+    "a,b,c\n"
+    "0,,\n"
+    ",2,3\n"
+    "4,5,\n"
+    "1,,3\n"
+)
+dati_pair = p.prepara_tabella(p.leggi_csv(csv_pair))
+risposte_pair = {
+    "riga": "oggetto",
+    "confrontoQuantitativo": "assoluto",
+    "misuraNumericaManuale": "weighted_minkowski",
+    "ordineMisuraManuale": "2",
+    "pesiMisuraManuale": "1; 2; 3",
+    "colonne": {nome: {"ruolo": "quantita", "usa": True} for nome in ("a", "b", "c")},
+    "mancantiNumericiPerColonna": {nome: "pairwise" for nome in ("a", "b", "c")},
+    "significatoMancanti": "sconosciuto",
+}
+piano_pair = p.crea_piano_confronto(dati_pair, risposte_pair)
+assert piano_pair["completo"], piano_pair
+percorso_pair = piano_pair["percorsi"][0]
+vettori_pair, indici_pair = p._righe_numeriche_per_percorso(dati_pair, percorso_pair)
+assert len(vettori_pair) == 4 and indici_pair == [0, 1, 2, 3]
+assert vettori_pair[0][1] is None and vettori_pair[0][2] is None
+locale_pair = p.calcola_matrice_numerica(dati_pair, risposte_pair)
+assert locale_pair["matrice"][0][1] is None
+assert locale_pair["matrice"][0][2] is not None
+assert locale_pair["matrice"][1][2] is not None
+try:
+    p.calcola_matrice(dati_pair, risposte_pair)
+    assert False, "La matrice finale incompleta deve essere bloccata."
+except ValueError as errore:
+    assert "coppie non hanno alcun contributo valido" in str(errore)
+assert not p.crea_piano_confronto(
+    dati_pair, {**risposte_pair, "misuraNumericaManuale": "mahalanobis"}
+)["completo"]
+assert not p.crea_piano_confronto(
+    dati_pair, {**risposte_pair, "misuraNumericaManuale": "canberra"}
+)["completo"]
+
+# Blocchi disgiunti: il confronto pairwise di un gruppo di coordinate
+# può non avere contributo, mentre un secondo gruppo copre la coppia.
+csv_blocchi_pair = (
+    "a,b,c,p1,p2,p3\n"
+    "0,,0,1,3,2\n"
+    "3,4,,2,1,4\n"
+    "6,4,3,3,4,1\n"
+    ",8,9,4,2,1\n"
+    ",,,2,3,4\n"
+)
+dati_blocchi_pair = p.prepara_tabella(p.leggi_csv(csv_blocchi_pair))
+risposte_blocchi_pair = {
+    "riga": "oggetto",
+    "significatoMancanti": "sconosciuto",
+    "significatoEstremi": "reali",
+    "colonne": {nome: {"ruolo": "quantita", "usa": True}
+                for nome in ("a", "b", "c", "p1", "p2", "p3")},
+    "gruppi": [
+        {"id": "coord", "nome": "Coordinate", "tipo": "coordinate"},
+        {"id": "profilo", "nome": "Profilo", "tipo": "ripetute"},
+    ],
+    "assegnazioni": {
+        **{nome: "coord" for nome in ("a", "b", "c")},
+        **{nome: "profilo" for nome in ("p1", "p2", "p3")},
+    },
+    "misureGruppi": {"coord": "weighted_minkowski"},
+    "ordiniGruppi": {"coord": "2"},
+    "pesiGruppi": {"coord": "1; 2; 3"},
+    "mancanti-gruppo-coord": "pairwise",
+    "somiglianza-profilo": "andamento",
+}
+piano_blocchi_pair = p.crea_piano_confronto(dati_blocchi_pair, risposte_blocchi_pair)
+assert piano_blocchi_pair["completo"], piano_blocchi_pair
+assert piano_blocchi_pair["conteggioPercorsi"] == 2
+percorso_coord = next(percorso for percorso in piano_blocchi_pair["percorsi"]
+                     if percorso.get("idGruppo") == "coord")
+matrice_coord = p._calcola_matrice_specializzata(
+    dati_blocchi_pair, risposte_blocchi_pair, percorso_coord
+)["matrice"]
+assert matrice_coord[0][4] is None
+assert matrice_coord[0][1] is not None
+matrice_blocchi_pair = p.calcola_matrice(dati_blocchi_pair, risposte_blocchi_pair)
+verifica_matrice_finale(matrice_blocchi_pair, 5)
+assert all(x is not None and 0 <= x <= 1 for row in matrice_blocchi_pair["matrice"] for x in row)
+assert not p.crea_piano_confronto(
+    dati_blocchi_pair,
+    {**risposte_blocchi_pair, "misureGruppi": {"coord": "euclidean"},
+     "mancanti-gruppo-coord": "interpola_lineare"},
+)["completo"]
+
 print("Tutti i test Python di preprocessing sono stati superati.")

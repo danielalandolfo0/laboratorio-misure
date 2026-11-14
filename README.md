@@ -142,6 +142,39 @@ un profilo, misurazioni temporali o parti di un totale. Le proposte sono
 facoltative; gli assegnamenti possono essere modificati o rimossi manualmente.
 Gli eventuali gruppi già confermati e le colonne escluse non vengono toccati.
 
+### Mancanti quantitativi: confronto sulle coordinate comuni
+
+Per le distanze di Minkowski, Manhattan ed euclidea, quando l'utente seleziona
+**confronto pairwise**, per la coppia di righe \(i,j\) si considerano
+soltanto gli indici \(O_{ij}\) osservati in entrambe. Ponendo
+\(a_\ell>0\), e \(q\ge1\), il contributo locale (prima della
+normalizzazione in \([0,1]\)) e':
+
+\[
+d(i,j)=\left(
+\frac{\sum_{\ell\in O_{ij}}a_\ell
+|z_{i\ell}-z_{j\ell}|^q}
+{\sum_{\ell\in O_{ij}}a_\ell}
+\right)^{1/q}.
+\]
+
+Le distanze non pesate impiegano \(a_\ell=1\); Chebyshev usa il massimo
+scarto disponibile, nella variante pesata il massimo degli scarti
+moltiplicati per i rispettivi pesi. Le coordinate mancanti sono
+**omesse dalla coppia**, mai assimilate a zero. Se
+\(O_{ij}=\varnothing\), il contributo del blocco e' non disponibile.
+La normalizzazione e l'aggregazione Gower generalizzata sono eseguite
+solo sulle distanze locali definite; la matrice finale deve comunque
+essere completa. Una normalizzazione sul numero di coordinate
+disponibili non garantisce in generale la disuguaglianza triangolare
+quando i dati hanno pattern differenti di mancanti.
+
+La modalita' e' selezionabile separatamente per colonna nei percorsi
+quantitativi indipendenti e per intero blocco quando il significato
+confermato e' quello di coordinate quantitative. Non e' estesa
+automaticamente a Pearson, DTW, Mahalanobis o distanze relative:
+il sito segnala la loro incompatibilita' e chiede una scelta.
+
 ## Matrice complessiva con più percorsi
 
 Ogni percorso produce prima la propria matrice. Gower, i confronti 0/1 e le

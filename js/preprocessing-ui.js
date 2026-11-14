@@ -918,14 +918,17 @@
     const opzioni = [
       ["", "Scegli una strategia"],
       ["escludi_riga", "Non usare le righe in cui questo valore manca"],
+      ["pairwise", "Confronta solo le coordinate osservate da entrambe le righe"],
       ["imputa_mediana", "Sostituisci con il valore centrale (mediana)"],
       ["imputa_media", "Sostituisci con il valore medio"],
       ["zero", "Confermo che la casella vuota significa davvero zero"]
     ];
     return '<div class="question-item"><strong>Come trattare le caselle vuote nelle quantità?</strong>' +
       '<p>La scelta è separata per colonna. Escludere una riga riduce i dati disponibili; ' +
-      'sostituire un valore introduce un’ipotesi esplicita. Il sito userà la stessa scelta ' +
-      'nell’anteprima e nella matrice finale.</p></div>' +
+      'sostituire un valore introduce un’ipotesi esplicita. La scelta pairwise conserva ' +
+      'le righe e ignora la coordinata soltanto nelle coppie in cui manca. ' +
+      'È applicabile a Minkowski, euclidea, Manhattan e Chebyshev; con nessuna ' +
+      'coordinata comune il confronto di quel percorso non è definito.</p></div>' +
       colonne.map(colonna => {
         const valore = interpretazione.mancantiNumericiPerColonna[colonna.nome] || "";
         return '<div class="question-item"><label><strong>' + escapeHtml(colonna.nome) +
@@ -1203,6 +1206,9 @@
             ]
           : [
               ["escludi_percorso", "Non usare questo gruppo per le righe con vuoti"],
+              ...(misuraPerCoordinate && gruppo.tipo !== "tempo"
+                ? [["pairwise", "Confronta solo le coordinate osservate da entrambe le righe"]]
+                : []),
               ["imputa_mediana", "Sostituisci con il valore centrale della colonna"],
               ["imputa_media", "Sostituisci con il valore medio della colonna"],
               ["zero", "Confermo che i vuoti significano davvero zero"]
@@ -1212,7 +1218,9 @@
           `Nel gruppo “${escapeHtml(gruppo.nome)}”, come trattiamo le caselle vuote?`,
           gruppo.tipo === "tempo"
             ? "L’interpolazione usa soltanto valori osservati prima e dopo il vuoto; non inventa gli estremi della serie."
-            : "La scelta vale soltanto per questo gruppo e viene dichiarata nel risultato.",
+            : "La scelta vale soltanto per questo gruppo e viene dichiarata nel risultato. " +
+              "Se scegli il confronto pairwise, le distanze di Minkowski sono medie pesate " +
+              "degli scarti sulle coordinate comuni, senza sostituire i vuoti.",
           opzioni
         ));
       }
