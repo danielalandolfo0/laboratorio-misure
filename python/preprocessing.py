@@ -6173,6 +6173,159 @@ def _valida_matrice_finale(
     }
 
 
+
+def _diagnostica_sensibilita_pesi(
+    componenti: list[dict[str, Any]],
+    matrice_finale: list[list[float]],
+) -> dict[str, Any]:
+    """Esperimenti CONTROFATTUALI sui pesi, senza modificare la matrice.
+
+    Per ciascun blocco k si valutano w_k/2 e 2*w_k, lasciando tutte
+    le dissimilarita' locali e le loro normalizzazioni invariate.
+    Il confronto per omissione (w_k -> 0) viene definito solo se un
+    altro blocco rimane disponibile per la coppia considerata.
+    """
+    n = len(matrice_finale)
+    totale_coppie = n * (n - 1) // 2
+    if not componenti:
+        raise ValueError("La diagnostica richiede almeno un blocco di confronto.")
+    schede: list[dict[str, Any]] = []
+    for componente in componenti:
+        percorso = componente["percorso"]
+        schede.append({
+            "idPercorso": percorso["idPercorso"],
+            "titolo": percorso["titolo"],
+            "pesoOriginale": float(percorso["pesoAggregazione"]),
+            "coppieDefinite": 0,
+            "coppieNonDisponibili": 0,
+            "coppieLocaliNulle": 0,
+            "coppieLocaliPositive": 0,
+            "sommaLocali": 0.0,
+            "fattoreMezzo": {"somma": 0.0, "massima": 0.0, "coppieVariate": 0},
+            "fattoreDoppio": {"somma": 0.0, "massima": 0.0, "coppieVariate": 0},
+            "senzaBlocco": {
+                "somma": 0.0, "massima": 0.0, "coppieVariate": 0,
+                "coppieConfrontabili": 0,
+                "coppieSenzaAltroContributo": 0,
+            },
+        })
+    for i in range(n):
+        for j in range(i + 1, n):
+            disponibili: list[tuple[int, float, float]] = []
+            for k, componente in enumerate(componenti):
+                posizione_i = componente["posizioni"].get(i)
+                posizione_j = componente["posizioni"].get(j)
+                valore = (
+                    componente["matrice"][posizione_i][posizione_j]
+                    if posizione_i is not None and posizione_j is not None
+                    else None
+                )
+                scheda = schede[k]
+                if valore is None:
+                    scheda["coppieNonDisponibili"] += 1
+                    continue
+                distanza = float(valore)
+                peso = scheda["pesoOriginale"]
+                scheda["coppieDefinite"] += 1
+                scheda["sommaLocali"] += distanza
+                if abs(distanza) <= 1e-12:
+                    scheda["coppieLocaliNulle"] += 1
+                else:
+                    scheda["coppieLocaliPositive"] += 1
+                disponibili.append((k, peso, distanza))
+            somma_pesi = sum(w for _, w, _ in disponibili)
+            if somma_pesi <= 0:
+                raise ValueError("La sensibilità non è definita per coppie prive di blocchi.")
+            somma_pesata = sum(w * v for _, w, v in disponibili)
+            base = float(matrice_finale[i][j])
+            for k, peso, valore in disponibili:
+                scheda = schede[k]
+                for fattore, chiave in ((0.5, "fattoreMezzo"), (2.0, "fattoreDoppio")):
+                    alternativo = (
+                        somma_pesata + (fattore - 1) * peso * valore
+                    ) / (somma_pesi + (fattore - 1) * peso)
+                    variazione = abs(alternativo - base)
+                    dati = scheda[chiave]
+                    dati["somma"] += variazione
+                    dati["massima"] = max(dati["massima"], variazione)
+                    if variazione > 1e-12:
+                        dati["coppieVariate"] += 1
+                altri_pesi = somma_pesi - peso
+                senza = scheda["senzaBlocco"]
+                if altri_pesi > 0:
+                    alternativo = (somma_pesata - peso * valore) / altri_pesi
+                    variazione = abs(alternativo - base)
+                    senza["coppieConfrontabili"] += 1
+                    senza["somma"] += variazione
+                    senza["massima"] = max(senza["massima"], variazione)
+                    if variazione > 1e-12:
+                        senza["coppieVariate"] += 1
+                else:
+                    senza["coppieSenzaAltroContributo"] += 1
+
+    rapporti: list[dict[str, Any]] = []
+    blocchi_nulli: list[dict[str, Any]] = []
+    for scheda in schede:
+        numero = scheda["coppieDefinite"]
+        scheda["distanzaLocaleMedia"] = scheda.pop("sommaLocali") / numero if numero else None
+        scheda["sempreNulloSulleCoppieDefinite"] = (
+            numero > 0 and scheda["coppieLocaliPositive"] == 0
+        )
+        for nome, fattore in (("fattoreMezzo", 0.5), ("fattoreDoppio", 2.0)):
+            valore = scheda.pop(nome)
+            scheda[nome] = {
+                "fattorePeso": fattore,
+                "coppieVariate": valore["coppieVariate"],
+                "variazioneMediaAssoluta": (
+                    valore["somma"] / totale_coppie if totale_coppie else 0.0
+                ),
+                "variazioneMassimaAssoluta": valore["massima"],
+            }
+        senza = scheda["senzaBlocco"]
+        n_confrontabili = senza["coppieConfrontabili"]
+        scheda["senzaBlocco"] = {
+            "coppieConfrontabili": n_confrontabili,
+            "coppieSenzaAltroContributo": senza["coppieSenzaAltroContributo"],
+            "coppieVariate": senza["coppieVariate"],
+            "variazioneMediaAssoluta": (
+                senza["somma"] / n_confrontabili if n_confrontabili else None
+            ),
+            "variazioneMassimaAssoluta": (
+                senza["massima"] if n_confrontabili else None
+            ),
+        }
+        rapporti.append(scheda)
+        if scheda["sempreNulloSulleCoppieDefinite"]:
+            blocchi_nulli.append({
+                "idPercorso": scheda["idPercorso"],
+                "titolo": scheda["titolo"],
+                "peso": scheda["pesoOriginale"],
+                "coppieDefinite": numero,
+                "coppieNonDisponibili": scheda["coppieNonDisponibili"],
+                "coppieConAltriBlocchi": n_confrontabili,
+                "attenuazioneMassimaRimuovendolo": (
+                    senza["massima"] if n_confrontabili else None
+                ),
+            })
+    return {
+        "metodo": (
+            "Modifica un solo peso globale per volta con i fattori 0.5 e 2, "
+            "mantenendo invariati dati, misure, pesi interni, mancanti e "
+            "normalizzazioni locali. Le variazioni assolute sono misurate "
+            "rispetto alla matrice scelta. La media per i fattori positivi "
+            "usa tutte le coppie distinte (incluse quelle senza il blocco, "
+            "la cui variazione è zero). La rimozione ipotetica w=0 usa "
+            "solo coppie con almeno un altro contributo disponibile e "
+            "non costituisce un peso ammissibile nel piano corrente."
+        ),
+        "tolleranzaZero": 1e-12,
+        "coppieTotali": totale_coppie,
+        "numeroBlocchi": len(componenti),
+        "perBlocco": rapporti,
+        "blocchiSempreNulli": blocchi_nulli,
+    }
+
+
 def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) -> dict[str, Any]:
     piano = crea_piano_confronto(risultato, interpretazione)
     percorsi = piano["percorsi"]
@@ -6198,6 +6351,22 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
         )
         etichette = singolo["etichette"]
         singolo["diagnosticaFinale"] = _valida_matrice_finale(normalizzata, etichette)
+        singolo["diagnosticaFinale"]["sensibilitaPesi"] = _diagnostica_sensibilita_pesi(
+            [{
+                "percorso": percorsi[0],
+                "matrice": normalizzata,
+                "posizioni": {
+                    indice: posizione
+                    for posizione, indice in enumerate(singolo["indiciRighe"])
+                },
+            }], normalizzata
+        )
+        for nullo in singolo["diagnosticaFinale"]["sensibilitaPesi"]["blocchiSempreNulli"]:
+            singolo["diagnosticaFinale"]["avvisi"].append(
+                f"Il blocco “{nullo['titolo']}” ha distanza locale nulla in "
+                f"tutte le {nullo['coppieDefinite']} coppie confrontabili. "
+                "È un contributo valido, non un valore mancante."
+            )
         singolo["diagnosticaMancantiSemantici"] = piano["diagnosticaMancantiSemantici"]
         singolo["pesaturaGlobale"] = piano["pesaturaGlobale"]
         if diagnostica_normalizzazione["coppieSaturate"]:
@@ -6272,6 +6441,24 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
 
     etichette = _etichette_righe(risultato, interpretazione)
     diagnostica_finale = _valida_matrice_finale(matrice_finale, etichette)
+    diagnostica_finale["sensibilitaPesi"] = _diagnostica_sensibilita_pesi(
+        componenti, matrice_finale
+    )
+    for nullo in diagnostica_finale["sensibilitaPesi"]["blocchiSempreNulli"]:
+        attenuazione = nullo["attenuazioneMassimaRimuovendolo"]
+        diagnostica_finale["avvisi"].append(
+            f"Il blocco “{nullo['titolo']}” (peso {nullo['peso']:.6g}) "
+            f"ha distanza locale nulla in tutte le {nullo['coppieDefinite']} "
+            "coppie in cui contribuisce. È mantenuto nel denominatore e "
+            "può attenuare le distanze degli altri blocchi."
+            + (
+                f" Scostamento massimo dalla matrice corrente, rimuovendolo "
+                f"solo per le coppie ancora confrontabili: {attenuazione:.6g}."
+                if attenuazione is not None else
+                " La sua rimozione lascerebbe tutte queste coppie senza "
+                "altri contributi."
+            )
+        )
     diagnostica_finale["coppieCoperturaParziale"] = coppie_con_copertura_parziale
     diagnostica_finale["coppieConSoloUnPercorso"] = coppie_con_solo_un_percorso
     diagnostica_finale["minContributiPerCoppia"] = contributi_minimi
