@@ -115,6 +115,147 @@ def mancante(valore: Any) -> bool:
     return valore is None or str(valore).strip().casefold() in MANCANTI
 
 
+
+
+STATI_MANCANTI = {"sconosciuto", "non_applicabile", "assenza"}
+
+
+def _stato_mancante_dichiarato(
+    valore: Any, nome: str, interpretazione: dict[str, Any],
+) -> str | None:
+    """Significato distinto del singolo marcatore, soltanto in modalità mista.
+
+    Non deduce che 'NA' significhi non applicabile: può essere ignoto,
+    non applicabile oppure assenza, ma serve una scelta esplicita.
+    """
+    if not mancante(valore) or interpretazione.get("significatoMancanti") != "misto":
+        return None
+    configurazioni = interpretazione.get("statiMancantiPerColonna") or {}
+    if not isinstance(configurazioni, dict):
+        raise ValueError("La codifica dei marcatori mancanti non è valida.")
+    configurazione = configurazioni.get(nome, {})
+    if not isinstance(configurazione, dict):
+        raise ValueError(f"Configura i marcatori mancanti della colonna “{nome}”.")
+    marcatore = str(valore).strip().casefold()
+    stato = configurazione.get(marcatore)
+    if stato not in STATI_MANCANTI:
+        rappresentazione = "(cella vuota)" if marcatore == "" else repr(str(valore).strip())
+        raise ValueError(
+            f"Per “{nome}”, specifica il significato di {rappresentazione}: "
+            "sconosciuto, non applicabile oppure assenza osservata."
+        )
+    return stato
+
+
+def _diagnostica_stati_mancanti(
+    risultato: dict[str, Any],
+    interpretazione: dict[str, Any],
+    colonne: list[str],
+    ruoli: dict[str, str],
+    assegnazioni: dict[str, str],
+    gruppi: dict[str, dict[str, Any]],
+    percorsi: list[dict[str, Any]],
+) -> tuple[dict[str, Any], list[str]]:
+    """Verifica le decisioni senza modificare i dati originali del CSV."""
+    if interpretazione.get("significatoMancanti") != "misto":
+        return {"attiva": False}, []
+    intestazioni = risultato["originale"]["intestazioni"]
+    righe = risultato["originale"]["righe"]
+    indici = {nome: intestazioni.index(nome) for nome in colonne}
+    sintesi: dict[str, dict[str, Any]] = {}
+    avvisi: list[str] = []
+    for nome in colonne:
+        conteggi = {"sconosciuto": 0, "non_applicabile": 0, "assenza": 0}
+        marcatori: dict[str, int] = {}
+        for riga in righe:
+            valore = riga[indici[nome]]
+            if not mancante(valore):
+                continue
+            marcatore = str(valore).strip().casefold()
+            marcatori[marcatore] = marcatori.get(marcatore, 0) + 1
+            try:
+                stato = _stato_mancante_dichiarato(valore, nome, interpretazione)
+            except ValueError as errore:
+                if str(errore) not in avvisi:
+                    avvisi.append(str(errore))
+                continue
+            conteggi[stato] += 1
+        if not marcatori:
+            continue
+        ruolo = ruoli[nome]
+        gruppo = gruppi.get(assegnazioni.get(nome), {})
+        e_binario = gruppo.get("tipo") == "vettore_binario"
+        if conteggi["assenza"] and ruolo not in {"presenza", "binaria", "categoria"}:
+            avvisi.append(
+                f"Per “{nome}”, un'assenza può essere uno stato osservato soltanto "
+                "per categorie o variabili binarie. Per quantità, livelli, testi e "
+                "tempi devi scegliere un trattamento specifico, senza sostituire "
+                "l'assenza con zero automaticamente."
+            )
+        if conteggi["assenza"] and gruppo and not e_binario:
+            avvisi.append(
+                f"Per “{nome}”, le assenze osservate non sono supportate "
+                f"nel gruppo “{gruppo.get('nome', gruppo.get('id'))}”. "
+                "Modifica il ruolo o il blocco."
+            )
+        sintesi[nome] = {"marcatori": marcatori, "conteggi": conteggi}
+    # Le politiche che trasformerebbero non-applicabilità e valori
+    # ignoti in zeri o strutture vuote sono incompatibili.
+    for percorso in percorsi:
+        mancanti = percorso.get("mancanti", {})
+        nomi = percorso["colonne"]
+        presenza_esclusa = any(
+            sintesi.get(nome, {}).get("conteggi", {}).get("sconosciuto", 0)
+            + sintesi.get(nome, {}).get("conteggi", {}).get("non_applicabile", 0) > 0
+            for nome in nomi
+        )
+        if not presenza_esclusa:
+            continue
+        strategia = mancanti.get("strategia")
+        incompatibile = (
+            (percorso["tipo"] == "gruppo"
+             and strategia == "zero")
+            or (percorso["tipo"] == "separato"
+                and strategia in {"stringa_vuota", "insieme_vuoto"})
+            or (percorso["tipo"] == "numerico" and
+                any(
+                    v == "zero" for k, v in mancanti.get("perColonna", {}).items()
+                    if sintesi.get(k, {}).get("conteggi", {}).get("sconosciuto", 0)
+                    + sintesi.get(k, {}).get("conteggi", {}).get("non_applicabile", 0) > 0
+                ))
+        )
+        if incompatibile:
+            avvisi.append(
+                f"Il percorso “{percorso['titolo']}” convertirebbe un valore "
+                "sconosciuto o non applicabile in zero o in una struttura "
+                "vuota. Cambia la politica: i significati confermati "
+                "per simbolo prevalgono sulle sostituzioni generiche."
+            )
+        if percorso["tipo"] in {"numerico", "gruppo"}:
+            for nome in nomi:
+                if (sintesi.get(nome, {}).get("conteggi", {}).get("non_applicabile", 0) > 0
+                    and percorso["tipo"] == "numerico"
+                    and mancanti.get("perColonna", {}).get(nome) in {"imputa_media", "imputa_mediana"}):
+                    avvisi.append(
+                        f"Per “{nome}” non imputare automaticamente un valore non applicabile "
+                        "con media o mediana: escludi la riga oppure usa le coordinate "
+                        "osservate, se la misura lo consente."
+                    )
+    return {
+        "attiva": True, "perColonna": sintesi,
+        "totali": {
+            stato: sum(v["conteggi"][stato] for v in sintesi.values())
+            for stato in sorted(STATI_MANCANTI)
+        },
+        "descrizione": (
+            "I marcatori sono interpretati per colonna: sconosciuto e "
+            "non applicabile non forniscono contributo osservato; "
+            "l'assenza è uno stato reale soltanto nei percorsi compatibili. "
+            "L'identico simbolo non può avere due significati diversi "
+            "nella stessa colonna."
+        ),
+    }, avvisi
+
 def leggi_numero(valore: Any, separatore: str = ",") -> float | None | object:
     if mancante(valore):
         return None
@@ -3629,6 +3770,7 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
                     "escludi": "esclusi a coppie",
                     "assenza": "trattati come assenza",
                     "zero": "sostituiti esplicitamente con zero",
+                    "codifiche": "trattati singolarmente secondo i simboli confermati",
                 }
                 percorso["mancanti"]["strategia"] = (
                     "esclusione_pairwise" if set(mancanti_risolti.values()) == {"escludi"}
@@ -3731,6 +3873,12 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
     elif (incluse_con_estremi or incluse_con_candidati_multivariati) and interpretazione.get("significatoEstremi") in {"errori", "controllare"}:
         avvisi.append("Controlla i valori estremi prima di calcolare le distanze.")
 
+    diagnostica_mancanti, avvisi_mancanti = _diagnostica_stati_mancanti(
+        risultato, interpretazione, incluse, ruoli, assegnazioni,
+        gruppi_per_id, percorsi,
+    )
+    avvisi.extend(avvisi_mancanti)
+
     for percorso in percorsi:
         if not percorso["mancanti"]["pronta"]:
             colonne = ", ".join(percorso["mancanti"]["colonne"])
@@ -3806,6 +3954,12 @@ def _politica_mancanti_gower(
     """Rende operativa la risposta sui mancanti senza inventare zeri numerici."""
     if not ha_mancanti:
         return "escludi"
+    if interpretazione.get("significatoMancanti") == "misto":
+        if ruolo not in {"presenza", "binaria", "categoria", "quantita", "livello", "data"}:
+            raise ValueError(
+                f"Il ruolo “{ruolo}” della colonna “{nome}” non è supportato in Gower."
+            )
+        return "codifiche"
     specifiche = interpretazione.get("mancantiPerColonna") or {}
     if not isinstance(specifiche, dict):
         raise ValueError("Le risposte sui mancanti per colonna non sono valide.")
@@ -3839,6 +3993,7 @@ def _politica_mancanti_gower(
 def _valori_binari_gower(
     grezzi: list[str], nome: str, ruolo: str, politica: str,
     interpretazione: dict[str, Any], asimmetrica: bool,
+    *, forza_decodifica: bool = False,
 ) -> list[str | int | None]:
     """Per i binari asimmetrici determina la polarità, senza supporre A/B = 0/1."""
     distinti = sorted({str(v).strip() for v in grezzi if not mancante(v)})
@@ -3881,12 +4036,12 @@ def _valori_binari_gower(
             # Per una colonna tutta di assenze, nessuna presenza è osservata.
             positivo = None
 
-    if (asimmetrica or politica == "assenza") and positivo == "":
+    if (asimmetrica or politica == "assenza" or forza_decodifica) and positivo == "":
         raise ValueError(
             f"Per la colonna “{nome}” scegli quale stato indica la presenza. "
             "Non è possibile ricavarlo automaticamente da queste etichette."
         )
-    if not (asimmetrica or politica == "assenza"):
+    if not (asimmetrica or politica == "assenza" or forza_decodifica):
         return [None if mancante(v) else str(v).strip() for v in grezzi]
     return [
         0 if mancante(v) and politica == "assenza" else
@@ -4084,11 +4239,37 @@ def _metadati_gower(
                 raise ValueError(
                     f"Per la colonna “{nome}” conferma se contano le assenze condivise."
                 )
+            codifiche_binarie = (
+                [
+                    "0" if mancante(v) and _stato_mancante_dichiarato(
+                        v, nome, interpretazione
+                    ) == "assenza"
+                    else "" if mancante(v) else v
+                    for v in grezzi
+                ] if politica == "codifiche" else grezzi
+            )
+            forza_binario = politica == "codifiche" and any(
+                mancante(v) and _stato_mancante_dichiarato(
+                    v, nome, interpretazione
+                ) == "assenza" for v in grezzi
+            )
             valori = _valori_binari_gower(
-                grezzi, nome, ruolo, politica, interpretazione, asimmetrica
+                codifiche_binarie, nome, ruolo,
+                "escludi" if politica == "codifiche" else politica,
+                interpretazione, asimmetrica, forza_decodifica=forza_binario,
             )
             tipo, scala, limita = "nominale", None, False
         elif ruolo == "quantita":
+            if politica == "codifiche":
+                for v in grezzi:
+                    if (mancante(v) and _stato_mancante_dichiarato(
+                        v, nome, interpretazione
+                    ) == "assenza"):
+                        raise ValueError(
+                            f"Per “{nome}” l'assenza non diventa zero numerico: "
+                            "indica un valore realmente misurato nel CSV oppure "
+                            "cambia la codifica del marcatore."
+                        )
             numeri = [leggi_numero(v, tabella["separatore"]) for v in grezzi]
             if any(v is INVALIDO for v in numeri):
                 raise ValueError(f"La colonna “{nome}” contiene quantità non numeriche.")
@@ -4174,7 +4355,12 @@ def _metadati_gower(
                 tipo, scala, limita = "numerica", 1.0, False
         else:
             valori = [
-                ASSENZA_GOWER if mancante(v) and politica == "assenza" else
+                ASSENZA_GOWER if mancante(v) and (
+                    politica == "assenza" or (
+                        politica == "codifiche"
+                        and _stato_mancante_dichiarato(v, nome, interpretazione) == "assenza"
+                    )
+                ) else
                 None if mancante(v) else str(v).strip()
                 for v in grezzi
             ]
