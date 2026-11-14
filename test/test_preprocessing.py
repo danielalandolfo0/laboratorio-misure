@@ -3368,7 +3368,7 @@ piano_parziale = p.crea_piano_confronto(
 )
 assert not piano_parziale["completo"], piano_parziale
 assert any("manca solo" in avviso for percorso in piano_parziale["percorsi"]
-           for avviso in percorso["avvisi"])
+           for avviso in percorso.get("avvisi", []))
 # Escludendo consapevolmente tutta la serie C, la categoria resta
 # confrontabile con il medesimo numero di righe nella matrice finale.
 escludi_serie = {
