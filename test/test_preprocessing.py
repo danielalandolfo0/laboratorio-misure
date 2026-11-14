@@ -2448,6 +2448,7 @@ csv_livelli_num = "livello,categoria\n1,A\n2,B\n8,A\n1,B"
 dati_livelli_num = p.prepara_tabella(p.leggi_csv(csv_livelli_num))
 risposte_livelli_num = {
     "riga": "oggetto",
+    "significatoEstremi": "reali",
     "ordineLivelli": "si",
     "modalitaIntervalliGower": {"livello": "personalizzati"},
     "passiOrdinaliGower": {"livello": "1; 3"},
