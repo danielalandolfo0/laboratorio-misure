@@ -285,7 +285,7 @@
       `Analisi delle ${nomi.length} caratteristiche quantitative indipendenti: ${nomi.join(", ")}. ` +
       (tabellaInteramenteNumerica()
         ? "Questa diagnosi orienta la scelta della misura e del riscalamento; non modifica i dati."
-        : "Le altre colonne e i gruppi non entrano in questa diagnosi. Nei percorsi misti Gower normalizza internamente i contributi quantitativi.");
+        : "Le altre colonne e i gruppi non entrano in questa diagnosi. Nei percorsi misti Gower usa i valori originali e normalizza internamente i contributi quantitativi; i gruppi di coordinate possono invece usare il riscalamento confermato.");
     corpo.textContent = "Analisi preliminare delle colonne quantitative indipendenti…";
     try {
       const risposta = await P.analizzaDiagnosi(testoOriginale, scelte, nomi);
@@ -453,7 +453,11 @@
   }
 
   function richiedeRiscalamentoConfermato() {
-    return tabellaInteramenteNumerica() &&
+    // Il requisito riguarda le quantità selezionate, non il fatto che
+    // tutte le altre colonne del CSV siano numeriche. In un dataset misto
+    // possono esserci gruppi di coordinate che usano il riscalamento.
+    const quantitativi = colonneNumericheDaRiscalare();
+    return quantitativi.length >= 2 &&
       !["relativo", "abbondanza", "frequenze"].includes(valoreRisposta("confrontoQuantitativo"));
   }
 
@@ -483,9 +487,9 @@
   }
 
   function confermaRiscalamentoNumerico() {
-    if (!tabellaInteramenteNumerica()) return;
+    if (!richiedeRiscalamentoConfermato()) return;
     const colonne = colonneNumericheDaRiscalare();
-    if (!colonne.length) return;
+    if (colonne.length < 2) return;
     annullaConfermeCompatibilita();
     riscalamentoConfermato = true;
     interpretazione.riscalamentoConfermato = true;
@@ -1704,7 +1708,7 @@
   async function scaricaTabella() {
     if (!risultato) return;
     try {
-      if (!riscalamentoConfermato || !tabellaInteramenteNumerica()) return;
+      if (!riscalamentoConfermato || !richiedeRiscalamentoConfermato()) return;
       const colonne = colonneNumericheDaRiscalare().map(c => c.nome);
       const indici = colonne.map(nome => risultato.originale.intestazioni.indexOf(nome));
       const righe = risultato.trasformate.map(riga => indici.map(i => riga[i]));
