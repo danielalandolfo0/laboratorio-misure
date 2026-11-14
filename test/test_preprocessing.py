@@ -1112,22 +1112,29 @@ assert piano_peso_nullo["completo"] is False
 assert any("strettamente positivo" in testo
            for testo in piano_peso_nullo["percorsi"][0]["avvisi"])
 
-# Le colonne costanti non riducono le distanze delle caratteristiche informative.
+# Le colonne costanti conservano il proprio peso nel denominatore (decisione 7).
 dati_costanti, piano_costanti, risposte_costanti = piano_gower_per(
     "classe,costante\nrosso,5\nblu,5\nrosso,5",
     colonne={"classe": {"ruolo": "categoria", "usa": True},
              "costante": {"ruolo": "quantita", "usa": True}},
 )
 assert piano_costanti["completo"], piano_costanti
-assert piano_costanti["percorsi"][0]["colonneEscluseGower"] == ["costante"]
-quasi_uguali(p.calcola_matrice_gower(dati_costanti, risposte_costanti)["matrice"][0][1], 1)
+assert piano_costanti["percorsi"][0]["colonneCostantiGower"] == ["costante"]
+assert piano_costanti["percorsi"][0]["pesiGower"] == {"classe": 1.0, "costante": 1.0}
+quasi_uguali(p.calcola_matrice_gower(dati_costanti, risposte_costanti)["matrice"][0][1], .5)
 tutti_costanti, piano_tutti_costanti, _ = piano_gower_per(
     "classe,costante\nrosso,5\nrosso,5\nrosso,5",
     colonne={"classe": {"ruolo": "categoria", "usa": True},
              "costante": {"ruolo": "quantita", "usa": True}},
 )
-assert not piano_tutti_costanti["completo"]
-assert any("costanti" in testo for testo in piano_tutti_costanti["percorsi"][0]["avvisi"])
+assert piano_tutti_costanti["completo"], piano_tutti_costanti
+assert piano_tutti_costanti["percorsi"][0]["colonneCostantiGower"] == ["classe", "costante"]
+assert all(valore == 0 for riga in p.calcola_matrice_gower(tutti_costanti, {
+    "riga": "oggetto", "colonne": {
+        "classe": {"ruolo": "categoria", "usa": True},
+        "costante": {"ruolo": "quantita", "usa": True},
+    },
+})["matrice"] for valore in riga)
 
 # "Sconosciuto" omette i valori vuoti, "assenza" diventa un valore vero e proprio.
 dati_assenze, piano_sconosciuto, risposte_sconosciuto = piano_gower_per(
