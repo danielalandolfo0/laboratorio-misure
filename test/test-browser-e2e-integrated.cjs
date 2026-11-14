@@ -251,6 +251,12 @@ async function main() {
     const expectedAB=(2*.3+1/3+3*coordinateAB+4*1)/10;
     approx(ab,expectedAB);
     approx(ae,19/21);
+    const dettagliPesi = page.locator("#gower-diagnostics");
+    assert.equal(await dettagliPesi.isVisible(), true);
+    assert.match(await dettagliPesi.innerText(), /Influenza dei pesi e dei blocchi/);
+    assert.equal(await dettagliPesi.locator("tbody tr").count(), 4);
+    assert.match(await dettagliPesi.innerText(), /peso ×0,5/);
+    assert.match(await dettagliPesi.innerText(), /peso ×2/);
     checkpoint("Matrice 6×6: A/B e A/E coincidono con le formule");
 
     const pending=page.waitForEvent("download");
