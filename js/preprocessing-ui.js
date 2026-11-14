@@ -12,6 +12,7 @@
   let pianoCorrente = null;
   let matriceCorrente = null;
   let versioneDiagnosi = 0;
+  let proposteGruppiCorrenti = [];
   let riscalamentoConfermato = false;
 
   function escapeHtml(valore) {
@@ -226,6 +227,7 @@
     const contenitore = $("numeric-preliminary-diagnosis");
     const corpo = $("numeric-preliminary-content");
     const versione = ++versioneDiagnosi;
+    proposteGruppiCorrenti = [];
     const nomi = colonneNumericheSelezionate().map(c => c.nome);
     if (nomi.length < 2) {
       contenitore.hidden = true;
@@ -243,6 +245,9 @@
       const risposta = await P.analizzaDiagnosi(testoOriginale, scelte, nomi);
       if (versione !== versioneDiagnosi) return;
       const d = risposta.diagnosi;
+      proposteGruppiCorrenti = (risposta.gruppiSuggeriti || []).filter(proposta =>
+        Array.isArray(proposta.colonne) && proposta.colonne.length >= 2
+      );
       const estreme = risposta.colonne.filter(c => c.statistiche.estremi > 0);
       const range = risposta.colonne.map(c => ({
         nome: c.nome,
@@ -295,7 +300,31 @@
           ? coppie.map(c => escapeHtml(c.colonne.join(" / ") + ": r = " + formatoNumero(c.correlazione) + " (" + c.coppieComplete + " coppie)")).join("; ")
           : "nessuna coppia confrontabile") + '.</p>' +
         '<p>' + escapeHtml(d.motivoCovarianza || "") + '</p></details>';
-      corpo.innerHTML = spiegazioni.join("") + dettaglio;
+
+      const proposteHtml = proposteGruppiCorrenti.length
+        ? '<section class="group-proposals"><h5>Possibili gruppi da verificare</h5>' +
+          '<p>Sono soltanto indizi esplorativi. Il sito non assegna automaticamente ' +
+          'a una correlazione il significato di una serie temporale o di un profilo. ' +
+          'Puoi ignorare ogni proposta, oppure confermarla e modificarla in seguito.</p>' +
+          proposteGruppiCorrenti.map((proposta, indice) =>
+            '<div class="question-item"><strong>' + escapeHtml(proposta.nome) + '</strong>' +
+            '<p>Colonne: ' + proposta.colonne.map(escapeHtml).join(', ') + '</p>' +
+            '<p>' + escapeHtml(proposta.motivazione) + '</p>' +
+            '<label>Che cosa rappresentano insieme queste colonne?' +
+            '<select class="group-proposal-type" data-proposal-index="' + indice + '">' +
+              '<option value="">Scegli il significato prima di creare il gruppo</option>' +
+              '<option value="tempo">Misurazioni successive nel tempo (nell’ordine del CSV)</option>' +
+              '<option value="ripetute">Coordinate di un profilo da confrontare per forma o direzione</option>' +
+              '<option value="coordinate">Coordinate quantitative da confrontare insieme</option>' +
+              '<option value="parti">Parti dello stesso totale</option>' +
+            '</select></label>' +
+            '<button type="button" class="secondary-action apply-group-proposal" ' +
+            'data-proposal-index="' + indice + '">Crea questo gruppo</button></div>'
+          ).join('') + '</section>'
+        : '<div class="question-item"><strong>Nessun gruppo proposto automaticamente</strong>' +
+          '<p>Puoi comunque creare gruppi manualmente: nessuna regola statistica ' +
+          'puo sostituire il significato delle variabili.</p></div>';
+      corpo.innerHTML = spiegazioni.join("") + proposteHtml + dettaglio;
     } catch (errore) {
       if (versione !== versioneDiagnosi) return;
       corpo.textContent = "Non è stato possibile completare la diagnosi: " + errore.message;
@@ -1383,6 +1412,37 @@
     interpretazione.riga = evento.target.value;
     nascondiPiano();
   });
+  $("numeric-preliminary-content").addEventListener("click", evento => {
+    const pulsante = evento.target.closest(".apply-group-proposal");
+    if (!pulsante) return;
+    const indice = Number(pulsante.dataset.proposalIndex);
+    const proposta = proposteGruppiCorrenti[indice];
+    if (!proposta) {
+      mostraErrore("La proposta non è più disponibile. Riesamina le colonne selezionate.");
+      return;
+    }
+    const selezione = pulsante.closest(".question-item").querySelector(".group-proposal-type");
+    const tipo = selezione?.value || "";
+    if (!["tempo", "ripetute", "coordinate", "parti"].includes(tipo)) {
+      mostraErrore("Prima di creare il gruppo, conferma che cosa rappresentano le sue colonne.");
+      return;
+    }
+    const disponibili = new Set(colonneNumericheSelezionate().map(colonna => colonna.nome));
+    if (!proposta.colonne.every(nome => disponibili.has(nome))) {
+      mostraErrore("Alcune colonne sono state già assegnate o escluse. Controlla la nuova proposta.");
+      disegnaQuestionario();
+      return;
+    }
+    const gruppo = creaGruppo();
+    gruppo.nome = proposta.nome;
+    gruppo.tipo = tipo;
+    proposta.colonne.forEach(nome => {
+      interpretazione.assegnazioni[nome] = gruppo.id;
+    });
+    nascondiErrore();
+    disegnaQuestionario();
+  });
+
   $("add-column-group").addEventListener("click", () => {
     riscalamentoConfermato = false;
     interpretazione.riscalamentoConfermato = false;

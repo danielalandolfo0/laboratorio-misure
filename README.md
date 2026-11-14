@@ -124,6 +124,24 @@ e otto colonne: le prime tre possono essere raggruppate come serie temporale,
 le successive tre come profilo e le ultime due come coordinate quantitative.
 La matrice finale combina tre dissimilarita' normalizzate nell'intervallo [0,1].
 
+### Proposte guidate di raggruppamento
+
+La diagnosi preliminare ora mostra **possibili gruppi di colonne quantitative**
+ancora indipendenti. La proposta usa due indizi distinti:
+
+- intestazioni con una radice comune e indici numerici differenti
+  (ad esempio `t1, t2, t3`, senza assumere che `t` indichi il tempo);
+- correlazioni elevate fra tutte le coppie del gruppo, con
+  `|r di Pearson| >= 0,8` e almeno quattro osservazioni comuni per coppia.
+
+La soglia e' soltanto esplorativa: una correlazione forte non dimostra che
+le colonne siano coordinate dello stesso profilo o osservazioni temporali.
+Nessuna proposta entra automaticamente nel piano. Per **creare** un gruppo
+l'utente deve scegliere esplicitamente se le colonne sono coordinate quantitative,
+un profilo, misurazioni temporali o parti di un totale. Le proposte sono
+facoltative; gli assegnamenti possono essere modificati o rimossi manualmente.
+Gli eventuali gruppi già confermati e le colonne escluse non vengono toccati.
+
 ## Matrice complessiva con più percorsi
 
 Ogni percorso produce prima la propria matrice. Gower, i confronti 0/1 e le

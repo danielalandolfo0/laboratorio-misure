@@ -1442,4 +1442,51 @@ verifica_matrice_finale(
     p.calcola_matrice(dati_blocchi_eterogenei, risposte_coordinate_indipendenti), 5
 )
 
+
+# Proposte guidate: le intestazioni e le correlazioni sono SOLO indizi.
+# I suggerimenti non modificano ne' le assegnazioni ne' i percorsi del piano.
+nomi_collaudo = ["t1", "t2", "t3", "p1", "p2", "p3", "c1", "c2"]
+proposte_collaudo = p._proponi_gruppi_numerici(
+    nomi_collaudo, p._diagnosi_numerica(
+        nomi_collaudo,
+        {colonna["nome"]: colonna for colonna in dati_blocchi_eterogenei["colonne"]},
+    )
+)
+assert [proposta["colonne"] for proposta in proposte_collaudo] == [
+    ["t1", "t2", "t3"], ["p1", "p2", "p3"], ["c1", "c2"],
+]
+assert all(proposta["fonte"] == "intestazioni" for proposta in proposte_collaudo)
+assert all("tipo" not in proposta for proposta in proposte_collaudo)
+assert len({c for proposta in proposte_collaudo for c in proposta["colonne"]}) == 8
+risposta_diagnosi = json.loads(p.analizza_diagnosi_numerica_json(
+    csv_blocchi_eterogenei, "[]", json.dumps(nomi_collaudo)
+))
+assert risposta_diagnosi["ok"]
+assert risposta_diagnosi["gruppiSuggeriti"] == proposte_collaudo
+
+# Una correlazione forte e' evidenza statistica, non conferma semantica.
+csv_correlato_senza_prefissi = (
+    "altezza,peso,colore\n"
+    "1,2,4\n2,4,1\n3,6,6\n4,8,2\n5,10,5\n6,12,3\n"
+)
+dati_correlati = p.prepara_tabella(p.leggi_csv(csv_correlato_senza_prefissi))
+nomi_correlati = ["altezza", "peso", "colore"]
+proposte_correlate = p._proponi_gruppi_numerici(
+    nomi_correlati, p._diagnosi_numerica(
+        nomi_correlati, {c["nome"]: c for c in dati_correlati["colonne"]}
+    )
+)
+assert any(
+    proposta["colonne"] == ["altezza", "peso"]
+    and proposta["fonte"] == "correlazione"
+    and "tipo" not in proposta
+    for proposta in proposte_correlate
+), proposte_correlate
+
+# Due colonne con numeri nell'intestazione ma indici duplicati non sono
+# presentate come una sequenza ordinata da usare automaticamente.
+assert not p._proponi_gruppi_numerici(
+    ["x1", "x_1"], {"relazioniCoppie": []}
+)
+
 print("Tutti i test Python di preprocessing sono stati superati.")

@@ -1246,6 +1246,90 @@ def _diagnosi_numerica(
     }
 
 
+
+def _proponi_gruppi_numerici(
+    nomi: list[str], diagnosi: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Propone blocchi DISGIUNTI senza inferire il loro significato semantico.
+
+    La radice delle intestazioni e la correlazione tra colonne sono soltanto
+    indizi esplorativi. L'utente deve scegliere esplicitamente il tipo di
+    gruppo prima che una proposta diventi parte del piano di confronto.
+    """
+    proposte: list[dict[str, Any]] = []
+    occupate: set[str] = set()
+    prefissi: dict[str, list[tuple[str, int]]] = {}
+    for nome in nomi:
+        # Esempi: t1, t2, t3; pressione_01, pressione_02.
+        match = re.fullmatch(r"(.+?)[_.\-\s]*([0-9]{1,4})", nome.strip())
+        if match is None:
+            continue
+        radice = match.group(1).rstrip("_.- ").casefold()
+        if not radice:
+            continue
+        prefissi.setdefault(radice, []).append((nome, int(match.group(2))))
+
+    for radice, membri_indicizzati in prefissi.items():
+        if len(membri_indicizzati) < 2:
+            continue
+        if len({indice for _, indice in membri_indicizzati}) != len(membri_indicizzati):
+            # Gli indici ripetuti non identificano una successione univoca.
+            continue
+        membri = [nome for nome in nomi if nome in {n for n, _ in membri_indicizzati}]
+        if len(membri) < 2 or any(nome in occupate for nome in membri):
+            continue
+        proposte.append({
+            "nome": f"Gruppo {radice}",
+            "colonne": membri,
+            "fonte": "intestazioni",
+            "motivazione": (
+                "Le intestazioni condividono una radice e hanno indici numerici "
+                "distinti. Questo non dimostra che siano misure temporali: "
+                "verifica il significato e l'ordine delle colonne."
+            ),
+        })
+        occupate.update(membri)
+
+    # Un grafo di correlazioni forti non equivale automaticamente a un blocco:
+    # per evitare aggregazioni per transitivita', ogni coppia in un gruppo
+    # candidato deve superare direttamente la soglia esplorativa.
+    forti: set[frozenset[str]] = set()
+    for relazione in diagnosi.get("relazioniCoppie", []):
+        coppia = relazione.get("colonne", [])
+        correlazione = relazione.get("correlazione")
+        if (len(coppia) == 2 and all(nome in nomi for nome in coppia)
+                and relazione.get("coppieComplete", 0) >= 4
+                and isinstance(correlazione, (int, float))
+                and math.isfinite(correlazione)
+                and abs(correlazione) >= 0.8):
+            forti.add(frozenset(coppia))
+
+    restanti = [nome for nome in nomi if nome not in occupate]
+    for primo in restanti:
+        if primo in occupate:
+            continue
+        membri = [primo]
+        for altro in restanti:
+            if altro == primo or altro in occupate:
+                continue
+            if all(frozenset((altro, precedente)) in forti for precedente in membri):
+                membri.append(altro)
+        if len(membri) < 2:
+            continue
+        proposte.append({
+            "nome": f"Gruppo da verificare ({len(proposte) + 1})",
+            "colonne": membri,
+            "fonte": "correlazione",
+            "motivazione": (
+                "Ogni coppia del gruppo ha |r di Pearson| >= 0,8 su almeno "
+                "quattro osservazioni comuni. La correlazione non identifica "
+                "ne' una serie temporale ne' un profilo: conferma se e come "
+                "le colonne vadano confrontate insieme."
+            ),
+        })
+        occupate.update(membri)
+    return proposte
+
 def analizza_diagnosi_numerica_json(
     testo: str, scelte_json: str = "[]", colonne_json: str = "[]"
 ) -> str:
@@ -1274,7 +1358,8 @@ def analizza_diagnosi_numerica_json(
             for nome in nomi
         ]
         return json.dumps(
-            {"ok": True, "diagnosi": diagnosi, "colonne": statistiche_colonne},
+            {"ok": True, "diagnosi": diagnosi, "colonne": statistiche_colonne,
+             "gruppiSuggeriti": _proponi_gruppi_numerici(nomi, diagnosi)},
             ensure_ascii=False, separators=(",", ":")
         )
     except (ValueError, TypeError, KeyError, json.JSONDecodeError) as errore:
