@@ -437,6 +437,52 @@ I vuoti non sono automaticamente assenze: l'utente sceglie di
 ignorare il gruppo nelle coppie interessate oppure confermare zero.
 La matrice finale resta unica e i pesi tra blocchi sono indipendenti.
 
+### Simboli mancanti misti: sconosciuto, non applicabile, assenza
+
+Quando l'utente sceglie **Dipende dalla colonna**, il questionario
+chiede per ciascun simbolo mancante effettivamente presente nella colonna
+(cella vuota, NA, N/A, NULL, ?) se sia:
+
+- **sconosciuto**: informazione che potrebbe esistere ma non è osservata;
+- **non applicabile**: caratteristica non definita per quella riga;
+- **assenza reale**: stato effettivamente osservato e usabile nei
+  confronti binari o nominali, senza inventare zeri numerici.
+
+I simboli sono confrontati senza distinzione di maiuscole; il loro
+significato **non** viene inferito automaticamente dal nome. Lo stesso
+simbolo può avere significati diversi in due colonne, ma non due
+significati distinti all'interno della stessa colonna; in tal caso
+l'utente deve ricodificare il CSV.
+
+Esempio:
+
+~~~csv
+id,presenza,categoria,quantita
+A,1,rosso,1
+B,?,N/A,2
+C,N/A,NA,3
+D,NA,blu,4
+E,0,rosso,5
+~~~
+
+Una codifica possibile, da confermare, è: nella colonna presenza
+? = sconosciuto, N/A = non applicabile, NA = assenza osservata;
+nella colonna categoria N/A = non applicabile e NA = assenza osservata.
+In Gower i primi due casi sono esclusi a coppie, mentre il terzo è
+uno stato valido, con peso positivo nel denominatore. Nei gruppi
+binari con politica pairwise l'assenza confermata è confrontata come
+zero *osservato*; non sostituisce un mancato rilevamento.
+
+I conteggi separati per colonna di sconosciuti, non applicabili e
+assenze confermate fanno parte della diagnostica del piano e del
+risultato. Le sostituzioni generiche che convertirebbero uno sconosciuto
+o un non applicabile in zero, stringa vuota o insieme vuoto vengono
+bloccate. Anche imputare automaticamente valori numerici non applicabili
+con media o mediana è vietato; per quantità e timestamp l'assenza
+non si trasforma in zero senza una definizione matematica compatibile.
+Le configurazioni legacy che non richiedono simboli distinti restano
+utilizzabili senza ulteriori domande.
+
 ### Mancanti nei vettori binari: confronto sulle coordinate comuni
 
 Nel gruppo **vettore binario** con valori mancanti sono ora disponibili
