@@ -6,6 +6,7 @@
   let creaCsvPython = null;
   let creaPianoPython = null;
   let calcolaMatricePython = null;
+  let creaRapportoPython = null;
   let analizzaDiagnosiPython = null;
 
   const ready = (async () => {
@@ -15,13 +16,14 @@
     const pyodide = await loadPyodide({
       indexURL: "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/"
     });
-    const risposta = await fetch("python/preprocessing.py?v=20261104-specialized1", { cache: "no-cache" });
+    const risposta = await fetch("python/preprocessing.py?v=20261114-fase7-report1", { cache: "no-cache" });
     if (!risposta.ok) throw new Error("Non è stato possibile caricare il modulo Python di preprocessing.");
     await pyodide.runPythonAsync(await risposta.text());
     analizzaCsvPython = pyodide.globals.get("analizza_csv_json");
     creaCsvPython = pyodide.globals.get("crea_csv_json");
     creaPianoPython = pyodide.globals.get("crea_piano_json");
     calcolaMatricePython = pyodide.globals.get("calcola_matrice_json");
+    creaRapportoPython = pyodide.globals.get("crea_rapporto_json");
     analizzaDiagnosiPython = pyodide.globals.get("analizza_diagnosi_numerica_json");
   })();
 
@@ -61,6 +63,18 @@
     return risposta.matrice;
   }
 
+  async function creaRapporto(testo, scelte, interpretazione, nomeFile) {
+    await ready;
+    const risposta = JSON.parse(creaRapportoPython(
+      testo,
+      JSON.stringify(scelte),
+      JSON.stringify(interpretazione),
+      nomeFile
+    ));
+    if (!risposta.ok) throw new Error(risposta.errore);
+    return risposta.rapporto;
+  }
+
   async function analizzaDiagnosi(testo, scelte, nomi) {
     await ready;
     const risposta = JSON.parse(analizzaDiagnosiPython(
@@ -70,5 +84,5 @@
     return risposta;
   }
 
-  window.Preprocessing = { ready, preparaTabella, creaCsv, creaPiano, calcolaMatrice, analizzaDiagnosi };
+  window.Preprocessing = { ready, preparaTabella, creaCsv, creaPiano, calcolaMatrice, creaRapporto, analizzaDiagnosi };
 })();
