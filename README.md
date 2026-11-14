@@ -286,6 +286,41 @@ la capacita' discriminante dei confronti. In caso di scelta robusta,
 la normalizzazione potrebbe non conservare la proprieta' triangolare
 delle distanze originarie. La scelta non elimina osservazioni o blocchi.
 
+### Kendall tau-b e Hamming sulle strutture appropriate
+
+Nel gruppo di **misurazioni dello stesso profilo**, alla scelta
+dell'ordinamento con Spearman si affianca quella per il confronto delle
+coppie con **Kendall \(\tau_b\)**, che gestisce esplicitamente i pari merito:
+\[
+\tau_b=\frac{C-D}{\sqrt{(C+D+T_x)(C+D+T_y)}},
+\qquad
+\delta_{\mathrm K}(x,y)=\frac{1-\tau_b}{2}\in[0,1].
+\]
+\(C\) e \(D\) contano le coppie concordanti e discordanti;
+\(T_x\), \(T_y\) contano quelle legate in una sola delle due serie.
+Le coppie legate in entrambe non contribuiscono. Quando uno dei due
+fattori al denominatore e' nullo, la dissimilarita' e' **non definita**,
+non artificialmente zero. Non serve una scala campionaria: l'intervallo
+teorico e' gia' \([0,1]\).
+
+Nelle **colonne testuali** l'utente puo' scegliere Levenshtein, adatta
+anche a inserimenti e cancellazioni, oppure **Hamming normalizzata**.
+Per due sequenze della stessa lunghezza \(m>0\):
+\[
+d_{\mathrm H}(a,b)=\frac{1}{m}\sum_{i=1}^m
+\mathbf{1}\{a_i\ne b_i\}.
+\]
+Per due sequenze vuote si pone \(d_{\mathrm H}=0\). Hamming e'
+applicabile soltanto quando tutte le stringhe confrontabili hanno
+la stessa lunghezza: il piano controlla il requisito prima del
+calcolo e non passa automaticamente a Levenshtein quando non e'
+rispettato. Le stringhe vengono trattate come sequenze di caratteri
+Unicode; questo confronto non e' una distanza semantica fra parole.
+
+La scelta di Kendall in un blocco di profili o di Hamming in una
+colonna testuale non cambia le misure degli altri percorsi; la matrice
+finale aggrega i contributi disponibili con i pesi confermati.
+
 ## Matrice complessiva con più percorsi
 
 Ogni percorso produce prima la propria matrice. Gower, i confronti 0/1 e le

@@ -2057,4 +2057,111 @@ assert [c["diagnosticaNormalizzazione"]["metodo"] for c in composita_norm["contr
     "campionaria", "teorica", "robusta"
 ]
 
+
+# Nuove misure: Kendall tau-b e Hamming normalizzata. Non devono
+# introdurre distanze arbitrarie nei casi matematicamente non definiti.
+quasi_uguali(p._kendall_tau_b([1, 2, 3], [2, 3, 4]), 1)
+quasi_uguali(p._kendall_tau_b([1, 2, 3], [3, 2, 1]), -1)
+quasi_uguali(p._kendall_tau_b([1, 1, 2], [1, 2, 2]), .5)
+quasi_uguali(p._kendall_tau_b([1, 1, 2], [4, 4, 7]), 1)
+assert p._kendall_tau_b([1, 1, 1], [1, 2, 3]) is None
+assert p._kendall_tau_b([1], [1]) is None
+quasi_uguali(
+    p._distanza_specializzata([1, 1, 2], [1, 2, 2], "Dissimilarità di Kendall τ-b"),
+    .25,
+)
+quasi_uguali(p._hamming_normalizzata("ABC", "BCA"), 1)
+quasi_uguali(p._hamming_normalizzata("ABC", "ABD"), 1 / 3)
+quasi_uguali(p._hamming_normalizzata("", ""), 0)
+try:
+    p._hamming_normalizzata("ABC", "AB")
+    assert False, "Hamming con lunghezze diverse non deve essere definita."
+except ValueError:
+    pass
+
+# Kendall e Hamming sono scelte indipendenti e si combinano in una sola
+# matrice: nessuno dei due percorsi viene sostituito automaticamente.
+csv_ranghi_simboli = (
+    "a,b,c,codice,id\n"
+    "1,2,3,ABC,A\n"
+    "3,2,1,BCA,B\n"
+    "2,3,1,ABD,C\n"
+    "2,1,3,ACB,D\n"
+)
+dati_ranghi_simboli = p.prepara_tabella(p.leggi_csv(csv_ranghi_simboli))
+risposte_ranghi_simboli = {
+    "riga": "oggetto",
+    "significatoEstremi": "reali",
+    "colonne": {
+        **{nome: {"ruolo": "quantita", "usa": True}
+           for nome in ("a", "b", "c")},
+        "codice": {"ruolo": "testo", "usa": True},
+        "id": {"ruolo": "identificativo", "usa": False},
+    },
+    "gruppi": [{"id": "prof", "nome": "Profilo", "tipo": "ripetute"}],
+    "assegnazioni": {nome: "prof" for nome in ("a", "b", "c")},
+    "somiglianza-prof": "ordine_coppie",
+    "misureTestualiPerColonna": {"codice": "hamming"},
+}
+piano_ranghi_simboli = p.crea_piano_confronto(
+    dati_ranghi_simboli, risposte_ranghi_simboli
+)
+assert piano_ranghi_simboli["completo"], piano_ranghi_simboli
+assert {v["metodo"] for v in piano_ranghi_simboli["percorsi"]} == {
+    "Dissimilarità di Kendall τ-b", "Distanza di Hamming normalizzata"
+}
+assert all(v["normalizzazione"]["metodo"] == "teorica"
+           for v in piano_ranghi_simboli["percorsi"])
+assert all(v["normalizzazione"]["limiteTeorico"] == 1
+           for v in piano_ranghi_simboli["percorsi"])
+risultato_ranghi_simboli = p.calcola_matrice(
+    dati_ranghi_simboli, risposte_ranghi_simboli
+)
+verifica_matrice_finale(risultato_ranghi_simboli, 4)
+assert len(risultato_ranghi_simboli["contributi"]) == 2
+quasi_uguali(risultato_ranghi_simboli["matrice"][0][1], 1)
+# A=(1,2,3), C=(2,3,1): Kendall = -1/3, d_K=2/3.
+# ABC vs ABD: Hamming=1/3, media locale con pesi uguali = 1/2.
+quasi_uguali(risultato_ranghi_simboli["matrice"][0][2], .5)
+assert risultato_ranghi_simboli["etichette"] == ["A", "B", "C", "D"]
+
+# Levenshtein resta il default e ha senso per lunghezze non uguali.
+dati_hamming_misto = p.prepara_tabella(p.leggi_csv(
+    "codice,id\nABC,A\nABCD,B\nBCA,C"
+))
+risposte_testo_hamming = {
+    "riga": "oggetto",
+    "colonne": {
+        "codice": {"ruolo": "testo", "usa": True},
+        "id": {"ruolo": "identificativo", "usa": False},
+    },
+    "misureTestualiPerColonna": {"codice": "hamming"},
+}
+piano_hamming_incompatibile = p.crea_piano_confronto(
+    dati_hamming_misto, risposte_testo_hamming
+)
+assert not piano_hamming_incompatibile["completo"]
+assert any("lunghezza differente" in messaggio
+           for percorso in piano_hamming_incompatibile["percorsi"]
+           for messaggio in percorso["avvisi"])
+assert p.crea_piano_confronto(
+    dati_hamming_misto,
+    {**risposte_testo_hamming, "misureTestualiPerColonna": {}},
+)["completo"]
+assert p.calcola_matrice(
+    dati_hamming_misto,
+    {**risposte_testo_hamming, "misureTestualiPerColonna": {}},
+)["metodo"] == "Distanza di Levenshtein normalizzata"
+assert not p.crea_piano_confronto(
+    dati_hamming_misto,
+    {**risposte_testo_hamming,
+     "misureTestualiPerColonna": {"codice": "non_riconosciuta"}},
+)["completo"]
+
+# Se i pari merito rendono Kendall non definita, altri blocchi
+# possono ancora contribuire: il suo risultato resta None.
+assert p._distanza_specializzata(
+    [4, 4, 4], [1, 2, 3], "Dissimilarità di Kendall τ-b"
+) is None
+
 print("Tutti i test Python di preprocessing sono stati superati.")
