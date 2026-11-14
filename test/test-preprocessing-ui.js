@@ -1135,6 +1135,18 @@ async function testDiagnosticaSensibilitaPesi() {
   h.fire("prepare-comparison-plan", "click");
   await flush();
   const matrix = h.makeMatrix();
+  matrix.diagnosticaFinale.distribuzioneDissimilarita = {
+    numeroCoppie: 1, minimo: .5, massimo: .5,
+    media: .5, mediana: .5, primoQuartile: .5, terzoQuartile: .5,
+    coppieZero: 0, coppieUno: 0,
+    intervalli: [
+      {inizio: 0, fine: .2, fineInclusa: false, coppie: 0, frazione: 0},
+      {inizio: .2, fine: .4, fineInclusa: false, coppie: 0, frazione: 0},
+      {inizio: .4, fine: .6, fineInclusa: false, coppie: 1, frazione: 1},
+      {inizio: .6, fine: .8, fineInclusa: false, coppie: 0, frazione: 0},
+      {inizio: .8, fine: 1, fineInclusa: true, coppie: 0, frazione: 0},
+    ]
+  };
   matrix.diagnosticaFinale.sensibilitaPesi = {
     numeroBlocchi: 2, coppieTotali: 1, tolleranzaZero: 1e-12,
     perBlocco: [
@@ -1169,6 +1181,10 @@ async function testDiagnosticaSensibilitaPesi() {
   await flush();
   const diag = h.element("gower-diagnostics");
   assert.equal(diag.hidden, false);
+  assert.match(diag.innerHTML, /Distribuzione delle dissimilarità finali/);
+  assert.match(diag.innerHTML, /final-distribution-list/);
+  assert.match(diag.innerHTML, /style="width: 100%"/);
+  assert.match(diag.innerHTML, /quartile/);
   assert.match(diag.innerHTML, /Influenza dei pesi e dei blocchi/);
   assert.match(diag.innerHTML, /peso ×0,5/);
   assert.match(diag.innerHTML, /peso ×2/);
@@ -1190,6 +1206,7 @@ async function testDiagnosticaSensibilitaPesi() {
   h.fire("calculate-gower", "click");
   await flush();
   assert.match(h.element("gower-diagnostics").innerHTML, /unico blocco/);
+  assert.doesNotMatch(h.element("gower-diagnostics").innerHTML, /final-distribution-list/);
   assert.doesNotMatch(h.element("gower-diagnostics").innerHTML, /final-diagnostics-table/);
 
   const legacy = {...matrix, diagnosticaFinale: {avvisi: []}};
