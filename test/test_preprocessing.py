@@ -750,6 +750,8 @@ raggiunte = {
     misura_da(aggregazioneScarti="minkowski", ordineMinkowski="3")["idMisura"],
     pesata["idMisura"], chebyshev_pesata["idMisura"],
     standardizzata["idMisura"], mahalanobis["idMisura"],
+    misura_da(misuraNumericaManuale="mahalanobis_ridge", lambdaMahalanobis="1")["idMisura"],
+    misura_da(misuraNumericaManuale="mahalanobis_pinv", tolleranzaPseudoinversa="1e-10")["idMisura"],
     canberra["idMisura"],
     misura_da(confrontoQuantitativo="abbondanza")["idMisura"],
     misura_da(confrontoQuantitativo="frequenze")["idMisura"],
