@@ -3851,6 +3851,67 @@ def _rapporto_errori_percorsi(errori: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _verifica_bray_curtis_percorso(
+    percorso: dict[str, Any],
+    risultato: dict[str, Any],
+    interpretazione: dict[str, Any],
+) -> None:
+    """Richiede una convenzione per ogni confronto 0/0 di Bray--Curtis.
+
+    Contiamo le righe realmente confrontabili DOPO il trattamento dei
+    mancanti approvato, ma senza modificare i valori originali. La scelta
+    è significativa solo se almeno due righe sono interamente nulle.
+    """
+    if (
+        percorso["tipo"] != "numerico"
+        or percorso.get("idMisura") != "bray_curtis"
+        or percorso["stato"] == "da_completare"
+    ):
+        return
+    try:
+        vettori, indici = _righe_numeriche_per_percorso(risultato, percorso)
+    except ValueError as errore:
+        percorso["stato"] = "da_completare"
+        percorso["calcolo"]["disponibile"] = False
+        percorso["calcolo"]["descrizione"] = "Rivedi i dati numerici e i mancanti."
+        percorso.setdefault("avvisi", []).append(str(errore))
+        return
+    righe_nulle = [
+        indice + 1 for vettore, indice in zip(vettori, indici)
+        if all(valore == 0 for valore in vettore)
+    ]
+    numero_coppie = len(righe_nulle) * (len(righe_nulle) - 1) // 2
+    percorso["righeNulleBrayCurtis"] = righe_nulle
+    percorso["coppieBrayDoppioZero"] = numero_coppie
+    if not numero_coppie:
+        return
+    scelta = interpretazione.get("convenzioneBrayCurtisZero")
+    if scelta not in {"zero", "indefinita"}:
+        percorso["stato"] = "da_completare"
+        percorso["calcolo"]["disponibile"] = False
+        percorso["calcolo"]["descrizione"] = (
+            "Scegli come interpretare i confronti Bray–Curtis tra due vettori nulli."
+        )
+        percorso.setdefault("avvisi", []).append(
+            f"Bray–Curtis produce 0/0 in {numero_coppie} coppie di righe "
+            "interamente nulle: scegli esplicitamente se attribuire "
+            "dissimilarità zero oppure lasciare il confronto non definito."
+        )
+        return
+    percorso.setdefault("parametri", {})["doppioZero"] = scelta
+    if scelta == "zero":
+        percorso.setdefault("avvisi", []).append(
+            f"Convenzione confermata: le {numero_coppie} coppie Bray–Curtis "
+            "(0,0) hanno dissimilarità zero e sono contributi validi."
+        )
+    else:
+        percorso.setdefault("avvisi", []).append(
+            f"Le {numero_coppie} coppie Bray–Curtis (0,0) restano non definite "
+            "per scelta esplicita. La matrice finale richiede altri contributi "
+            "validi per ciascuna di esse."
+        )
+
+
 def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, Any]) -> dict[str, Any]:
     """Costruisce un piano verificabile senza calcolare ancora le distanze."""
     if not isinstance(interpretazione, dict):
@@ -3908,6 +3969,7 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
         _verifica_vettore_binario_percorso(percorso, risultato)
         _verifica_serie_a_coppie_percorso(percorso, risultato)
         _verifica_specializzati_percorso(percorso, risultato)
+        _verifica_bray_curtis_percorso(percorso, risultato, interpretazione)
     # Hamming richiede che tutte le sequenze confrontabili abbiano una
     # lunghezza comune. Il controllo precede il calcolo; non si converte
     # implicitamente a Levenshtein se le lunghezze sono differenti.
@@ -5087,8 +5149,12 @@ def _distanza_numerica(
             for a, b in zip(x, y)
         )
     if id_misura == "bray_curtis":
-        denominatore = sum(a + b for a, b in zip(x, y))
-        return None if denominatore == 0 else sum(scarti) / denominatore
+        denominatore = math.fsum(a + b for a, b in zip(x, y))
+        if denominatore == 0:
+            # 0/0 non e' una distanza definita. L'estensione a zero
+            # richiede la conferma esplicita nel piano di confronto.
+            return 0.0 if parametri.get("doppioZero") == "zero" else None
+        return math.fsum(scarti) / denominatore
     if id_misura == "chi_square":
         return math.sqrt(sum(
             0.0 if a + b == 0 else (a - b) ** 2 / (a + b)
@@ -5156,6 +5222,13 @@ def calcola_matrice_numerica(
         escluse = len(tabella["righe"]) - len(righe_numeriche)
         if escluse:
             nota += f" Righe escluse: {escluse}."
+    if id_misura == "bray_curtis" and percorso.get("coppieBrayDoppioZero", 0):
+        nota += (
+            " Convenzione per due vettori nulli: dissimilarità zero "
+            "(contributo definito)." if parametri.get("doppioZero") == "zero" else
+            " Due vettori nulli: confronto non definito, disponibile soltanto "
+            "quando altri blocchi forniscono contributi."
+        )
     if id_misura == "mahalanobis":
         nota += " La covarianza empirica considera il pattern con cui le colonne variano insieme; nessuna colonna è stata eliminata."
     elif id_misura == "mahalanobis_ridge":
