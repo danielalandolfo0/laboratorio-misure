@@ -3735,6 +3735,122 @@ def _verifica_distribuzione_percorso(
         percorso["righeDistribuzioneValide"] = valide
 
 
+def _azioni_rapporto_problema(messaggio: str) -> list[str]:
+    """Alternative informative: nessuna viene applicata dal software."""
+    t = messaggio.casefold()
+    if "covarianza" in t or "mahalanobis" in t:
+        return [
+            "Rivedi le colonne dipendenti o la misura selezionata.",
+            "Valuta regolarizzazione o pseudoinversa soltanto dopo una scelta esplicita.",
+        ]
+    if "hamming" in t or "lunghezz" in t:
+        return ["Verifica le lunghezze; se sono differenti, valuta Levenshtein."]
+    if "peso" in t or "importanza" in t:
+        return ["Conferma pesi positivi e finiti, oppure modifica la struttura dei blocchi."]
+    if "mancant" in t or "vuot" in t or "non applicabil" in t:
+        return [
+            "Chiarisci il significato dei mancanti e scegli una strategia compatibile.",
+            "Valuta esclusione delle righe o imputazione dichiarata, quando ammissibili.",
+        ]
+    if "estrem" in t or "anomal" in t or "outlier" in t:
+        return ["Verifica i valori segnalati e conferma come trattarli prima del calcolo."]
+    if "normalizz" in t or "scala" in t or "riscal" in t:
+        return ["Rivedi il preprocessing o la normalizzazione di questo blocco."]
+    if "colonn" in t or "grupp" in t or "blocc" in t:
+        return ["Rivedi la selezione delle colonne e la loro assegnazione ai blocchi."]
+    return ["Completa o modifica la scelta pertinente nel questionario o nel piano."]
+
+
+def _rapporto_problemi_piano(
+    avvisi_globali: list[str],
+    blocchi: list[dict[str, Any]],
+    percorsi: list[dict[str, Any]],
+    completo: bool,
+) -> dict[str, Any]:
+    """Raccoglie tutti i problemi noti al piano, distinguendone l'effetto."""
+    bloccanti: list[dict[str, Any]] = []
+    non_bloccanti: list[dict[str, Any]] = []
+    visti: set[tuple[str, str, str, str]] = set()
+
+    def aggiungi(
+        gravita: str, ambito: str, nome: str, colonne: list[str],
+        messaggio: str, id_percorso: str | None = None,
+    ) -> None:
+        chiave = (gravita, ambito, nome, messaggio)
+        if chiave in visti:
+            return
+        visti.add(chiave)
+        destinazione = bloccanti if gravita == "bloccante" else non_bloccanti
+        destinazione.append({
+            "gravita": gravita,
+            "ambito": ambito,
+            "nome": nome,
+            "idPercorso": id_percorso,
+            "colonne": list(colonne),
+            "messaggio": messaggio,
+            "decisioniPossibili": _azioni_rapporto_problema(messaggio),
+        })
+
+    for messaggio in avvisi_globali:
+        aggiungi("bloccante", "generale", "Configurazione", [], messaggio)
+    for blocco in blocchi:
+        gravita = "bloccante" if blocco["stato"] == "da_completare" else "avviso"
+        messaggi = list(blocco.get("avvisi") or [])
+        if gravita == "bloccante" and not messaggi:
+            messaggi = ["La configurazione di questa caratteristica non è completa."]
+        for messaggio in messaggi:
+            aggiungi(gravita, "blocco", blocco["nome"],
+                    blocco["colonne"], messaggio)
+    for percorso in percorsi:
+        gravita = "bloccante" if (
+            percorso["stato"] == "da_completare" or
+            not percorso["calcolo"]["disponibile"]
+        ) else "avviso"
+        messaggi = list(percorso.get("avvisi") or [])
+        if gravita == "bloccante" and not messaggi:
+            messaggi = [
+                percorso["calcolo"].get("descrizione")
+                or "Il percorso non è ancora calcolabile."
+            ]
+        for messaggio in messaggi:
+            aggiungi(gravita, "percorso", percorso["titolo"],
+                    percorso["colonne"], messaggio, percorso["idPercorso"])
+    if not completo and not bloccanti:
+        aggiungi(
+            "bloccante", "generale", "Configurazione", [],
+            "Il piano non è completo: rivedi le scelte prima del calcolo.",
+        )
+    return {
+        "fase": "piano",
+        "calcoloConsentito": completo,
+        "numeroBloccanti": len(bloccanti),
+        "numeroAvvisi": len(non_bloccanti),
+        "bloccanti": bloccanti,
+        "nonBloccanti": non_bloccanti,
+    }
+
+
+class IncompatibilitaCalcolo(ValueError):
+    """Errore bloccante con un rapporto serializzabile e senza correzioni tacite."""
+
+    def __init__(self, messaggio: str, rapporto: dict[str, Any]):
+        super().__init__(messaggio)
+        self.rapportoProblemi = rapporto
+
+
+def _rapporto_errori_percorsi(errori: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "fase": "calcolo",
+        "numeroBloccanti": len(errori),
+        "numeroAvvisi": 0,
+        "bloccanti": errori,
+        "nonBloccanti": [],
+        "coppieNonConfrontabili": [],
+        "etichette": [],
+        "numeroCoppieNonConfrontabili": 0,
+    }
+
+
 def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, Any]) -> dict[str, Any]:
     """Costruisce un piano verificabile senza calcolare ancora le distanze."""
     if not isinstance(interpretazione, dict):
@@ -4028,6 +4144,7 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
             }
     return {
         "anteprimaNumerica": anteprima_numerica,
+        "rapportoProblemi": _rapporto_problemi_piano(avvisi, blocchi, percorsi, completo),
         "diagnosticaMancantiSemantici": diagnostica_mancanti,
         "pesaturaGlobale": pesatura_globale,
         "diagnosi": diagnosi, "blocchi": blocchi, "percorsi": percorsi, "avvisi": avvisi,
@@ -6181,12 +6298,42 @@ def _valida_matrice_finale(
             f"righe {i + 1} ({etichette[i]}) e {j + 1} ({etichette[j]})"
             for i, j in non_disponibili[:6]
         )
-        raise ValueError(
+        messaggio = (
             f"Non posso generare una matrice completa: {len(non_disponibili)} "
             f"coppie non hanno alcun contributo valido. Esempi: {esempi}. "
             "Rivedi le scelte sui mancanti, le colonne o le misure; "
             "nessuna distanza verra' inventata."
         )
+        problema = {
+            "gravita": "bloccante",
+            "ambito": "matrice",
+            "nome": "Coppie senza contributi",
+            "idPercorso": None,
+            "colonne": [],
+            "messaggio": (
+                f"{len(non_disponibili)} coppie non hanno alcun contributo "
+                "locale definito e non possono ricevere una dissimilarita'."
+            ),
+            "decisioniPossibili": [
+                "Rivedi i mancanti e la strategia scelta nei blocchi coinvolti.",
+                "Valuta misure compatibili o una selezione diversa di righe e colonne.",
+                "Imputa valori soltanto con una procedura motivata e confermata.",
+            ],
+        }
+        raise IncompatibilitaCalcolo(messaggio, {
+            "fase": "calcolo",
+            "numeroBloccanti": 1,
+            "numeroAvvisi": 0,
+            "bloccanti": [problema],
+            "nonBloccanti": [],
+            "numeroCoppieNonConfrontabili": len(non_disponibili),
+            # Indici 1-based; l'array etichette preserva l'eventuale duplicazione.
+            # La lista completa resta esportabile senza riempire la matrice con zeri.
+            "coppieNonConfrontabili": [
+                [i + 1, j + 1] for i, j in non_disponibili
+            ],
+            "etichette": list(etichette),
+        })
 
     coppie = [float(matrice[i][j]) for i in range(n) for j in range(i + 1, n)]
     zeri = sum(v <= 1e-12 for v in coppie)
@@ -6393,12 +6540,30 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
 
     if len(percorsi) == 1:
         # Anche un unico percorso deve produrre valori finali in [0,1].
-        singolo = calcola(percorsi[0])
-        normalizzata, descrizione, diagnostica_normalizzazione = (
-            _normalizza_per_aggregazione_con_diagnostica(
-                singolo, percorsi[0]["normalizzazione"]
+        try:
+            singolo = calcola(percorsi[0])
+            normalizzata, descrizione, diagnostica_normalizzazione = (
+                _normalizza_per_aggregazione_con_diagnostica(
+                    singolo, percorsi[0]["normalizzazione"]
+                )
             )
-        )
+        except ValueError as errore:
+            if isinstance(errore, IncompatibilitaCalcolo):
+                raise
+            percorso = percorsi[0]
+            problema = {
+                "gravita": "bloccante",
+                "ambito": "percorso",
+                "nome": percorso["titolo"],
+                "idPercorso": percorso["idPercorso"],
+                "colonne": list(percorso["colonne"]),
+                "messaggio": str(errore),
+                "decisioniPossibili": _azioni_rapporto_problema(str(errore)),
+            }
+            raise IncompatibilitaCalcolo(
+                f"Il blocco “{percorso['titolo']}” non è calcolabile: {errore}",
+                _rapporto_errori_percorsi([problema]),
+            ) from errore
         etichette = singolo["etichette"]
         singolo["diagnosticaFinale"] = _valida_matrice_finale(normalizzata, etichette)
         singolo["diagnosticaFinale"]["sensibilitaPesi"] = _diagnostica_sensibilita_pesi(
@@ -6438,13 +6603,26 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
     if n > 1000:
         raise ValueError("La matrice completa è limitata a 1000 righe per evitare di bloccare il browser.")
     componenti: list[dict[str, Any]] = []
+    errori_percorsi: list[dict[str, Any]] = []
     for percorso in percorsi:
-        risultato_percorso = calcola(percorso)
-        matrice_normalizzata, normalizzazione, diagnostica_normalizzazione = (
-            _normalizza_per_aggregazione_con_diagnostica(
-                risultato_percorso, percorso["normalizzazione"]
+        try:
+            risultato_percorso = calcola(percorso)
+            matrice_normalizzata, normalizzazione, diagnostica_normalizzazione = (
+                _normalizza_per_aggregazione_con_diagnostica(
+                    risultato_percorso, percorso["normalizzazione"]
+                )
             )
-        )
+        except ValueError as errore:
+            errori_percorsi.append({
+                "gravita": "bloccante",
+                "ambito": "percorso",
+                "nome": percorso["titolo"],
+                "idPercorso": percorso["idPercorso"],
+                "colonne": list(percorso["colonne"]),
+                "messaggio": str(errore),
+                "decisioniPossibili": _azioni_rapporto_problema(str(errore)),
+            })
+            continue
         componenti.append({
             "percorso": percorso,
             "risultato": risultato_percorso,
@@ -6456,6 +6634,12 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
             "normalizzazione": normalizzazione,
             "diagnosticaNormalizzazione": diagnostica_normalizzazione,
         })
+    if errori_percorsi:
+        raise IncompatibilitaCalcolo(
+            f"Il calcolo è sospeso: {len(errori_percorsi)} blocchi presentano "
+            "problemi. Consulta il rapporto completo e modifica le scelte.",
+            _rapporto_errori_percorsi(errori_percorsi),
+        )
 
     matrice_finale: list[list[float | None]] = [[0.0 for _ in range(n)] for _ in range(n)]
     coppie_con_copertura_parziale = 0
@@ -6783,5 +6967,11 @@ def calcola_matrice_json(testo: str, scelte_json: str = "[]", interpretazione_js
         risultato = prepara_tabella(leggi_csv(testo), scelte)
         matrice = calcola_matrice(risultato, interpretazione)
         return json.dumps({"ok": True, "matrice": matrice}, ensure_ascii=False, separators=(",", ":"))
+    except IncompatibilitaCalcolo as errore:
+        return json.dumps(
+            {"ok": False, "errore": str(errore),
+             "rapportoProblemi": errore.rapportoProblemi},
+            ensure_ascii=False, separators=(",", ":"), allow_nan=False,
+        )
     except (ValueError, TypeError, KeyError, json.JSONDecodeError) as errore:
         return json.dumps({"ok": False, "errore": str(errore)}, ensure_ascii=False, separators=(",", ":"))
