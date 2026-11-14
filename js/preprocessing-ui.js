@@ -1037,6 +1037,77 @@
     aggiornaGuida();
   }
 
+  function disegnaDiagnosticaFinale(risposta) {
+    const contenitore = $("gower-diagnostics");
+    const analisi = risposta.diagnosticaFinale?.sensibilitaPesi;
+    if (!analisi?.perBlocco?.length) {
+      contenitore.innerHTML = "";
+      contenitore.hidden = true;
+      return;
+    }
+    const nulle = analisi.blocchiSempreNulli || [];
+    const presentazioneNulle = nulle.length
+      ? '<p class="final-diagnostics-warning"><strong>Attenzione ai blocchi con distanza nulla.</strong> ' +
+        nulle.map(voce =>
+          '«' + escapeHtml(voce.titolo) + '» (peso ' +
+          escapeHtml(formatoNumero(voce.peso)) + ', ' +
+          escapeHtml(String(voce.coppieDefinite)) +
+          ' coppie definite): distanza zero per tutte le coppie in cui contribuisce. ' +
+          (voce.attenuazioneMassimaRimuovendolo === null
+            ? 'La sua rimozione potrebbe lasciare alcune coppie senza confronto.'
+            : 'Variazione massima ipotetica senza questo blocco, ' +
+              'fra le coppie ancora confrontabili: ' +
+              escapeHtml(formatoNumero(voce.attenuazioneMassimaRimuovendolo)) + '.')
+        ).join(' ') +
+        ' Questi zeri sono contributi validi e restano nel denominatore.</p>'
+      : '<p>Nessun blocco ha distanza nulla su tutti i confronti locali disponibili.</p>';
+    if (analisi.numeroBlocchi === 1) {
+      contenitore.innerHTML =
+        '<h6>Influenza dei pesi e dei blocchi</h6>' +
+        '<p>È presente un unico blocco: moltiplicarne il peso per un ' +
+        'fattore positivo non cambia la matrice. Non si può rimuoverlo ' +
+        'senza perdere il confronto.</p>' + presentazioneNulle;
+      contenitore.hidden = false;
+      return;
+    }
+    const righe = analisi.perBlocco.map(voce => {
+      const rim = voce.senzaBlocco;
+      const maxRim = rim.variazioneMassimaAssoluta === null
+        ? 'Non definibile' : formatoNumero(rim.variazioneMassimaAssoluta);
+      return '<tr><th scope="row">' + escapeHtml(voce.titolo) +
+        '</th><td>' + escapeHtml(formatoNumero(voce.pesoOriginale)) +
+        '</td><td>' + escapeHtml(String(voce.coppieDefinite)) +
+        ' / ' + escapeHtml(String(analisi.coppieTotali)) +
+        '</td><td>' + escapeHtml(formatoNumero(
+          voce.fattoreMezzo.variazioneMassimaAssoluta
+        )) + '</td><td>' + escapeHtml(formatoNumero(
+          voce.fattoreDoppio.variazioneMassimaAssoluta
+        )) + '</td><td>' + escapeHtml(maxRim) +
+        ' (' + escapeHtml(String(rim.coppieConfrontabili)) + ' coppie)</td><td>' +
+        escapeHtml(String(rim.coppieSenzaAltroContributo)) + '</td></tr>';
+    }).join("");
+    contenitore.innerHTML =
+      '<h6>Influenza dei pesi e dei blocchi</h6>' +
+      '<p>Analisi non bloccante: si varia <strong>un solo peso globale per volta</strong> ' +
+      'a metà o al doppio, mantenendo fisse le misure e le normalizzazioni locali. ' +
+      'Le differenze indicate sono i massimi scarti assoluti dalla matrice attuale, ' +
+      'nell’intervallo [0,1]. La rimozione è soltanto ipotetica.</p>' +
+      presentazioneNulle +
+      '<div class="data-table-wrap"><table class="data-table final-diagnostics-table">' +
+      '<thead><tr><th scope="col">Blocco</th><th scope="col">Peso</th>' +
+      '<th scope="col">Coppie locali disponibili</th>' +
+      '<th scope="col">Variazione max, peso ×0,5</th>' +
+      '<th scope="col">Variazione max, peso ×2</th>' +
+      '<th scope="col">Variazione max senza blocco</th>' +
+      '<th scope="col">Coppie non confrontabili senza blocco</th>' +
+      '</tr></thead><tbody>' + righe + '</tbody></table></div>' +
+      '<p>La rimozione di un blocco non è una nuova scelta applicata alla matrice: ' +
+      'si confrontano soltanto le coppie che resterebbero definite. ' +
+      'Le medie, i massimi e i conteggi completi sono registrati nel rapporto JSON. ' +
+      'Una variazione elevata non indica da sola un errore.</p>';
+    contenitore.hidden = false;
+  }
+
   function disegnaMatrice(risposta) {
     const limite = Math.min(12, risposta.etichette.length);
     const etichette = risposta.etichette.slice(0, limite);
@@ -1052,6 +1123,7 @@
       ? ` Marcatori nel CSV: ${stati.totali?.sconosciuto || 0} sconosciuti, ${stati.totali?.non_applicabile || 0} non applicabili, ${stati.totali?.assenza || 0} assenze realmente osservate confermate.`
       : "";
     $("gower-result-caption").textContent = `${risposta.etichette.length} × ${risposta.etichette.length}. ${risposta.nota}${limite < risposta.etichette.length ? ` Anteprima delle prime ${limite} righe.` : ""}${diagnosticaMista}${avvisiFinali.length ? " Diagnostica (non bloccante): " + avvisiFinali.join(" ") : ""}`;
+    disegnaDiagnosticaFinale(risposta);
     $("download-gower").disabled = false;
     $("download-report").disabled = false;
     $("gower-result").hidden = false;
