@@ -233,13 +233,17 @@ def _diagnostica_stati_mancanti(
             )
         if percorso["tipo"] in {"numerico", "gruppo"}:
             for nome in nomi:
-                if (sintesi.get(nome, {}).get("conteggi", {}).get("non_applicabile", 0) > 0
-                    and percorso["tipo"] == "numerico"
-                    and mancanti.get("perColonna", {}).get(nome) in {"imputa_media", "imputa_mediana"}):
+                if sintesi.get(nome, {}).get("conteggi", {}).get("non_applicabile", 0) == 0:
+                    continue
+                strategia_colonna = (
+                    mancanti.get("perColonna", {}).get(nome)
+                    if percorso["tipo"] == "numerico" else strategia
+                )
+                if strategia_colonna in {"imputa_media", "imputa_mediana", "interpola_lineare"}:
                     avvisi.append(
-                        f"Per “{nome}” non imputare automaticamente un valore non applicabile "
-                        "con media o mediana: escludi la riga oppure usa le coordinate "
-                        "osservate, se la misura lo consente."
+                        f"Per “{nome}” non imputare o interpolare automaticamente un "
+                        "valore non applicabile. Escludi il suo contributo oppure "
+                        "usa soltanto le coordinate osservate, se la misura lo consente."
                     )
     return {
         "attiva": True, "perColonna": sintesi,
