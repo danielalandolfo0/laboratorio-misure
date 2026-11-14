@@ -2675,4 +2675,156 @@ for manuale, parametro in (
     matrice_locale = p.calcola_matrice_numerica(m_mancanti, scelta)
     assert matrice_locale["indiciRighe"] == [0, 1, 3]
 
+
+# Integrazione: vettori binari, con conteggi delle quattro contingenze
+# coerenti con il modulo dimostrativo e aggregazione in una sola matrice.
+dati_binari_misti = p.prepara_tabella(p.leggi_csv(
+    "flag1,flag2,categoria,id\n"
+    "1,1,alfa,A\n"
+    "1,0,alfa,B\n"
+    "0,1,beta,C"
+))
+risposte_vettore = {
+    "riga": "oggetto",
+    "colonne": {
+        "flag1": {"ruolo": "presenza", "usa": True},
+        "flag2": {"ruolo": "binaria", "usa": True},
+        "categoria": {"ruolo": "categoria", "usa": True},
+        "id": {"ruolo": "identificativo", "usa": False},
+    },
+    "gruppi": [{"id": "flags", "nome": "Presenze", "tipo": "vettore_binario"}],
+    "assegnazioni": {"flag1": "flags", "flag2": "flags"},
+}
+assert not p.crea_piano_confronto(dati_binari_misti, risposte_vettore)["completo"]
+for misura, attesi in (
+    ("hamming", (0.5, 0.5, 1.0)),
+    ("rogers_tanimoto", (2 / 3, 2 / 3, 1.0)),
+    ("jaccard", (0.5, 0.5, 1.0)),
+    ("dice", (1 / 3, 1 / 3, 1.0)),
+):
+    scelta = {**risposte_vettore, "misuraBinaria-flags": misura}
+    piano = p.crea_piano_confronto(dati_binari_misti, scelta)
+    assert piano["completo"], piano
+    assert [percorso["tipo"] for percorso in piano["percorsi"]] == ["gower", "gruppo"]
+    gruppo = piano["percorsi"][1]
+    assert gruppo["colonne"] == ["flag1", "flag2"]
+    assert gruppo["tipoGruppo"] == "vettore_binario"
+    assert gruppo["idMisura"] == misura
+    assert gruppo["normalizzazione"]["limiteTeorico"] == 1
+    matrice_locale = p._calcola_matrice_specializzata(dati_binari_misti, scelta, gruppo)
+    for (i, k), valore in zip(((0, 1), (0, 2), (1, 2)), attesi):
+        quasi_uguali(matrice_locale["matrice"][i][k], valore)
+    matrice_finale = p.calcola_matrice(dati_binari_misti, scelta)
+    verifica_matrice_finale(matrice_finale, 3)
+    quasi_uguali(matrice_finale["matrice"][0][1], attesi[0] / 2)
+    quasi_uguali(matrice_finale["matrice"][0][2], (attesi[1] + 1) / 2)
+    quasi_uguali(matrice_finale["matrice"][1][2], (attesi[2] + 1) / 2)
+    assert len(matrice_finale["contributi"]) == 2
+    assert matrice_finale["etichette"] == ["A", "B", "C"]
+
+binari_pesati = {
+    **risposte_vettore,
+    "misuraBinaria-flags": "rogers_tanimoto",
+    "pesiPercorsi": {"percorso-1": "1", "percorso-2": "3"},
+}
+matrice_binari_pesati = p.calcola_matrice(dati_binari_misti, binari_pesati)
+quasi_uguali(matrice_binari_pesati["matrice"][0][1], 0.5)
+quasi_uguali(matrice_binari_pesati["matrice"][0][2], 0.75)
+
+# Nulli in Jaccard ammissibili per convenzione; Dice non è definita
+# per un vettore nullo nemmeno rispetto a se stesso.
+dati_nulli = p.prepara_tabella(p.leggi_csv(
+    "flag1,flag2\n0,0\n1,0\n1,1"
+))
+risposte_nulle = {
+    "riga": "oggetto",
+    "colonne": {
+        "flag1": {"ruolo": "presenza", "usa": True},
+        "flag2": {"ruolo": "binaria", "usa": True},
+    },
+    "gruppi": [{"id": "bin", "nome": "Presenze", "tipo": "vettore_binario"}],
+    "assegnazioni": {"flag1": "bin", "flag2": "bin"},
+    "misuraBinaria-bin": "dice",
+}
+piano_dice_nullo = p.crea_piano_confronto(dati_nulli, risposte_nulle)
+assert not piano_dice_nullo["completo"], piano_dice_nullo
+assert any("Dice non è definita" in messaggio
+           for percorso in piano_dice_nullo["percorsi"]
+           for messaggio in percorso["avvisi"])
+jaccard_nullo = {**risposte_nulle, "misuraBinaria-bin": "jaccard"}
+assert p.crea_piano_confronto(dati_nulli, jaccard_nullo)["completo"]
+assert p.calcola_matrice(dati_nulli, jaccard_nullo)["matrice"][0][1] == 1
+assert p._distanza_vettori_binari([0, 0], [0, 0], "jaccard") == 0
+
+# Etichette trasparenti sì/no ammesse, codici opachi A/B no.
+dati_yes_no = p.prepara_tabella(p.leggi_csv(
+    "flag1,flag2\nsì,no\nno,sì\nsì,sì"
+))
+assert p.crea_piano_confronto(
+    dati_yes_no, {**risposte_nulle, "misuraBinaria-bin": "rogers_tanimoto"}
+)["completo"]
+dati_ab = p.prepara_tabella(p.leggi_csv(
+    "flag1,flag2\nA,B\nB,A\nA,A"
+))
+piano_ab = p.crea_piano_confronto(
+    dati_ab, {**risposte_nulle, "misuraBinaria-bin": "dice"}
+)
+assert not piano_ab["completo"]
+assert any("non riconosciuto" in msg for v in piano_ab["percorsi"]
+           for msg in v["avvisi"])
+
+# Mancanti: nessuna assenza implicita, e nessuna perdita delle righe
+# quando un percorso Gower indipendente permette il confronto.
+dati_binari_vuoti = p.prepara_tabella(p.leggi_csv(
+    "flag1,flag2,categoria\n1,1,x\nNA,1,x\n0,1,y"
+))
+base_vuoti = {
+    **risposte_vettore,
+    "misuraBinaria-flags": "rogers_tanimoto",
+    "significatoMancanti": "sconosciuto",
+}
+assert not p.crea_piano_confronto(dati_binari_vuoti, base_vuoti)["completo"]
+for politica in ("escludi_percorso", "zero"):
+    scelta = {**base_vuoti, "mancanti-gruppo-flags": politica}
+    piano = p.crea_piano_confronto(dati_binari_vuoti, scelta)
+    assert piano["completo"], piano
+    calcolata = p.calcola_matrice(dati_binari_vuoti, scelta)
+    verifica_matrice_finale(calcolata, 3)
+    if politica == "escludi_percorso":
+        quasi_uguali(calcolata["matrice"][0][1], 0)
+        quasi_uguali(calcolata["matrice"][1][2], 1)
+    else:
+        quasi_uguali(calcolata["matrice"][0][1], 1 / 3)
+
+# Stringhe: Damerau–Levenshtein completa e normalizzazione esplicita.
+assert p._damerau_levenshtein_normalizzata("CA", "ABC") == 2 / 3
+assert p._damerau_levenshtein_normalizzata("CA", "AC") == 1 / 2
+assert p._damerau_levenshtein_normalizzata("a", "a") == 0
+assert p._damerau_levenshtein_normalizzata("", "") == 0
+assert p._damerau_levenshtein_normalizzata("", "AB") == 1
+assert p._damerau_levenshtein_normalizzata("AB", "") == 1
+dati_trasposizioni = p.prepara_tabella(p.leggi_csv(
+    "codice,id\nCA,A\nABC,B\nAC,C"
+))
+testo_base = {
+    "riga": "oggetto",
+    "colonne": {
+        "codice": {"ruolo": "testo", "usa": True},
+        "id": {"ruolo": "identificativo", "usa": False},
+    },
+    "misureTestualiPerColonna": {"codice": "damerau_levenshtein"},
+}
+testo_piano = p.crea_piano_confronto(dati_trasposizioni, testo_base)
+assert testo_piano["completo"], testo_piano
+assert testo_piano["percorsi"][0]["normalizzazione"]["limiteTeorico"] == 1
+testo_matrice = p.calcola_matrice(dati_trasposizioni, testo_base)
+verifica_matrice_finale(testo_matrice, 3)
+quasi_uguali(testo_matrice["matrice"][0][1], 2 / 3)
+quasi_uguali(testo_matrice["matrice"][0][2], 1 / 2)
+assert testo_matrice["metodo"] == "Distanza di Damerau–Levenshtein normalizzata"
+assert not p.crea_piano_confronto(
+    dati_trasposizioni, {**testo_base,
+       "misureTestualiPerColonna": {"codice": "damerau_strano"}}
+)["completo"]
+
 print("Tutti i test Python di preprocessing sono stati superati.")

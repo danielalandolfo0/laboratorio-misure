@@ -663,10 +663,17 @@ def _blocco_indipendente(nome: str, ruolo: str, analisi: dict[str, Any], interpr
                 "Conta le posizioni con simboli differenti, divise per la "
                 "lunghezza comune. Richiede sequenze allineate ed equidimensionali."
             )
+        elif scelta == "damerau_levenshtein":
+            misura = "Distanza di Damerau–Levenshtein normalizzata"
+            motivo = (
+                "Confronta inserimenti, cancellazioni, sostituzioni e trasposizioni "
+                "adiacenti con costo unitario; divide per la lunghezza massima "
+                "per ottenere un contributo in [0,1]. Non e' la distanza grezza."
+            )
         else:
             misura = "Da decidere"
             motivo = "La misura testuale indicata non e' riconosciuta."
-            avvisi.append("Scegli Levenshtein oppure Hamming per questa colonna.")
+            avvisi.append("Scegli Levenshtein, Damerau–Levenshtein oppure Hamming per questa colonna.")
             stato = "da_completare"
     elif ruolo == "risultato":
         misura = "Da decidere"
@@ -695,6 +702,7 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
     etichetta = {"ripetute": "Misurazioni dello stesso profilo", "tempo": "Osservazioni successive nel tempo",
                  "parti": "Parti dello stesso totale", "coordinate": "Coordinate quantitative da confrontare insieme",
                  "distribuzione": "Distribuzioni di probabilità o istogrammi",
+                 "vettore_binario": "Vettore di presenze e assenze",
                  "altro": "Gruppo di caratteristiche"}.get(tipo_gruppo, "Gruppo di caratteristiche")
     id_gruppo = str(gruppo.get("id", ""))
     id_misura: str | None = None
@@ -717,10 +725,52 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
             (numerico_distribuzione if tipo_gruppo == "distribuzione" else numerico)
             and all(ruoli.get(m) == "quantita" for m in membri)
         )
+        binario = (
+            tipo_gruppo == "vettore_binario"
+            and tipi <= {"binaria", "numerica_costante", "non_numerica"}
+            and all(ruoli.get(m) in {"binaria", "presenza"} for m in membri)
+        )
         if tipo_gruppo in {"ripetute", "tempo", "parti", "coordinate", "distribuzione"} and not quantitativo:
             misura, motivo = "Da decidere", "Questa struttura richiede quantità numeriche, non codici o livelli ordinali."
             avvisi.append("Controlla il significato e il tipo delle colonne del gruppo.")
             stato = "da_completare"
+        elif tipo_gruppo == "vettore_binario":
+            scelte_binarie = {
+                "hamming": "Distanza di Hamming binaria normalizzata",
+                "rogers_tanimoto": "Dissimilarità di Rogers–Tanimoto",
+                "jaccard": "Dissimilarità di Jaccard binaria",
+                "dice": "Dissimilarità di Dice",
+            }
+            scelta_binaria = interpretazione.get(f"misuraBinaria-{id_gruppo}", "")
+            if not binario:
+                misura, motivo = "Da decidere", (
+                    "Servono almeno due colonne di presenze o risposte binarie, "
+                    "ognuna con stati interpretabili come 0 e 1."
+                )
+                avvisi.append(
+                    "Per un vettore binario assegna ruoli presenza/binaria a tutte "
+                    "le colonne e controlla che contengano 0/1 o sì/no."
+                )
+                stato = "da_completare"
+            elif scelta_binaria not in scelte_binarie:
+                misura, motivo = "Da decidere", (
+                    "La scelta dei disaccordi, delle assenze comuni e delle "
+                    "presenze comuni determina la misura binaria del gruppo."
+                )
+                avvisi.append(
+                    "Scegli Hamming, Rogers–Tanimoto, Jaccard oppure Dice "
+                    "per il vettore di presenze."
+                )
+                stato = "da_completare"
+            else:
+                id_misura = scelta_binaria
+                misura = scelte_binarie[id_misura]
+                motivo = {
+                    "hamming": "Quota di caratteristiche binarie discordanti; le assenze comuni contano.",
+                    "rogers_tanimoto": "Penalizza i disaccordi due volte rispetto agli accordi, comprese le doppie assenze.",
+                    "jaccard": "Considera le co-presenze e i disaccordi, ignorando le assenze comuni; due vettori nulli hanno dissimilarità zero per convenzione.",
+                    "dice": "Dà doppio peso alle co-presenze e ignora le assenze comuni; non è definita per un vettore nullo confrontato con se stesso.",
+                }[id_misura]
         elif tipo_gruppo == "coordinate":
             misura, motivo = "Da decidere", (
                 "Scegli esplicitamente la misura per questo gruppo di coordinate quantitative."
@@ -958,6 +1008,11 @@ MISURE_SPECIALIZZATE_CALCOLABILI = {
     "Uguale o diverso",
     "Distanza di Levenshtein normalizzata",
     "Distanza di Hamming normalizzata",
+    "Distanza di Damerau–Levenshtein normalizzata",
+    "Distanza di Hamming binaria normalizzata",
+    "Dissimilarità di Rogers–Tanimoto",
+    "Dissimilarità di Jaccard binaria",
+    "Dissimilarità di Dice",
     "Distanza tra coordinate",
     "Dissimilarità coseno",
     "Dissimilarità di Pearson",
@@ -2126,6 +2181,25 @@ def _politica_mancanti(
         id_gruppo = percorso.get("idGruppo", "")
         tipo_gruppo = percorso.get("tipoGruppo", "altro")
         strategia = interpretazione.get(f"mancanti-gruppo-{id_gruppo}", "")
+        if tipo_gruppo == "vettore_binario":
+            if strategia not in {"escludi_percorso", "zero"}:
+                return {
+                    "presenza": True, "strategia": "da_definire",
+                    "descrizione": "Per le presenze mancanti scegli esplicitamente "
+                    "se ignorare il gruppo nelle coppie coinvolte oppure "
+                    "se il vuoto significa davvero assenza (zero).",
+                    "pronta": False, "colonne": colonne,
+                }
+            return {
+                "presenza": True, "strategia": strategia,
+                "descrizione": (
+                    "Una riga incompleta non contribuisce a questo vettore binario."
+                    if strategia == "escludi_percorso" else
+                    "Ogni vuoto del vettore binario è interpretato esplicitamente "
+                    "come assenza (zero)."
+                ),
+                "pronta": True, "colonne": colonne,
+            }
         ammesse = {"escludi_percorso", "zero"}
         if tipo_gruppo == "tempo":
             ammesse.add("interpola_lineare")
@@ -2676,8 +2750,11 @@ def _limite_teorico_percorso(percorso: dict[str, Any]) -> float | None:
         return None
     if tipo == "separato":
         if misura in {"Uguale o diverso", "Distanza di Levenshtein normalizzata",
-                      "Distanza di Hamming normalizzata"}:
+                      "Distanza di Hamming normalizzata",
+                      "Distanza di Damerau–Levenshtein normalizzata"}:
             return 1.0
+    if percorso.get("tipoGruppo") == "vettore_binario":
+        return 1.0
     if misura in {
         "Dissimilarità coseno", "Dissimilarità di Pearson",
         "Dissimilarità di Spearman",
@@ -2758,6 +2835,102 @@ def _prepara_normalizzazione_percorso(
     }
 
 
+
+
+
+def _decodifica_vettori_binari(
+    risultato: dict[str, Any], percorso: dict[str, Any],
+) -> list[list[int] | None]:
+    """Interpreta solo stati binari non ambigui; nessuna ricodifica di A/B."""
+    tabella = risultato["originale"]
+    nomi = percorso["colonne"]
+    indici = [tabella["intestazioni"].index(nome) for nome in nomi]
+    strategia = percorso["mancanti"].get("strategia", "non_necessaria")
+    positivi = {"1", "1.0", "si", "sì", "yes", "true", "vero", "presente", "attivo"}
+    negativi = {"0", "0.0", "no", "false", "falso", "assente", "inattivo"}
+    vettori: list[list[int] | None] = []
+    for numero_riga, riga in enumerate(tabella["righe"], start=1):
+        if any(mancante(riga[indice]) for indice in indici) and strategia == "escludi_percorso":
+            vettori.append(None)
+            continue
+        valori: list[int] = []
+        for nome, indice in zip(nomi, indici):
+            valore = riga[indice]
+            if mancante(valore):
+                if strategia != "zero":
+                    raise ValueError(
+                        f"Riga {numero_riga}, colonna “{nome}”: conferma "
+                        "il significato dei valori mancanti nel vettore binario."
+                    )
+                valori.append(0)
+                continue
+            stato = str(valore).strip().casefold()
+            if stato in positivi:
+                valori.append(1)
+            elif stato in negativi:
+                valori.append(0)
+            else:
+                raise ValueError(
+                    f"Riga {numero_riga}, colonna “{nome}”: stato binario “{valore}” "
+                    "non riconosciuto. Sono ammessi 0/1 e convenzioni sì/no; "
+                    "non viene deciso arbitrariamente quale etichetta significhi presenza."
+                )
+        vettori.append(valori)
+    return vettori
+
+
+def _distanza_vettori_binari(
+    x: list[int], y: list[int], id_misura: str,
+) -> float:
+    """Stesse convenzioni delle formule del modulo dimostrativo."""
+    if len(x) != len(y) or not x:
+        raise ValueError("I vettori binari devono avere uguale dimensione positiva.")
+    if any(v not in (0, 1) for v in [*x, *y]):
+        raise ValueError("I vettori binari devono contenere soltanto 0 e 1.")
+    n11 = sum(a == 1 and b == 1 for a, b in zip(x, y))
+    n00 = sum(a == 0 and b == 0 for a, b in zip(x, y))
+    m = len(x) - n11 - n00
+    if id_misura == "hamming":
+        return m / len(x)
+    if id_misura == "rogers_tanimoto":
+        return 2 * m / (n11 + n00 + 2 * m)
+    if id_misura == "jaccard":
+        return 0.0 if n11 + m == 0 else m / (n11 + m)
+    if id_misura == "dice":
+        if 2 * n11 + m == 0:
+            raise ValueError(
+                "Dice non è definita tra due vettori entrambi nulli: "
+                "scegli Jaccard oppure Rogers–Tanimoto."
+            )
+        return m / (2 * n11 + m)
+    raise ValueError(f"Misura binaria non riconosciuta: {id_misura}.")
+
+
+def _verifica_vettore_binario_percorso(
+    percorso: dict[str, Any], risultato: dict[str, Any],
+) -> None:
+    """Non promette una matrice completa quando il dominio non lo consente."""
+    if percorso.get("tipoGruppo") != "vettore_binario" or percorso["stato"] == "da_completare":
+        return
+    try:
+        vettori = _decodifica_vettori_binari(risultato, percorso)
+        validi = [v for v in vettori if v is not None]
+        if len(validi) < 2:
+            raise ValueError(
+                "Servono almeno due righe complete confrontabili per il vettore binario."
+            )
+        if percorso["idMisura"] == "dice" and any(not any(v) for v in validi):
+            raise ValueError(
+                "È presente almeno un vettore tutto zero: Dice non è definita "
+                "neppure sulla sua diagonale. Usa Jaccard, Rogers–Tanimoto "
+                "oppure escludi esplicitamente questa riga dal problema."
+            )
+        percorso["righeBinariValide"] = len(validi)
+    except ValueError as errore:
+        percorso["stato"] = "da_completare"
+        percorso["calcolo"]["disponibile"] = False
+        percorso["calcolo"]["descrizione"] = "Correggi la codifica o la misura binaria."
+        percorso.setdefault("avvisi", []).append(str(errore))
 
 
 def _verifica_distribuzione_percorso(
@@ -2895,6 +3068,7 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
         percorso["idPercorso"] = f"percorso-{indice}"
     for percorso in percorsi:
         _verifica_distribuzione_percorso(percorso, risultato)
+        _verifica_vettore_binario_percorso(percorso, risultato)
     # Hamming richiede che tutte le sequenze confrontabili abbiano una
     # lunghezza comune. Il controllo precede il calcolo; non si converte
     # implicitamente a Levenshtein se le lunghezze sono differenti.
@@ -4109,6 +4283,44 @@ def _levenshtein_normalizzata(a: str, b: str) -> float:
     return precedente[-1] / max(len(a), len(b))
 
 
+
+def _damerau_levenshtein_normalizzata(a: str, b: str) -> float:
+    """Damerau–Levenshtein completa, non Optimal String Alignment.
+
+    Il costo minimo è diviso per max(len(a),len(b)). Per due stringhe
+    vuote la dissimilarità è posta a zero, come per Levenshtein.
+    """
+    n, m = len(a), len(b)
+    if not max(n, m):
+        return 0.0
+    infinito = n + m
+    matrice = [[0] * (m + 2) for _ in range(n + 2)]
+    matrice[0][0] = infinito
+    for i in range(n + 1):
+        matrice[i + 1][0] = infinito
+        matrice[i + 1][1] = i
+    for j in range(m + 1):
+        matrice[0][j + 1] = infinito
+        matrice[1][j + 1] = j
+    ultima_riga: dict[str, int] = {}
+    for i in range(1, n + 1):
+        ultima_colonna = 0
+        for j in range(1, m + 1):
+            i1 = ultima_riga.get(b[j - 1], 0)
+            j1 = ultima_colonna
+            costo = int(a[i - 1] != b[j - 1])
+            if costo == 0:
+                ultima_colonna = j
+            matrice[i + 1][j + 1] = min(
+                matrice[i][j] + costo,
+                matrice[i + 1][j] + 1,
+                matrice[i][j + 1] + 1,
+                matrice[i1][j1] + (i - i1 - 1) + 1 + (j - j1 - 1),
+            )
+        ultima_riga[a[i - 1]] = i
+    return matrice[n + 1][m + 1] / max(n, m)
+
+
 def _hamming_normalizzata(a: str, b: str) -> float:
     """Quota delle posizioni discordanti in sequenze di lunghezza identica."""
     if len(a) != len(b):
@@ -4349,11 +4561,27 @@ def _calcola_matrice_specializzata(
                     distanza = _hamming_normalizzata(
                         str(valori[i]).strip(), str(valori[k]).strip()
                     )
+                elif metodo == "Distanza di Damerau–Levenshtein normalizzata":
+                    distanza = _damerau_levenshtein_normalizzata(
+                        str(valori[i]).strip(), str(valori[k]).strip()
+                    )
                 else:
                     raise ValueError(f"Il confronto separato “{metodo}” non è ancora calcolabile.")
                 matrice[i][k] = distanza
                 matrice[k][i] = distanza
         limite: float | None = 1.0
+    elif percorso.get("tipoGruppo") == "vettore_binario":
+        vettori_binari = _decodifica_vettori_binari(risultato, percorso)
+        for i in range(n):
+            for k in range(i + 1, n):
+                distanza = (
+                    None if vettori_binari[i] is None or vettori_binari[k] is None
+                    else _distanza_vettori_binari(
+                        vettori_binari[i], vettori_binari[k], percorso["idMisura"]
+                    )
+                )
+                matrice[i][k] = matrice[k][i] = distanza
+        limite = 1.0
     else:
         analisi_per_nome = {colonna["nome"]: colonna for colonna in risultato["colonne"]}
         strategia = percorso["mancanti"].get("strategia")
@@ -4484,6 +4712,17 @@ def _calcola_matrice_specializzata(
         + ("le trasformazioni numeriche confermate." if percorso["preelaborazione"]["usaTabellaTrasformata"]
            else "i valori originali.")
     )
+    if percorso.get("tipoGruppo") == "vettore_binario":
+        nota += (
+            " Il gruppo confronta simultaneamente tutte le colonne come "
+            "un vettore binario (0/1); nessuna caratteristica è conteggiata "
+            "separatamente in Gower."
+        )
+        if percorso.get("idMisura") == "dice":
+            nota += (
+                " Dice ignora le co-assenze; nessun vettore nullo è ammesso. "
+                "La dissimilarità può non rispettare la disuguaglianza triangolare."
+            )
     if percorso.get("tipoGruppo") == "distribuzione":
         natura = percorso.get("parametri", {}).get("natura")
         nota += (

@@ -348,6 +348,12 @@ teorico e' gia' \([0,1]\).
 
 Nelle **colonne testuali** l'utente puo' scegliere Levenshtein, adatta
 anche a inserimenti e cancellazioni, oppure **Hamming normalizzata**.
+È disponibile anche la **Damerau–Levenshtein completa** (non la variante
+limitata Optimal String Alignment): ammette trasposizioni adiacenti a
+costo unitario e nel percorso CSV è divisa per la lunghezza maggiore,
+\(d_{DL}/\max\{|a|,|b|\}\in[0,1]\). Per due sequenze vuote
+si pone zero. La versione grezza resta nel modulo dimostrativo.
+Questa normalizzazione non garantisce il mantenimento della metrica.
 Per due sequenze della stessa lunghezza \(m>0\):
 \[
 d_{\mathrm H}(a,b)=\frac{1}{m}\sum_{i=1}^m
@@ -363,6 +369,33 @@ Unicode; questo confronto non e' una distanza semantica fra parole.
 La scelta di Kendall in un blocco di profili o di Hamming in una
 colonna testuale non cambia le misure degli altri percorsi; la matrice
 finale aggrega i contributi disponibili con i pesi confermati.
+
+### Gruppi di caratteristiche binarie (Hamming, Rogers–Tanimoto, Jaccard, Dice)
+
+L'utente può assegnare almeno due colonne con ruolo **binaria** o
+**presenza/assenza** a un gruppo «Insieme di presenze/assenze da
+confrontare come vettore binario». I soli stati riconosciuti senza
+interpretazioni arbitrarie sono 0/1 e le convenzioni sì/no, true/false.
+Etichette opache come A/B richiedono una ricodifica consapevole nel CSV.
+Le colonne raggruppate non vengono conteggiate anche in Gower.
+
+La misura è **obbligatoriamente scelta dall'utente**: Hamming binaria
+normalizzata, Rogers–Tanimoto, Jaccard oppure Dice. In funzione dei
+conteggi \(n_{11},n_{00},n_{10},n_{01}\), con
+\(m=n_{10}+n_{01}\) e \(p=n_{11}+n_{00}+m\), si usano
+
+- Hamming binaria \(d=m/p\);
+- Rogers–Tanimoto \(d=2m/(n_{11}+n_{00}+2m)\);
+- Jaccard \(d=m/(n_{11}+m)\), con convenzione \(d(0,0)=0\);
+- Dice \(d=m/(2n_{11}+m)\); quando il vettore nullo compare
+  fra le righe, il piano segnala che il metodo non è definito
+  sulla diagonale e richiede di cambiare misura o dati.
+
+Le quattro dissimilarità sono in \([0,1]\) sulla propria regione
+di definizione. Dice può violare la disuguaglianza triangolare.
+I vuoti non sono automaticamente assenze: l'utente sceglie di
+ignorare il gruppo nelle coppie interessate oppure confermare zero.
+La matrice finale resta unica e i pesi tra blocchi sono indipendenti.
 
 ### Distribuzioni di probabilita' e istogrammi
 

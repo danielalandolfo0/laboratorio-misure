@@ -81,7 +81,8 @@ function createHarness() {
     const numerical = n => n !== "categoria" && n !== "livello" &&
       n !== "codice" && n !== "id" && n !== "gruppo" && n !== "presente";
     const colonne = names.map((nome, i) => {
-      const tipo = numerical(nome) ? "numerica" : "non_numerica";
+      const tipo = /^flag[12]$/.test(nome) ? "binaria" :
+        numerical(nome) ? "numerica" : "non_numerica";
       const valori = data.map(r => Number(r[i])).filter(Number.isFinite);
       const method = choices[i]?.metodo || "auto";
       return {
@@ -107,6 +108,7 @@ function createHarness() {
       questionario: {
         colonne: names.map((nome, i) => ({
           nome, ruoloSuggerito: nome === "id" ? "identificativo" :
+            /^flag[12]$/.test(nome) ? "presenza" :
             nome === "livello" ? "livello" :
             nome === "categoria" || nome === "gruppo" ? "categoria" :
             nome === "codice" ? "testo" : "quantita",
@@ -499,7 +501,56 @@ async function testMahalanobisAvanzata() {
   assert.equal(scelta.tolleranzaPseudoinversa, "1e-10");
 }
 
+async function testGruppoBinarioESceltaTestuale() {
+  const h = createHarness();
+  h.fire("csv-file", "change", {target: {files: [{
+    name: "flag.csv", type: "text/csv", size: 90,
+    text: async () => "flag1,flag2,categoria,id\n1,1,x,A\n1,0,x,B\n0,1,y,C"
+  }]}});
+  await flush();
+  h.fire("add-column-group", "click");
+  for (const nome of ["flag1", "flag2"]) {
+    h.fire("group-assignment-body", "change", {target: h.customTarget(
+      ".group-assignment", {groupColumn: nome}, "gruppo-1"
+    )});
+  }
+  assert.match(h.element("group-config-list").innerHTML, /value="vettore_binario"/);
+  const tipo = h.customTarget(".group-type", {}, "vettore_binario");
+  tipo.closest = () => ({dataset: {groupId: "gruppo-1"}});
+  h.fire("group-config-list", "change", {target: tipo});
+  const html = h.element("adaptive-questions").innerHTML;
+  assert.match(html, /id="misuraBinaria-gruppo-1"/);
+  assert.match(html, /value="rogers_tanimoto"/);
+  assert.match(html, /value="dice"/);
+  assert.match(html, /value="jaccard"/);
+  h.fire("adaptive-questions", "change", {target: h.customTarget(
+    ".semantic-answer", {answer: "misuraBinaria-gruppo-1"}, "dice"
+  )});
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  assert.equal(h.observations.planCalls.at(-1).interpretazione["misuraBinaria-gruppo-1"], "dice");
+  assert.equal(h.observations.planCalls.at(-1).interpretazione.assegnazioni.flag1, "gruppo-1");
+  assert.equal(h.observations.planCalls.at(-1).interpretazione.assegnazioni.flag2, "gruppo-1");
+
+  const t = createHarness();
+  t.fire("csv-file", "change", {target: {files: [{
+    name: "testo.csv", type: "text/csv", size: 80,
+    text: async () => "codice,id\nCA,A\nABC,B\nAC,C"
+  }]}});
+  await flush();
+  assert.match(t.element("adaptive-questions").innerHTML,
+    /value="damerau_levenshtein"/);
+  t.fire("adaptive-questions", "change", {target: t.customTarget(
+    ".text-measure-setting", {textMeasureColumn: "codice"}, "damerau_levenshtein"
+  )});
+  t.fire("prepare-comparison-plan", "click");
+  await flush();
+  assert.equal(t.observations.planCalls.at(-1).interpretazione.misureTestualiPerColonna.codice,
+    "damerau_levenshtein");
+}
+
 (async () => {
+  await testGruppoBinarioESceltaTestuale();
   await testMahalanobisAvanzata();
   await testRiscalamentoNumericoInTabellaMista();
   await testGuida();
