@@ -1335,7 +1335,8 @@ async function testConfermaBrayDoppioZero() {
   assert.equal(h.element("gower-actions").hidden, true);
 
   h.fire("comparison-plan-paths", "change", {
-    target: {id: "bray-zero-convention", value: "zero"}
+    target: {id: "bray-zero-convention", value: "zero",
+      matches: () => false, closest: () => null}
   });
   await flush();
   assert.equal(
@@ -1346,7 +1347,8 @@ async function testConfermaBrayDoppioZero() {
   assert.match(html, /value="zero" selected/);
 
   h.fire("comparison-plan-paths", "change", {
-    target: {id: "bray-zero-convention", value: "indefinita"}
+    target: {id: "bray-zero-convention", value: "indefinita",
+      matches: () => false, closest: () => null}
   });
   await flush();
   assert.equal(
