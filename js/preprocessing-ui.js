@@ -992,6 +992,54 @@
           escapeHtml(op[1]) + '</option>').join("") + '</select></label>';
     }
 
+
+    function configuraNominali(nome, livelli) {
+      const scelta = interpretazione.modalitaCategorieGower?.[nome] || "semplice";
+      let html = menu(
+        "modalitaCategorieGower", nome,
+        "Quanto devono essere differenti due categorie diverse?",
+        [
+          ["semplice", "Uguale o diverso: tutte le categorie distinte valgono 1"],
+          ["personalizzata", "Imposto una dissimilarità diversa per ciascuna coppia"]
+        ],
+        scelta
+      );
+      if (scelta !== "personalizzata") return html;
+      if (livelli.length > 16) {
+        return html + '<p>Le categorie distinte sono ' + livelli.length +
+          '. L’editor personalizzato supporta al massimo 16 stati: ' +
+          'raggruppa le categorie in modo motivato o torna al confronto uguale/diverso.</p>';
+      }
+      const configurata = interpretazione.dissimilaritaCategorieGower?.[nome];
+      const valida = configurata && JSON.stringify(configurata.livelli) === JSON.stringify(livelli);
+      const coppie = valida ? (configurata.coppie || {}) : {};
+      const etichetta = livello => livello === null ? "Assenza confermata" : String(livello);
+      const righe = [];
+      for (let i = 0; i < livelli.length; i++) {
+        for (let j = i + 1; j < livelli.length; j++) {
+          const chiave = i + ":" + j;
+          righe.push(
+            '<label>' + escapeHtml(etichetta(livelli[i])) + ' ↔ ' +
+            escapeHtml(etichetta(livelli[j])) + ': dissimilarità tra 0 e 1' +
+            '<input type="text" class="gower-nominal-pair" data-gower-nominal-column="' +
+            escapeHtml(nome) + '" data-gower-pair="' + chiave +
+            '" data-gower-levels="' + escapeHtml(JSON.stringify(livelli)) +
+            '" value="' + escapeHtml(coppie[chiave] ?? "") +
+            '" placeholder="es. 0,4"></label>'
+          );
+        }
+      }
+      return html + (
+        righe.length
+          ? '<p>Indica tutte le coppie, senza assumere che categorie distinte abbiano distanza 1. ' +
+            'Valore 0 = nessuna differenza; valore 1 = massima differenza. ' +
+            'La matrice sarà simmetrica e con diagonale nulla. ' +
+            'Questi valori non devono necessariamente soddisfare la disuguaglianza triangolare.</p>' +
+            righe.join('')
+          : '<p>La colonna contiene un solo stato: il contributo è sempre zero.</p>'
+      );
+    }
+
     campi.push('<div class="question-item"><strong>Configurazione delle caratteristiche in Gower</strong>' +
       '<p>Ogni caratteristica contribuisce secondo il suo tipo. Puoi assegnare un peso positivo a ciascuna ' +
       'colonna: 1 significa importanza uguale; 2 significa contributo doppio, a parità di disponibilità.</p></div>');
@@ -1047,12 +1095,28 @@
           elementi += '<p>Hai scelto «dipende»: specifica sopra se le assenze contano per questa colonna.</p>';
       }
 
+      if (ruolo === "categoria") {
+        const politica = interpretazione.mancantiPerColonna?.[nome] || "";
+        const comeAssenza = (risultato.colonne.find(c => c.nome === nome)?.mancanti > 0) &&
+          (politica === "assenza" || (!politica && rispostaMancanti === "assenza"));
+        const livelli = [...distinti].sort();
+        if (comeAssenza) livelli.push(null);
+        elementi += configuraNominali(nome, livelli);
+      }
       if (ruolo === "livello") {
         elementi += menu("ordinePerColonna", nome, "I livelli di questa colonna sono ordinati?",
           [["", "Segui la risposta generale"],
             ["si", "Sì, hanno un ordine"], ["no", "No, sono semplici categorie"]],
           interpretazione.ordinePerColonna?.[nome] || "");
         const ordinale = interpretazione.ordinePerColonna?.[nome] || rispostaOrdini;
+        if (ordinale === "no") {
+          const politica = interpretazione.mancantiPerColonna?.[nome] || "";
+          const comeAssenza = (risultato.colonne.find(c => c.nome === nome)?.mancanti > 0) &&
+            (politica === "assenza" || (!politica && rispostaMancanti === "assenza"));
+          const livelliNominali = [...distinti].sort();
+          if (comeAssenza) livelliNominali.push(null);
+          elementi += configuraNominali(nome, livelliNominali);
+        }
         if (ordinale === "si" && tipo === "non_numerica") {
           elementi += '<label>Elenca i livelli dal più basso al più alto, separati da ;' +
             '<input class="gower-setting" data-gower-key="ordiniLivelliGower" data-gower-column="' +
@@ -1062,6 +1126,42 @@
           elementi += '<p>Livelli osservati (senza un ordine implicito): ' +
             escapeHtml(distinti.join(", ")) +
             '. Inseriscili tutti una sola volta nell’ordine corretto.</p>';
+        }
+        if (ordinale === "si") {
+          const numerici = tipo !== "non_numerica";
+          const livelli = numerici
+            ? [...new Set(distinti.map(v => Number(v.replace(",", "."))))].sort((a,b) => a-b)
+            : (interpretazione.ordiniLivelliGower?.[nome] || "").split(";")
+                .map(v => v.trim()).filter(Boolean);
+          const modo = interpretazione.modalitaIntervalliGower?.[nome] || "equidistanti";
+          elementi += menu(
+            "modalitaIntervalliGower", nome,
+            "Quanto sono distanti due livelli consecutivi?",
+            [
+              ["equidistanti", "Tutti gli intervalli contano allo stesso modo"],
+              ["personalizzati", "Indico l’ampiezza di ciascun intervallo (avanzato)"]
+            ],
+            modo
+          );
+          if (modo === "personalizzati" && livelli.length >= 2) {
+            const intervalli = livelli.slice(1).map((v,i) =>
+              escapeHtml(String(livelli[i])) + " → " + escapeHtml(String(v))
+            );
+            elementi += '<label>Ampiezze positive degli intervalli, nell’ordine indicato (' +
+              intervalli.length + ' valori, separati da ;)' +
+              '<input class="gower-setting" data-gower-key="passiOrdinaliGower" ' +
+              'data-gower-column="' + escapeHtml(nome) +
+              '" type="text" value="' +
+              escapeHtml(interpretazione.passiOrdinaliGower?.[nome] || "") +
+              '" placeholder="es. 1; 3"></label>' +
+              '<p>Intervalli: ' + intervalli.join("; ") +
+              '. I valori sono riportati su una scala da 0 a 1 dividendo ' +
+              'le distanze cumulative per la somma delle ampiezze. ' +
+              'Tutte le ampiezze devono essere positive.</p>';
+          } else if (modo === "personalizzati") {
+            elementi += '<p>Definisci prima l’ordine completo dei livelli; ' +
+              'serve almeno una coppia di livelli diversi.</p>';
+          }
         }
       }
       elementi += '</div>';
@@ -1660,6 +1760,22 @@
     disegnaQuestionario();
   });
   $("adaptive-questions").addEventListener("input", evento => {
+    if (evento.target.matches(".gower-nominal-pair")) {
+      const campo = evento.target;
+      const nome = campo.dataset.gowerNominalColumn;
+      const livelli = JSON.parse(campo.dataset.gowerLevels);
+      const contenitore = campo.closest(".question-item");
+      const coppie = {};
+      contenitore.querySelectorAll(".gower-nominal-pair").forEach(input => {
+        coppie[input.dataset.gowerPair] = input.value;
+      });
+      if (!interpretazione.dissimilaritaCategorieGower) {
+        interpretazione.dissimilaritaCategorieGower = {};
+      }
+      interpretazione.dissimilaritaCategorieGower[nome] = {livelli, coppie};
+      nascondiPiano();
+      return;
+    }
     if (!evento.target.matches(".temporal-order-input")) return;
     if (!interpretazione.ordiniTemporaliGruppi) interpretazione.ordiniTemporaliGruppi = {};
     interpretazione.ordiniTemporaliGruppi[evento.target.dataset.groupId] = evento.target.value;
@@ -1747,9 +1863,11 @@
       const colonna = evento.target.dataset.gowerColumn;
       if (!["pesiGower", "mancantiPerColonna", "zeriCondivisiPerColonna",
             "presenzaPositivaPerColonna", "ordinePerColonna", "ordiniLivelliGower",
-            "righeOutlierGower"].includes(chiave)) return;
+            "righeOutlierGower", "modalitaCategorieGower",
+            "modalitaIntervalliGower", "passiOrdinaliGower"].includes(chiave)) return;
       if (!interpretazione[chiave]) interpretazione[chiave] = {};
       interpretazione[chiave][colonna] = evento.target.value;
+      annullaScelteNormalizzazione();
       disegnaQuestionario();
       return;
     }
