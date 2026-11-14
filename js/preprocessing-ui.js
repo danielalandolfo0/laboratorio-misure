@@ -235,6 +235,14 @@
     $("gower-result").hidden = true;
     pianoCorrente = null;
     matriceCorrente = null;
+    // Le promesse annullate possono terminare dopo questa invalidazione.
+    // Ripristina qui i comandi, non soltanto nel finally della promessa
+    // superata, che non deve più modificare l'interfaccia.
+    $("prepare-comparison-plan").disabled = false;
+    $("prepare-comparison-plan").textContent = "Conferma scelte e prepara il piano";
+    $("calculate-gower").disabled = false;
+    $("calculate-gower").textContent = "Calcola la matrice finale";
+    $("download-gower").disabled = true;
     aggiornaVisibilitaTrasformazione();
   }
 

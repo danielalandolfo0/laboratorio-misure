@@ -252,6 +252,8 @@ async function testStalePlanAndMatrix() {
   h.fire("prepare-comparison-plan", "click");
   assert.equal(h.element("comparison-plan").hidden, true);
   h.fire("row-meaning", "change", {value: "persona"});
+  assert.equal(h.element("prepare-comparison-plan").disabled, false,
+    "Dopo la modifica deve essere possibile preparare un nuovo piano.");
   richiestaPiano.resolve(h.makePlan());
   await flush();
   assert.equal(h.element("comparison-plan").hidden, true,
@@ -265,6 +267,8 @@ async function testStalePlanAndMatrix() {
   h.observations.matrixIntercept = () => richiestaMatrice.promise;
   h.fire("calculate-gower", "click");
   h.fire("row-meaning", "change", {value: "evento"});
+  assert.equal(h.element("calculate-gower").disabled, false,
+    "Il pulsante di calcolo va ripristinato quando il piano viene invalidato.");
   richiestaMatrice.resolve(h.makeMatrix());
   await flush();
   assert.equal(h.element("gower-result").hidden, true,
