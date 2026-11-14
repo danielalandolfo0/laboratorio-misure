@@ -688,19 +688,19 @@ agli estremi restano esclusi. Ogni percorso contribuisce alla stessa
 matrice normalizzata in \([0,1]\), senza sostituzioni arbitrarie per
 coppie non confrontabili.
 
-Nei gruppi temporali l'utente deve confermare esplicitamente
-l'**ordine cronologico** (elencando tutte e sole le colonne del gruppo)
-e dichiarare che gli intervalli temporali sono **regolari**. L'ordine
-non viene dedotto dal CSV e, se viene cambiato, determina effettivamente
-l'ordine delle coordinate usato dalla DTW e dal confronto punto per punto.
-Se gli istanti non sono equidistanti, il percorso si interrompe e chiede
-un ricampionamento o un allineamento esplicito (non ancora disponibile).
-L'interpolazione lineare e' applicata soltanto ai vuoti interni in una
-serie con campionamento regolare; una serie priva del primo o dell'ultimo
-valore non viene estrapolata. Nei profili numerici, media e mediana sono stimate
-separatamente per colonna. Nei percorsi testuali una casella vuota può essere
-esclusa dal solo percorso oppure interpretata come stringa vuota, ma soltanto
-dopo una conferma esplicita.
+Nei gruppi temporali l'utente conferma l'**ordine cronologico**
+(elencando tutte e sole le colonne del gruppo), poi specifica se
+il campionamento è regolare o irregolare. L'ordine non viene dedotto
+dal CSV. Per tempi irregolari la comparazione è disponibile solo
+con una griglia temporale reale condivisa da tutte le righe; la DTW
+richiede in tal caso una penalità sullo sfasamento oppure si può
+usare LCSS o un confronto sincronizzato. L'interpolazione lineare,
+sempre esplicitamente scelta, ricostruisce soltanto i vuoti interni
+in proporzione ai tempi dichiarati: non estrapola il primo o
+l'ultimo valore. Nei profili numerici, media e mediana sono stimate
+separatamente per colonna. Nei percorsi testuali una casella vuota
+può essere esclusa dal solo percorso oppure interpretata come stringa
+vuota, ma soltanto dopo una conferma esplicita.
 
 La distanza composizionale di Aitchison non accetta zeri. Se l’utente conferma
 che rappresentano valori sotto soglia, il sito chiude ogni riga a somma 1,
