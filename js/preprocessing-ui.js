@@ -1659,8 +1659,9 @@
           `Nel gruppo “${escapeHtml(gruppo.nome)}”, come confrontiamo le presenze e le assenze?`,
           "Le colonne sono confrontate insieme come vettori 0/1, senza usare Gower "
           + "sulle stesse colonne. Rogers–Tanimoto raddoppia i disaccordi; Dice "
-          + "dà più peso alle presenze condivise. Dice non è definita per un "
-          + "vettore tutto zero; Jaccard adotta in questo caso la convenzione 0.",
+          + "dà più peso alle presenze condivise. Jaccard considera uguali due "
+          + "vettori di assenze osservate; Dice non è definita quando il "
+          + "denominatore è nullo. Un dato non osservato non è un'assenza.",
           [
             ["hamming", "Hamming binaria: quota di disaccordi, comprese le assenze comuni"],
             ["rogers_tanimoto", "Rogers–Tanimoto: penalizza maggiormente i disaccordi"],
@@ -1673,10 +1674,15 @@
           domande.push(domandaAdattiva(
             `mancanti-gruppo-${gruppo.id}`,
             `Nel gruppo “${escapeHtml(gruppo.nome)}”, come trattiamo i valori mancanti?`,
-            "Il sito non inventa una presenza o assenza. Puoi ignorare il blocco per "
-            + "le coppie coinvolte oppure dichiarare esplicitamente che vuoto significa zero.",
-            [["escludi_percorso", "Non usare questo blocco per una riga con vuoti"],
-             ["zero", "Confermo che ogni vuoto rappresenta assenza (zero)"]]
+            "Se scegli le coordinate osservate in entrambe le righe, una doppia "
+            + "assenza realmente osservata conta come informazione, mentre "
+            + "un valore mancante viene ignorato. Senza coordinate comuni "
+            + "il contributo non è disponibile; Dice è indefinita quando "
+            + "rimangono soltanto assenze comuni. Altri blocchi possono "
+            + "ancora confrontare la stessa coppia di righe.",
+            [["escludi_percorso", "Ignora il blocco se una delle due righe contiene vuoti"],
+             ["pairwise", "Confronta soltanto le caratteristiche osservate in entrambe le righe"],
+             ["zero", "Confermo che ogni vuoto rappresenta davvero assenza (zero)"]]
           ));
         }
         return;

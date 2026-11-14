@@ -796,7 +796,54 @@ async function testSerieTemporaliPerRiga() {
   assert.equal(scelta.metodiAllineamentoTemporaleGruppi?.["gruppo-1"], undefined);
 }
 
+
+async function testMancantiBinariPairwise() {
+  const h = createHarness();
+  h.observations.tableIntercept = (csv, scelte) => {
+    const data = h.makeTable(csv, scelte);
+    for (const colonna of data.colonne) {
+      if (colonna.nome === "flag1" || colonna.nome === "flag2") {
+        colonna.mancanti = 1;
+      }
+    }
+    return Promise.resolve(data);
+  };
+  h.fire("csv-file", "change", {target: {files: [{
+    name: "binari-mancanti.csv", type: "text/csv", size: 100,
+    text: async () =>
+      "flag1,flag2,categoria,id\n1,NA,x,A\n1,0,x,B\n0,1,y,C"
+  }]}});
+  await flush();
+  h.fire("add-column-group", "click");
+  for (const nome of ["flag1", "flag2"]) {
+    h.fire("group-assignment-body", "change", {target: h.customTarget(
+      ".group-assignment", {groupColumn: nome}, "gruppo-1"
+    )});
+  }
+  const tipo = h.customTarget(".group-type", {}, "vettore_binario");
+  tipo.closest = () => ({dataset: {groupId: "gruppo-1"}});
+  h.fire("group-config-list", "change", {target: tipo});
+  const html = h.element("adaptive-questions").innerHTML;
+  assert.match(html, /id="mancanti-gruppo-gruppo-1"/);
+  assert.match(html, /value="pairwise"/);
+  assert.match(html, /coordinate osservate/);
+  h.fire("adaptive-questions", "change", {target: h.customTarget(
+    ".semantic-answer", {answer: "misuraBinaria-gruppo-1"}, "jaccard"
+  )});
+  h.fire("adaptive-questions", "change", {target: h.customTarget(
+    ".semantic-answer", {answer: "mancanti-gruppo-gruppo-1"}, "pairwise"
+  )});
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  const dati = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(dati["misuraBinaria-gruppo-1"], "jaccard");
+  assert.equal(dati["mancanti-gruppo-gruppo-1"], "pairwise");
+  assert.equal(dati.assegnazioni.flag1, "gruppo-1");
+  assert.equal(dati.assegnazioni.flag2, "gruppo-1");
+}
+
 (async () => {
+  await testMancantiBinariPairwise();
   await testSerieTemporaliPerRiga();
   await testScelteTemporaliAvanzate();
   await testInsiemiECicliQuestionario();

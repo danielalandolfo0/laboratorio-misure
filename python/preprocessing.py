@@ -2499,12 +2499,13 @@ def _politica_mancanti(
                 ),
             }
         if tipo_gruppo == "vettore_binario":
-            if strategia not in {"escludi_percorso", "zero"}:
+            if strategia not in {"escludi_percorso", "zero", "pairwise"}:
                 return {
                     "presenza": True, "strategia": "da_definire",
                     "descrizione": "Per le presenze mancanti scegli esplicitamente "
-                    "se ignorare il gruppo nelle coppie coinvolte oppure "
-                    "se il vuoto significa davvero assenza (zero).",
+                    "se ignorare il gruppo nelle coppie coinvolte, confrontare "
+                    "soltanto le coordinate osservate da entrambe le righe, "
+                    "oppure confermare che ogni vuoto significhi assenza (zero).",
                     "pronta": False, "colonne": colonne,
                 }
             return {
@@ -2512,6 +2513,11 @@ def _politica_mancanti(
                 "descrizione": (
                     "Una riga incompleta non contribuisce a questo vettore binario."
                     if strategia == "escludi_percorso" else
+                    "Per ogni coppia di righe si confrontano solo le caratteristiche "
+                    "osservate in entrambe. Se non ne esistono, il contributo è "
+                    "non disponibile, non zero. I doppi zeri osservati sono validi; "
+                    "per Dice le sole doppie assenze non definiscono la misura."
+                    if strategia == "pairwise" else
                     "Ogni vuoto del vettore binario è interpretato esplicitamente "
                     "come assenza (zero)."
                 ),
@@ -3183,29 +3189,37 @@ def _prepara_normalizzazione_percorso(
 
 def _decodifica_vettori_binari(
     risultato: dict[str, Any], percorso: dict[str, Any],
-) -> list[list[int] | None]:
-    """Interpreta solo stati binari non ambigui; nessuna ricodifica di A/B."""
+) -> list[list[int | None] | None]:
+    """Decodifica soltanto valori 0/1 o sì/no, preservando i mancanti pairwise.
+
+    list None = intera riga non disponibile in questo blocco;
+    elemento None = coordinata mancante da escludere soltanto dalla coppia.
+    """
     tabella = risultato["originale"]
     nomi = percorso["colonne"]
     indici = [tabella["intestazioni"].index(nome) for nome in nomi]
     strategia = percorso["mancanti"].get("strategia", "non_necessaria")
     positivi = {"1", "1.0", "si", "sì", "yes", "true", "vero", "presente", "attivo"}
     negativi = {"0", "0.0", "no", "false", "falso", "assente", "inattivo"}
-    vettori: list[list[int] | None] = []
+    vettori: list[list[int | None] | None] = []
     for numero_riga, riga in enumerate(tabella["righe"], start=1):
-        if any(mancante(riga[indice]) for indice in indici) and strategia == "escludi_percorso":
+        if (strategia == "escludi_percorso"
+                and any(mancante(riga[indice]) for indice in indici)):
             vettori.append(None)
             continue
-        valori: list[int] = []
+        valori: list[int | None] = []
         for nome, indice in zip(nomi, indici):
             valore = riga[indice]
             if mancante(valore):
-                if strategia != "zero":
+                if strategia == "zero":
+                    valori.append(0)
+                elif strategia == "pairwise":
+                    valori.append(None)
+                else:
                     raise ValueError(
                         f"Riga {numero_riga}, colonna “{nome}”: conferma "
                         "il significato dei valori mancanti nel vettore binario."
                     )
-                valori.append(0)
                 continue
             stato = str(valore).strip().casefold()
             if stato in positivi:
@@ -3223,26 +3237,37 @@ def _decodifica_vettori_binari(
 
 
 def _distanza_vettori_binari(
-    x: list[int], y: list[int], id_misura: str,
-) -> float:
-    """Stesse convenzioni delle formule del modulo dimostrativo."""
+    x: list[int | None], y: list[int | None], id_misura: str,
+    *, consenti_indefiniti: bool = False,
+) -> float | None:
+    """Distanza sulle sole coordinate osservate congiuntamente.
+
+    Nessuna coordinata comune: None per qualunque misura.
+    Jaccard per soli doppi zeri osservati: 0 (contributo valido).
+    Dice per soli doppi zeri: indefinita, non va convertita in zero.
+    """
     if len(x) != len(y) or not x:
         raise ValueError("I vettori binari devono avere uguale dimensione positiva.")
-    if any(v not in (0, 1) for v in [*x, *y]):
-        raise ValueError("I vettori binari devono contenere soltanto 0 e 1.")
-    n11 = sum(a == 1 and b == 1 for a, b in zip(x, y))
-    n00 = sum(a == 0 and b == 0 for a, b in zip(x, y))
-    m = len(x) - n11 - n00
+    if any(v is not None and v not in (0, 1) for v in [*x, *y]):
+        raise ValueError("I vettori binari devono contenere soltanto 0 e 1 osservati.")
+    comuni = [(a, b) for a, b in zip(x, y) if a is not None and b is not None]
+    if not comuni:
+        return None
+    n11 = sum(a == 1 and b == 1 for a, b in comuni)
+    n00 = sum(a == 0 and b == 0 for a, b in comuni)
+    m = len(comuni) - n11 - n00
     if id_misura == "hamming":
-        return m / len(x)
+        return m / len(comuni)
     if id_misura == "rogers_tanimoto":
         return 2 * m / (n11 + n00 + 2 * m)
     if id_misura == "jaccard":
         return 0.0 if n11 + m == 0 else m / (n11 + m)
     if id_misura == "dice":
         if 2 * n11 + m == 0:
+            if consenti_indefiniti:
+                return None
             raise ValueError(
-                "Dice non è definita tra due vettori entrambi nulli: "
+                "Dice non è definita tra due vettori con sole assenze comuni: "
                 "scegli Jaccard oppure Rogers–Tanimoto."
             )
         return m / (2 * n11 + m)
@@ -3252,29 +3277,78 @@ def _distanza_vettori_binari(
 def _verifica_vettore_binario_percorso(
     percorso: dict[str, Any], risultato: dict[str, Any],
 ) -> None:
-    """Non promette una matrice completa quando il dominio non lo consente."""
+    """Valida la codifica e l'esistenza di almeno un confronto locale."""
     if percorso.get("tipoGruppo") != "vettore_binario" or percorso["stato"] == "da_completare":
         return
     try:
         vettori = _decodifica_vettori_binari(risultato, percorso)
+        strategia = percorso["mancanti"]["strategia"]
         validi = [v for v in vettori if v is not None]
-        if len(validi) < 2:
-            raise ValueError(
-                "Servono almeno due righe complete confrontabili per il vettore binario."
+        if strategia != "pairwise":
+            if len(validi) < 2:
+                raise ValueError(
+                    "Servono almeno due righe complete confrontabili per il vettore binario."
+                )
+            if percorso["idMisura"] == "dice" and any(not any(v) for v in validi):
+                raise ValueError(
+                    "È presente almeno un vettore tutto zero: Dice non è definita "
+                    "neppure sulla sua diagonale. Usa Jaccard, Rogers–Tanimoto "
+                    "oppure escludi esplicitamente questa riga dal problema."
+                )
+            percorso["righeBinariValide"] = len(validi)
+        else:
+            # La definizione locale può essere non disponibile soltanto per
+            # alcune coppie. L'aggregazione globale ne conserva la maschera.
+            valide = 0
+            senza_coordinate = 0
+            dice_solo_assenze = 0
+            for i in range(len(vettori)):
+                for j in range(i + 1, len(vettori)):
+                    a, b = vettori[i], vettori[j]
+                    if a is None or b is None:
+                        continue
+                    numero_comuni = sum(
+                        u is not None and v is not None for u, v in zip(a, b)
+                    )
+                    if numero_comuni == 0:
+                        senza_coordinate += 1
+                        continue
+                    distanza = _distanza_vettori_binari(
+                        a, b, percorso["idMisura"], consenti_indefiniti=True
+                    )
+                    if distanza is None:
+                        dice_solo_assenze += 1
+                    else:
+                        valide += 1
+            if valide == 0:
+                raise ValueError(
+                    "Non esiste alcuna coppia con contributo binario definito "
+                    "sulle coordinate osservate da entrambe le righe. "
+                    "Rivedi i dati, la misura o il trattamento dei mancanti."
+                )
+            percorso["righeBinariValide"] = sum(
+                v is not None and any(s is not None for s in v) for v in vettori
             )
-        if percorso["idMisura"] == "dice" and any(not any(v) for v in validi):
-            raise ValueError(
-                "È presente almeno un vettore tutto zero: Dice non è definita "
-                "neppure sulla sua diagonale. Usa Jaccard, Rogers–Tanimoto "
-                "oppure escludi esplicitamente questa riga dal problema."
-            )
-        percorso["righeBinariValide"] = len(validi)
+            percorso["coppieBinariValide"] = valide
+            percorso["coppieSenzaCoordinateComuni"] = senza_coordinate
+            percorso["coppieDiceIndefinite"] = dice_solo_assenze
+            if senza_coordinate or dice_solo_assenze:
+                percorso.setdefault("avvisi", []).append(
+                    f"Il blocco binario dispone di {valide} confronti definiti; "
+                    f"{senza_coordinate} coppie non condividono coordinate osservate"
+                    + (
+                        f" e {dice_solo_assenze} coppie hanno Dice indefinita "
+                        "per sole assenze comuni."
+                        if dice_solo_assenze else "."
+                    )
+                    + " Queste coppie non ricevono contributo dal blocco, "
+                    "ma possono essere coperte da altri percorsi."
+                )
     except ValueError as errore:
         percorso["stato"] = "da_completare"
         percorso["calcolo"]["disponibile"] = False
         percorso["calcolo"]["descrizione"] = "Correggi la codifica o la misura binaria."
         percorso.setdefault("avvisi", []).append(str(errore))
-
 
 
 def _leggi_insieme_etichette(
@@ -5311,7 +5385,10 @@ def _calcola_matrice_specializzata(
                 distanza = (
                     None if vettori_binari[i] is None or vettori_binari[k] is None
                     else _distanza_vettori_binari(
-                        vettori_binari[i], vettori_binari[k], percorso["idMisura"]
+                        vettori_binari[i], vettori_binari[k], percorso["idMisura"],
+                        consenti_indefiniti=(
+                            percorso["mancanti"]["strategia"] == "pairwise"
+                        ),
                     )
                 )
                 matrice[i][k] = matrice[k][i] = distanza
@@ -5494,6 +5571,13 @@ def _calcola_matrice_specializzata(
             "un vettore binario (0/1); nessuna caratteristica è conteggiata "
             "separatamente in Gower."
         )
+        if percorso["mancanti"]["strategia"] == "pairwise":
+            nota += (
+                " Le distanze sono calcolate solo sulle coordinate osservate "
+                "congiuntamente. Se non ve ne sono, il contributo locale "
+                "è non disponibile (non zero); Jaccard sui soli doppi zeri "
+                "osservati vale zero, mentre Dice è non definita."
+            )
         if percorso.get("idMisura") == "dice":
             nota += (
                 " Dice ignora le co-assenze; nessun vettore nullo è ammesso. "
@@ -5835,10 +5919,15 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
         })
 
     matrice_finale: list[list[float | None]] = [[0.0 for _ in range(n)] for _ in range(n)]
+    coppie_con_copertura_parziale = 0
+    coppie_con_solo_un_percorso = 0
+    contributi_minimi = len(componenti)
+    contributi_massimi = 0
     for i in range(n):
         for k in range(i + 1, n):
             numeratore = 0.0
             denominatore = 0.0
+            percorsi_disponibili = 0
             for componente in componenti:
                 posizione_i = componente["posizioni"].get(i)
                 posizione_k = componente["posizioni"].get(k)
@@ -5850,12 +5939,33 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
                 peso = float(componente["percorso"]["pesoAggregazione"])
                 numeratore += peso * float(valore)
                 denominatore += peso
+                percorsi_disponibili += 1
+            contributi_minimi = min(contributi_minimi, percorsi_disponibili)
+            contributi_massimi = max(contributi_massimi, percorsi_disponibili)
+            if 0 < percorsi_disponibili < len(componenti):
+                coppie_con_copertura_parziale += 1
+                if percorsi_disponibili == 1:
+                    coppie_con_solo_un_percorso += 1
             distanza = None if denominatore == 0 else numeratore / denominatore
             matrice_finale[i][k] = distanza
             matrice_finale[k][i] = distanza
 
     etichette = _etichette_righe(risultato, interpretazione)
     diagnostica_finale = _valida_matrice_finale(matrice_finale, etichette)
+    diagnostica_finale["coppieCoperturaParziale"] = coppie_con_copertura_parziale
+    diagnostica_finale["coppieConSoloUnPercorso"] = coppie_con_solo_un_percorso
+    diagnostica_finale["minContributiPerCoppia"] = contributi_minimi
+    diagnostica_finale["maxContributiPerCoppia"] = contributi_massimi
+    if coppie_con_copertura_parziale:
+        diagnostica_finale["avvisi"].append(
+            f"{coppie_con_copertura_parziale} coppie usano meno di "
+            f"{len(componenti)} blocchi; {coppie_con_solo_un_percorso} "
+            "coppie sono confrontate con un solo blocco. "
+            "La media pesata è rinormalizzata sui soli contributi "
+            "effettivamente disponibili: non si è sostituita alcuna "
+            "distanza mancante con zero. Le coppie possono utilizzare "
+            "informazioni differenti."
+        )
     for componente in componenti:
         numero_sature = componente["diagnosticaNormalizzazione"]["coppieSaturate"]
         if numero_sature:

@@ -437,6 +437,42 @@ I vuoti non sono automaticamente assenze: l'utente sceglie di
 ignorare il gruppo nelle coppie interessate oppure confermare zero.
 La matrice finale resta unica e i pesi tra blocchi sono indipendenti.
 
+### Mancanti nei vettori binari: confronto sulle coordinate comuni
+
+Nel gruppo **vettore binario** con valori mancanti sono ora disponibili
+tre politiche scelte dall'utente:
+
+1. **Escludi il contributo del gruppo per una riga incompleta**:
+   una coppia che contiene tale riga non usa il blocco.
+2. **Confronta le coordinate osservate da entrambe le righe** (*pairwise*):
+   con \(O_{ij}=\{\ell:x_{i\ell},x_{j\ell}\text{ osservati}\}\)
+   si calcolano i conteggi \(n_{11},n_{00},n_{10},n_{01}\)
+   **soltanto su \(O_{ij}\)**. Le formule di Hamming,
+   Rogers–Tanimoto, Jaccard e Dice usano esclusivamente questi conteggi.
+3. **Interpreta ogni mancante come zero**, esclusivamente dopo conferma
+   che il vuoto significhi davvero assenza osservata.
+
+Se \(O_{ij}=\varnothing\), tutte le misure binarie restituiscono un
+**contributo non disponibile**, non una dissimilarità nulla. Se
+\(|O_{ij}|>0\) e tutte le coordinate osservate congiuntamente sono
+doppie assenze, Jaccard restituisce **zero con contributo valido**
+per la convenzione dichiarata. Per Dice il denominatore è zero:
+quel contributo resta **indefinito**, non è convertito in zero e può
+essere coperto da altri percorsi del modello; per un blocco Dice senza
+mancanti continua a valere il controllo prudenziale dei vettori nulli
+prima del calcolo. Se nessuna coppia è definita, il piano del gruppo
+è incompleto; se manca un contributo globale per almeno una coppia,
+la matrice finale viene bloccata.
+
+La politica pairwise può ridurre il numero di coordinate da una
+coppia all'altra e **non garantisce la triangolarità**, anche quando
+la formula originale ha proprietà metriche. La diagnostica finale
+conta quante coppie sono state confrontate utilizzando meno blocchi
+di quelli dichiarati, e quante si basano su un unico blocco.
+La somma dei pesi globali viene ricalcolata usando solo i blocchi
+validi per la coppia, secondo la Fase 6 della bozza, senza riempire
+con zero il contributo di un blocco non disponibile.
+
 ### Distribuzioni di probabilita' e istogrammi
 
 Un gruppo di colonne puo' essere interpretato esplicitamente come **bin
