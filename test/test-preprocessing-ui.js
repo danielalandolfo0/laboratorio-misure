@@ -936,7 +936,115 @@ async function testLogaritmoStrettamentePositivo() {
   assert.match(hn.element("scaling-body").innerHTML, /value="log1p" disabled/);
 }
 
+async function testModalitaPesiGlobali() {
+  const h = createHarness();
+  h.fire("load-example-csv", "click");
+  await flush();
+  h.observations.planIntercept = (_csv, _scelte, interpretazione) => {
+    const piano = h.makePlan();
+    const modalita = interpretazione.modalitaPesiPercorsi ||
+      (Object.keys(interpretazione.pesiPercorsi || {}).length
+        ? "personalizzati" : "uguali");
+    const colonne = [["x", "y"], ["categoria"]];
+    const pesi = colonne.map((c, index) =>
+      modalita === "dimensione" ? c.length :
+        modalita === "personalizzati"
+          ? Number(interpretazione.pesiPercorsi?.["percorso-" + (index + 1)] ?? 1)
+          : 1
+    );
+    piano.conteggioPercorsi = 2;
+    piano.percorsi[0].colonne = colonne[0];
+    piano.percorsi[0].numeroCaratteristiche = 2;
+    piano.percorsi[0].pesoAggregazione = pesi[0];
+    const secondo = {
+      ...piano.percorsi[0], idPercorso: "percorso-2",
+      titolo: "Categorie", colonne: colonne[1],
+      numeroCaratteristiche: 1, pesoAggregazione: pesi[1]
+    };
+    piano.percorsi = [piano.percorsi[0], secondo];
+    piano.pesaturaGlobale = {
+      modalita, dimensioniBlocchi: {"percorso-1": 2, "percorso-2": 1},
+      descrizione: modalita === "dimensione"
+        ? "Peso uguale al numero di colonne." : "Pesi globali positivi."
+    };
+    return Promise.resolve(piano);
+  };
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  let html = h.element("comparison-plan-paths").innerHTML;
+  assert.match(html, /class="global-weights-mode"/);
+  assert.match(html, /value="dimensione"/);
+  assert.match(html, /value="personalizzati"/);
+  assert.match(html, /value="uguali" selected/);
+  assert.doesNotMatch(html, /class="path-weight"/);
+
+  h.fire("comparison-plan-paths", "change", {
+    target: h.customTarget(".global-weights-mode", {}, "dimensione")
+  });
+  await flush();
+  assert.equal(h.observations.planCalls.at(-1).interpretazione.modalitaPesiPercorsi,
+    "dimensione");
+  html = h.element("comparison-plan-paths").innerHTML;
+  assert.match(html, /value="dimensione" selected/);
+  assert.match(html, /Peso globale: 2/);
+  assert.match(html, /Peso globale: 1/);
+  assert.match(html, /Colonne del blocco/);
+  assert.doesNotMatch(html, /class="path-weight"/);
+
+  h.fire("comparison-plan-paths", "change", {
+    target: h.customTarget(".global-weights-mode", {}, "personalizzati")
+  });
+  await flush();
+  assert.match(h.element("comparison-plan-paths").innerHTML,
+    /class="path-weight"/);
+  h.fire("comparison-plan-paths", "change", {
+    target: h.customTarget(".path-weight", {pathId: "percorso-1"}, "2.5")
+  });
+  await flush();
+  let ultima = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(ultima.modalitaPesiPercorsi, "personalizzati");
+  assert.equal(ultima.pesiPercorsi["percorso-1"], "2.5");
+
+  // Cambiare modalità non deve continuare ad applicare i pesi salvati:
+  // il motore usa solo la modalità esplicitamente attiva.
+  h.fire("comparison-plan-paths", "change", {
+    target: h.customTarget(".global-weights-mode", {}, "uguali")
+  });
+  await flush();
+  ultima = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(ultima.modalitaPesiPercorsi, "uguali");
+  assert.equal(ultima.pesiPercorsi["percorso-1"], "2.5");
+  html = h.element("comparison-plan-paths").innerHTML;
+  assert.match(html, /value="uguali" selected/);
+  assert.doesNotMatch(html, /class="path-weight"/);
+  assert.match(html, /Peso globale: 1/);
+
+  // Cambio strutturale: non applicare pesi personalizzati alla prossima
+  // numerazione dei percorsi. La modalità dimensione invece ricalcola.
+  h.fire("comparison-plan-paths", "change", {
+    target: h.customTarget(".global-weights-mode", {}, "personalizzati")
+  });
+  await flush();
+  h.fire("add-column-group", "click");
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  ultima = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(ultima.modalitaPesiPercorsi, "uguali");
+  assert.equal(ultima.pesiPercorsi, undefined);
+  h.fire("comparison-plan-paths", "change", {
+    target: h.customTarget(".global-weights-mode", {}, "dimensione")
+  });
+  await flush();
+  h.fire("add-column-group", "click");
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  ultima = h.observations.planCalls.at(-1).interpretazione;
+  assert.equal(ultima.modalitaPesiPercorsi, "dimensione");
+  assert.equal(ultima.pesiPercorsi, undefined);
+}
+
 (async () => {
+  await testModalitaPesiGlobali();
   await testLogaritmoStrettamentePositivo();
   await testMarcatoriMancantiMisti();
   await testMancantiBinariPairwise();
