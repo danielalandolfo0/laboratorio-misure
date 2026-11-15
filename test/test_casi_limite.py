@@ -213,4 +213,44 @@ for matrice, messaggio in (
         lambda m=matrice: p._valida_matrice_finale(m, ["A", "B"]), messaggio
     )
 
+
+# Priorità 1: la matrice finale deve soddisfare gli invarianti ESATTI,
+# non soltanto superarli entro la tolleranza numerica.
+approssimata = [
+    [3e-13, 0.3 + 4e-11, -5e-13],
+    [0.3, -4e-13, 1 + 5e-13],
+    [2e-13, 1 + 7e-13, -2e-13],
+]
+diagnostica = p._valida_matrice_finale(approssimata, ["A", "B", "C"])
+assert diagnostica["coppieTotali"] == 3
+for i in range(3):
+    assert approssimata[i][i] == 0.0
+    for j in range(3):
+        assert approssimata[i][j] == approssimata[j][i]
+        assert math.isfinite(approssimata[i][j])
+        assert 0.0 <= approssimata[i][j] <= 1.0
+vicino(approssimata[0][1], 0.3 + 2e-11)
+assert approssimata[0][2] == 0.0
+assert approssimata[1][2] == 1.0
+
+# Verificare anche l'altra metà del triangolo: differenze piccole
+# rispetto alla tolleranza di simmetria non giustificano valori
+# significativamente fuori dall'intervallo [0,1].
+for matrice, messaggio in (
+    ([[0, 1], [1 + 2e-11, 0]], "intervallo"),
+    ([[0, -2e-11], [0, 0]], "intervallo"),
+    ([[0, None], [0.2, 0]], "disponibilita"),
+    ([[0, 0.1], [0.1 + 2e-10, 0]], "simmetrica"),
+    ([[2e-11, 0.2], [0.2, 0]], "diagonale"),
+):
+    deve_fallire(
+        lambda m=matrice: p._valida_matrice_finale(m, ["A", "B"]),
+        messaggio
+    )
+
+# Su matrici già esatte la validazione non deve alterare il risultato.
+gia_esatta = [[0.0, 0.1], [0.1, 0.0]]
+p._valida_matrice_finale(gia_esatta, ["A", "B"])
+assert gia_esatta == [[0.0, 0.1], [0.1, 0.0]]
+
 print("Collaudo trasversale dei casi limite superato.")
