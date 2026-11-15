@@ -5120,8 +5120,17 @@ def _distanza_coordinate_comuni(
     if any(not math.isfinite(float(x[i])) or not math.isfinite(float(y[i]))
            for i in comuni):
         raise ValueError("Le coordinate comuni devono essere numeri finiti.")
+    scarti = [abs(float(x[i]) - float(y[i])) for i in comuni]
+    if any(not math.isfinite(d) for d in scarti):
+        raise ValueError(
+            "Uno scarto numerico supera l'intervallo rappresentabile: "
+            "verifica la scala dei valori prima del confronto."
+        )
     if id_misura in {"chebyshev", "weighted_chebyshev"}:
-        return max(pesi[i] * abs(float(x[i]) - float(y[i])) for i in comuni)
+        risultato = max(pesi[i] * d for i, d in zip(comuni, scarti))
+        if not math.isfinite(risultato):
+            raise ValueError("La distanza pesata supera l'intervallo numerico rappresentabile.")
+        return risultato
     q = (
         1.0 if id_misura == "manhattan"
         else 2.0 if id_misura == "euclidean"
@@ -5129,11 +5138,30 @@ def _distanza_coordinate_comuni(
     )
     if not math.isfinite(q) or q < 1:
         raise ValueError("L'esponente di Minkowski deve essere finito e almeno 1.")
-    somma_pesi = sum(pesi[i] for i in comuni)
-    return (
-        sum(pesi[i] * abs(float(x[i]) - float(y[i])) ** q for i in comuni)
-        / somma_pesi
-    ) ** (1 / q)
+    massimo_scarto = max(scarti)
+    if massimo_scarto == 0:
+        return 0.0
+    # Log-sum-exp sulla forma omogenea. Evita sia overflow in
+    # somma(w*d^q)/somma(w), sia underflow quando l'unica differenza
+    # non nulla ha peso minuscolo rispetto alle altre coordinate.
+    log_termini = [
+        math.log(pesi[i]) + q * math.log(d / massimo_scarto)
+        for i, d in zip(comuni, scarti) if d > 0
+    ]
+    massimo_log = max(log_termini)
+    log_numeratore = massimo_log + math.log(
+        math.fsum(math.exp(t - massimo_log) for t in log_termini)
+    )
+    massimo_peso = max(pesi[i] for i in comuni)
+    log_denominatore = math.log(massimo_peso) + math.log(
+        math.fsum(pesi[i] / massimo_peso for i in comuni)
+    )
+    risultato = massimo_scarto * math.exp(
+        (log_numeratore - log_denominatore) / q
+    )
+    if not math.isfinite(risultato):
+        raise ValueError("La distanza supera l'intervallo numerico rappresentabile.")
+    return risultato
 
 
 def _distanza_numerica(
