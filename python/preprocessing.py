@@ -6617,27 +6617,86 @@ def _diagnostica_sensibilita_pesi(
                 else:
                     scheda["coppieLocaliPositive"] += 1
                 disponibili.append((k, peso, distanza))
-            somma_pesi = sum(w for _, w, _ in disponibili)
-            if somma_pesi <= 0:
+            if not disponibili:
                 raise ValueError("La sensibilità non è definita per coppie prive di blocchi.")
-            somma_pesata = sum(w * v for _, w, v in disponibili)
             base = float(matrice_finale[i][j])
-            for k, peso, valore in disponibili:
+            massimo = max(w for _, w, _ in disponibili)
+            # I pesi di una coppia sono tutti divisi per lo stesso
+            # massimo, senza trasformare un peso originario in inf.
+            relativi = [w / massimo for _, w, _ in disponibili]
+            somma_pesi = math.fsum(relativi)
+            somma_pesata = math.fsum(
+                r * v for r, (_, _, v) in zip(relativi, disponibili)
+            )
+
+            # Riepiloghi prefix/suffix per la rimozione del blocco:
+            # evita la sottrazione di pesi quasi uguali (catastrofica
+            # per 1e308 e 1e-308) e resta lineare nel numero di blocchi.
+            # Stato = (massimo del segmento, somma pesi relativa,
+            #          somma relativa dei prodotti peso*distanza).
+            def estendi(
+                stato: tuple[float, float, float],
+                peso: float,
+                distanza: float,
+            ) -> tuple[float, float, float]:
+                max_precedente, somma, pesata = stato
+                if max_precedente == 0:
+                    return peso, 1.0, distanza
+                massimo_locale = max(max_precedente, peso)
+                precedente = max_precedente / massimo_locale
+                nuovo = peso / massimo_locale
+                return (
+                    massimo_locale,
+                    math.fsum((somma * precedente, nuovo)),
+                    math.fsum((pesata * precedente, nuovo * distanza)),
+                )
+
+            def unisci(
+                primo: tuple[float, float, float],
+                secondo: tuple[float, float, float],
+            ) -> tuple[float, float, float]:
+                if primo[0] == 0:
+                    return secondo
+                if secondo[0] == 0:
+                    return primo
+                massimo_locale = max(primo[0], secondo[0])
+                a = primo[0] / massimo_locale
+                b = secondo[0] / massimo_locale
+                return (
+                    massimo_locale,
+                    math.fsum((primo[1] * a, secondo[1] * b)),
+                    math.fsum((primo[2] * a, secondo[2] * b)),
+                )
+
+            vuoto = (0.0, 0.0, 0.0)
+            prefissi = [vuoto]
+            for _, peso, valore in disponibili:
+                prefissi.append(estendi(prefissi[-1], peso, valore))
+            suffissi = [vuoto] * (len(disponibili) + 1)
+            for posizione in range(len(disponibili) - 1, -1, -1):
+                _, peso, valore = disponibili[posizione]
+                suffissi[posizione] = unisci(
+                    (peso, 1.0, valore), suffissi[posizione + 1]
+                )
+
+            for posizione, (k, peso, valore) in enumerate(disponibili):
                 scheda = schede[k]
+                relativo = relativi[posizione]
                 for fattore, chiave in ((0.5, "fattoreMezzo"), (2.0, "fattoreDoppio")):
-                    alternativo = (
-                        somma_pesata + (fattore - 1) * peso * valore
-                    ) / (somma_pesi + (fattore - 1) * peso)
+                    variazione_peso = (fattore - 1) * relativo
+                    alternativo = math.fsum((
+                        somma_pesata, variazione_peso * valore
+                    )) / math.fsum((somma_pesi, variazione_peso))
                     variazione = abs(alternativo - base)
                     dati = scheda[chiave]
                     dati["somma"] += variazione
                     dati["massima"] = max(dati["massima"], variazione)
                     if variazione > 1e-12:
                         dati["coppieVariate"] += 1
-                altri_pesi = somma_pesi - peso
+                altri = unisci(prefissi[posizione], suffissi[posizione + 1])
                 senza = scheda["senzaBlocco"]
-                if altri_pesi > 0:
-                    alternativo = (somma_pesata - peso * valore) / altri_pesi
+                if altri[0] > 0:
+                    alternativo = altri[2] / altri[1]
                     variazione = abs(alternativo - base)
                     senza["coppieConfrontabili"] += 1
                     senza["somma"] += variazione
