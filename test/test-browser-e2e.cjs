@@ -122,6 +122,50 @@ async function gower(browser){
     assert.equal(erroreCoppie.rapporto.fase,"calcolo");
     assert.equal(erroreCoppie.rapporto.numeroCoppieNonConfrontabili,1);
     assert.deepEqual(erroreCoppie.rapporto.coppieNonConfrontabili,[[1,2]]);
+    assert.equal(erroreCoppie.rapporto.analisiCopertura.numeroCoppie,1);
+    assert.equal(erroreCoppie.rapporto.analisiCopertura.perBlocco.length,1);
+    assert.equal(
+      erroreCoppie.rapporto.analisiCopertura.perBlocco[0].coppieLocalmenteIndefinite,1
+    );
+
+    // Due percorsi con copertura insufficiente: il bridge distingue
+    // dissimilarità locale indefinita da zero valido, senza fallback.
+    const coperturaMista = await page.evaluate(async () => {
+      const opzioni = {
+        riga: "oggetto", significatoMancanti: "sconosciuto",
+        colonne: {
+          id: {ruolo:"identificativo",usa:false},
+          flag1: {ruolo:"presenza",usa:true},
+          flag2: {ruolo:"presenza",usa:true},
+          categoria: {ruolo:"categoria",usa:true}
+        },
+        gruppi: [{id:"bin",nome:"Presenze",tipo:"vettore_binario"}],
+        assegnazioni: {flag1:"bin",flag2:"bin"},
+        "misuraBinaria-bin":"jaccard",
+        "mancanti-gruppo-bin":"pairwise"
+      };
+      const csvScoperto = "id,flag1,flag2,categoria\nA,1,NA,NA\nB,NA,1,NA\nC,1,1,x\nD,0,0,y";
+      const csvRecuperato = "id,flag1,flag2,categoria\nA,1,NA,x\nB,NA,1,x\nC,1,1,x\nD,0,0,y";
+      let errore;
+      try {
+        await window.Preprocessing.calcolaMatrice(csvScoperto, [], opzioni);
+      } catch (e) {
+        errore = e.rapportoProblemi;
+      }
+      const matrice = await window.Preprocessing.calcolaMatrice(
+        csvRecuperato, [], opzioni
+      );
+      return {
+        errore,
+        recuperata: matrice.matrice,
+        parziali: matrice.diagnosticaFinale.coppieCoperturaParziale
+      };
+    });
+    assert.deepEqual(coperturaMista.errore.coppieNonConfrontabili, [[1,2]]);
+    assert.equal(coperturaMista.errore.analisiCopertura.perBlocco.length, 2);
+    assert.equal(coperturaMista.errore.analisiCopertura.numeroCoppie, 1);
+    assert.equal(coperturaMista.recuperata[0][1], 0);
+    assert.ok(coperturaMista.parziali > 0);
     fs.writeFileSync(path.join(OUT,"gower-rapporto.json"),rapportoJson);
 
     // Collaudo del contratto Bray–Curtis 0/0 con il VERO motore Pyodide.
