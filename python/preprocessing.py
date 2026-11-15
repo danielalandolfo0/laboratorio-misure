@@ -6742,9 +6742,11 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
                         [{
                             "percorso": percorsi[0],
                             "matrice": normalizzata,
+                            # Nel ramo con un solo percorso, gli indici
+                            # del rapporto sono riferiti alle righe rimaste,
+                            # non alle posizioni del CSV originario.
                             "posizioni": {
-                                indice: posizione
-                                for posizione, indice in enumerate(singolo["indiciRighe"])
+                                indice: indice for indice in range(len(normalizzata))
                             },
                         }],
                         coppie,
