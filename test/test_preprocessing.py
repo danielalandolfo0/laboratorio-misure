@@ -4426,4 +4426,78 @@ assert matrice_recuperata["diagnosticaFinale"]["coppieCoperturaParziale"] > 0
 assert matrice_recuperata["diagnosticaFinale"]["minContributiPerCoppia"] == 1
 assert matrice_recuperata["diagnosticaFinale"]["coppieNonDisponibili"] == 0
 
+# Stabilita' numerica: i pesi possono essere positivi, finiti e tali
+# che la loro somma NON sia rappresentabile in float. Nessun blocco
+# perde peso per overflow, e i pesi originali restano nel rapporto.
+assert p._media_pesata_stabile([]) is None
+quasi_uguali(p._media_pesata_stabile([(1e308, 0.0), (1e308, 1.0)]), 0.5)
+quasi_uguali(p._media_pesata_stabile([(1e-308, 0.0), (1e-308, 1.0)]), 0.5)
+assert p._media_pesata_stabile([(1e308, 0.0), (1e-308, 1.0)]) == 0.0
+assert p._media_pesata_stabile([(1e-308, 0.0), (1e308, 1.0)]) == 1.0
+assert p._media_pesata_stabile([(1e308, 0.0), (1e308, 0.0)]) == 0.0
+for invalidi in ([(0.0, 1)], [(math.inf, 0)], [(1.0, math.nan)]):
+    try:
+        p._media_pesata_stabile(invalidi)
+        assert False, "Peso o contributo non valido."
+    except ValueError:
+        pass
+
+for primo, secondo in ((1e308, 1e308), (1e-308, 1e-308),
+                       (1e308, 1e-308), (1e-308, 1e308)):
+    risposte_estreme = {
+        **scelta_blocchi,
+        "modalitaPesiPercorsi": "personalizzati",
+        "pesiPercorsi": {
+            "percorso-1": format(primo, ".17g"),
+            "percorso-2": format(secondo, ".17g"),
+        },
+    }
+    piano_estremo = p.crea_piano_confronto(dati_misti_blocchi, risposte_estreme)
+    assert piano_estremo["completo"], piano_estremo
+    prova = p.calcola_matrice(dati_misti_blocchi, risposte_estreme)
+    verifica_matrice_finale(prova, 3)
+    assert [v["peso"] for v in prova["contributi"]] == [primo, secondo]
+    assert math.isfinite(prova["matrice"][0][1])
+    if primo == secondo:
+        quasi_uguali(prova["matrice"][0][1], matrice_blocchi[0][1])
+        quasi_uguali(prova["matrice"][0][2], matrice_blocchi[0][2])
+    elif primo > secondo:
+        quasi_uguali(prova["matrice"][0][1], 0.6)
+        quasi_uguali(prova["matrice"][0][2], 0.8)
+    else:
+        assert prova["matrice"][0][1] == 0.0
+        assert prova["matrice"][0][2] == 1.0
+    sensibilita = prova["diagnosticaFinale"]["sensibilitaPesi"]
+    assert len(sensibilita["perBlocco"]) == 2
+    for blocco in sensibilita["perBlocco"]:
+        assert math.isfinite(blocco["fattoreDoppio"]["variazioneMediaAssoluta"])
+        assert math.isfinite(blocco["fattoreMezzo"]["variazioneMassimaAssoluta"])
+        assert blocco["senzaBlocco"]["coppieConfrontabili"] == 3
+        assert blocco["senzaBlocco"]["coppieSenzaAltroContributo"] == 0
+
+# La rimozione ipotetica del blocco dominante non rende inutilizzabile
+# il blocco con peso 1e-308: la media residua esiste ed è finita.
+solo_dominante = {
+    **scelta_blocchi,
+    "pesiPercorsi": {"percorso-1": "1e308", "percorso-2": "1e-308"},
+}
+diag_dom = p.calcola_matrice(dati_misti_blocchi, solo_dominante)[
+    "diagnosticaFinale"
+]["sensibilitaPesi"]
+assert diag_dom["perBlocco"][0]["senzaBlocco"]["coppieConfrontabili"] == 3
+assert diag_dom["perBlocco"][0]["senzaBlocco"]["variazioneMassimaAssoluta"] > 0.1
+
+# Gower: somma di tre pesi 1e308 > massimo float, ma la media resta
+# definita e la matrice deve coincidere con la versione a pesi unitari.
+gower_estremo = {
+    **scelta_unica,
+    "pesiGower": {"x": "1e308", "y": "1e308", "categoria": "1e308"},
+}
+assert p.crea_piano_confronto(dati_misti_blocchi, gower_estremo)["completo"]
+gower_calcolata = p.calcola_matrice(dati_misti_blocchi, gower_estremo)
+verifica_matrice_finale(gower_calcolata, 3)
+for i in range(3):
+    for j in range(3):
+        quasi_uguali(gower_calcolata["matrice"][i][j], matrice_unica[i][j])
+
 print("Tutti i test Python di preprocessing sono stati superati.")
