@@ -6475,6 +6475,69 @@ def _valida_matrice_finale(
 
 
 
+def _analisi_copertura_non_confrontabili(
+    componenti: list[dict[str, Any]],
+    coppie: list[list[int]],
+) -> dict[str, Any]:
+    """Spiega quali blocchi non forniscono contributi alle coppie scoperte.
+
+    Una riga assente dal blocco (ad es. esclusione completa) è diversa
+    da una coppia locale non definita su due righe presenti. Il report
+    aggrega TUTTE le coppie; ne dettaglia soltanto le prime dodici,
+    mantenendo l'elenco integrale separato nel rapporto d'errore.
+    """
+    per_blocco: list[dict[str, Any]] = [
+        {
+            "idPercorso": componente["percorso"]["idPercorso"],
+            "titolo": componente["percorso"]["titolo"],
+            "colonne": list(componente["percorso"]["colonne"]),
+            "coppieConRigaAssente": 0,
+            "coppieLocalmenteIndefinite": 0,
+        }
+        for componente in componenti
+    ]
+    esempi: list[dict[str, Any]] = []
+    for uno, due in coppie:
+        i, j = uno - 1, due - 1
+        dettagli: list[dict[str, str]] = []
+        for k, componente in enumerate(componenti):
+            posizione_i = componente["posizioni"].get(i)
+            posizione_j = componente["posizioni"].get(j)
+            if posizione_i is None or posizione_j is None:
+                motivo = "riga_assente"
+                per_blocco[k]["coppieConRigaAssente"] += 1
+            elif componente["matrice"][posizione_i][posizione_j] is None:
+                motivo = "locale_indefinita"
+                per_blocco[k]["coppieLocalmenteIndefinite"] += 1
+            else:
+                # In un errore di copertura nessun percorso può fornire
+                # una distanza locale: segnaliamo un'incoerenza interna.
+                raise ValueError(
+                    "Diagnostica incoerente: una coppia dichiarata priva "
+                    "di contributi ha una distanza locale definita."
+                )
+            if len(esempi) < 12:
+                dettagli.append({
+                    "idPercorso": componente["percorso"]["idPercorso"],
+                    "titolo": componente["percorso"]["titolo"],
+                    "motivo": motivo,
+                })
+        if len(esempi) < 12:
+            esempi.append({"righe": [uno, due], "blocchi": dettagli})
+    return {
+        "numeroCoppie": len(coppie),
+        "perBlocco": per_blocco,
+        "esempi": esempi,
+        "nota": (
+            "Riga assente: almeno una osservazione non appartiene al "
+            "risultato locale del blocco. Distanza locale indefinita: "
+            "entrambe le righe sono presenti, ma la misura non produce "
+            "una dissimilarita' utilizzabile per la coppia. "
+            "Nessuno dei due casi equivale a distanza zero."
+        ),
+    }
+
+
 def _diagnostica_sensibilita_pesi(
     componenti: list[dict[str, Any]],
     matrice_finale: list[list[float]],
@@ -6669,7 +6732,25 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
                 _rapporto_errori_percorsi([problema]),
             ) from errore
         etichette = singolo["etichette"]
-        singolo["diagnosticaFinale"] = _valida_matrice_finale(normalizzata, etichette)
+        try:
+            singolo["diagnosticaFinale"] = _valida_matrice_finale(normalizzata, etichette)
+        except IncompatibilitaCalcolo as errore:
+            coppie = errore.rapportoProblemi.get("coppieNonConfrontabili", [])
+            if coppie:
+                errore.rapportoProblemi["analisiCopertura"] = (
+                    _analisi_copertura_non_confrontabili(
+                        [{
+                            "percorso": percorsi[0],
+                            "matrice": normalizzata,
+                            "posizioni": {
+                                indice: posizione
+                                for posizione, indice in enumerate(singolo["indiciRighe"])
+                            },
+                        }],
+                        coppie,
+                    )
+                )
+            raise
         singolo["diagnosticaFinale"]["sensibilitaPesi"] = _diagnostica_sensibilita_pesi(
             [{
                 "percorso": percorsi[0],
@@ -6778,7 +6859,15 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
             matrice_finale[k][i] = distanza
 
     etichette = _etichette_righe(risultato, interpretazione)
-    diagnostica_finale = _valida_matrice_finale(matrice_finale, etichette)
+    try:
+        diagnostica_finale = _valida_matrice_finale(matrice_finale, etichette)
+    except IncompatibilitaCalcolo as errore:
+        coppie = errore.rapportoProblemi.get("coppieNonConfrontabili", [])
+        if coppie:
+            errore.rapportoProblemi["analisiCopertura"] = (
+                _analisi_copertura_non_confrontabili(componenti, coppie)
+            )
+        raise
     diagnostica_finale["sensibilitaPesi"] = _diagnostica_sensibilita_pesi(
         componenti, matrice_finale
     )
