@@ -103,6 +103,31 @@ deve_fallire(lambda: p._distanza_numerica(
     {"q": 1, "pesi": [1e308]}
 ), "rappresentabile")
 
+# Altre dissimilarita' numeriche: prodotti e denominatori enormi
+# NON devono trasformare in 0, infinito o NaN un risultato finito.
+assert p._distanza_numerica(
+    [1e308], [-1e308], "canberra", {}
+) == 1.0
+assert p._distanza_numerica(
+    [1e308, 0], [0, 1e308], "bray_curtis", {}
+) == 1.0
+assert math.isclose(p._distanza_numerica(
+    [1e308, 0], [5e307, 5e307], "bray_curtis", {}
+), 0.5, rel_tol=1e-12)
+assert math.isclose(p._distanza_numerica(
+    [1e308, 0], [0, 1e308], "chi_square", {}
+), math.sqrt(2) * 1e154, rel_tol=1e-12)
+assert math.isclose(p._distanza_numerica(
+    [1e308], [0], "chi_square", {}
+), 1e154, rel_tol=1e-12)
+assert math.isclose(p._distanza_coordinate_comuni(
+    [0, 0], [1e-308, 1e308], "euclidean", {}
+), 1e308 / math.sqrt(2), rel_tol=1e-12)
+assert math.isclose(p._distanza_numerica(
+    [0, 0], [1e-308, 1e308], "weighted_minkowski",
+    {"q": 2, "pesi": [1e308, 1e-308]}
+), 1e154, rel_tol=1e-12)
+
 # 2. Binarie simmetriche/asimmetriche: zero osservato != mancante.
 vicino(p._distanza_vettori_binari([0, 0], [0, 0], "jaccard"), 0)
 vicino(p._distanza_vettori_binari([0, 1], [1, 1], "hamming"), .5)
