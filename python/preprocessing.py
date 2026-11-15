@@ -6392,7 +6392,7 @@ def _valida_matrice_finale(
                 # Scarti di arrotondamento entro la tolleranza sono ricondotti
                 # a un unico valore; scarti maggiori sono già stati rifiutati.
                 # L'output è così esattamente simmetrico, non solo 'quasi'.
-                media = (float(x) / 2.0) + (float(y) / 2.0)
+                media = math.fsum((float(x), float(y))) / 2.0
                 valore = min(1.0, max(0.0, media))
                 matrice[i][j] = valore
                 matrice[j][i] = valore
