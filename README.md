@@ -2,6 +2,62 @@
 
 Applicazione didattica per calcolare, confrontare e visualizzare distanze e dissimilarità.
 
+## Criterio di priorità per lo sviluppo
+
+Gli interventi vengono ordinati per **rischio per la correttezza**,
+non per numero della fase nel TeX né per facilità di realizzazione:
+
+1. **Priorità critica — risultato matematicamente corretto:** verificare
+   definizioni delle misure, denominatori, simmetria esatta, diagonale
+   nulla, valori finiti e intervallo \([0,1]\). Un errore sostanziale
+   deve bloccare il risultato, non essere corretto tacitamente.
+2. **Priorità alta — decisioni semantiche esplicite:** impedire scelte
+   involontarie su tipo di colonna, trasformazioni, gruppi, mancanti,
+   pesi e convenzioni delle misure.
+3. **Priorità alta — matrice completa o blocco motivato:** ogni coppia
+   distinta deve avere almeno un contributo valido; altrimenti si
+   comunicano i confronti e i blocchi coinvolti senza attribuire
+   distanze artificiali.
+4. **Priorità intermedia — prove e riproducibilità:** test con risultati
+   indipendenti, casi misti, collaudo Chromium, rapporto verificabile.
+5. **Priorità successiva — presentazione e rifiniture:** semplificare
+   le spiegazioni, l'accessibilità e la navigazione senza cambiare
+   tacitamente il significato matematico.
+
+Questa gerarchia governa i prossimi interventi; i casi più rischiosi
+possono richiedere di tornare a una fase precedente dell'architettura.
+
+### Invarianti esatti nell'output
+
+La validazione della matrice finale verifica ogni coppia ordinata.
+Scarti reciproci superiori a \(10^{-10}\), diagonali con valore assoluto
+superiore a \(10^{-12}\), disponibilità asimmetrica, valori non finiti
+o fuori da \([-10^{-12},1+10^{-12}]\) bloccano il calcolo.
+Quando gli scarti rientrano nelle tolleranze numeriche, i valori
+reciproci sono ricondotti alla stessa media e limitati a \([0,1]\);
+la diagonale viene posta esattamente a zero. La matrice restituita
+soddisfa quindi **esattamente** \(D_{ij}=D_{ji}\),
+\(D_{ii}=0\) e \(0\leq D_{ij}\leq1\).
+Sono disponibili test di regressione dedicati ai due triangoli.
+
+### Copertura delle coppie quando i blocchi sono incompleti
+
+Se alcuni percorsi non definiscono una dissimilarità locale, ma
+almeno uno degli altri percorsi è disponibile, il suo contributo
+mantiene il peso positivo nel denominatore e la coppia è recuperata.
+In particolare un contributo definito **zero** è diverso da
+un contributo assente.
+
+Se invece tutti i blocchi sono indisponibili per una coppia, oltre
+all'elenco completo delle coppie non confrontabili il rapporto
+d'errore contiene `analisiCopertura`. Per ciascun blocco distingue
+quante di tali coppie hanno almeno una riga **assente dal risultato
+locale** e quante hanno entrambe le righe presenti ma una distanza
+locale **indefinita**. L'interfaccia presenta anche le cause per
+le prime dodici coppie; il CSV diagnostico mantiene l'elenco
+integrale delle coppie. Nessuna di queste informazioni produce
+una distanza sostitutiva.
+
 ## Funzionalità disponibili
 
 - caricamento locale di tabelle CSV con intestazione;
