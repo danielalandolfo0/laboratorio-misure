@@ -54,6 +54,55 @@ deve_fallire(
     ), "strettamente positivo"
 )
 
+# Norme assolute pesate: NON dividono per la somma dei pesi.
+# La stessa formula, con q=2 e due scarti unitari, vale sqrt(2e308):
+# la norma è finita anche se la somma intermedia non lo è.
+norma_grande = p._distanza_numerica(
+    [0, 0], [1, 1], "weighted_minkowski",
+    {"q": 2, "pesi": [1e308, 1e308]},
+)
+assert math.isfinite(norma_grande)
+assert math.isclose(norma_grande, math.sqrt(2) * 1e154, rel_tol=1e-12)
+assert math.isclose(p._distanza_numerica(
+    [0, 0], [1, 1], "weighted_minkowski",
+    {"q": 2, "pesi": [1e-308, 1e-308]},
+), math.sqrt(2) * 1e-154, rel_tol=1e-12)
+assert math.isclose(p._distanza_numerica(
+    [0, 0], [1e200, 1e200], "minkowski", {"q": 2}
+), math.sqrt(2) * 1e200, rel_tol=1e-12)
+assert math.isclose(p._distanza_numerica(
+    [0, 0], [1e200, 1e200], "euclidean", {}
+), math.sqrt(2) * 1e200, rel_tol=1e-12)
+assert math.isclose(p._distanza_numerica(
+    [0, 0], [3, 4], "minkowski", {"q": 1000}
+), 4.0, rel_tol=1e-3)
+
+# Nel confronto pairwise si usa INVECE la media delle potenze sulle
+# coordinate osservate: la moltiplicazione comune dei pesi si cancella.
+for comune in (1e308, 1e-308):
+    assert math.isclose(p._distanza_coordinate_comuni(
+        [0, 0], [1, 1], "weighted_minkowski",
+        {"q": 2, "pesi": [comune, comune]}
+    ), 1.0, rel_tol=1e-12)
+    assert math.isclose(p._distanza_coordinate_comuni(
+        [0, 0], [3, 4], "weighted_minkowski",
+        {"q": 200, "pesi": [comune, comune]}
+    ), 4 * (1 / 2) ** (1 / 200), rel_tol=1e-12)
+piccolo_non_nullo = p._distanza_coordinate_comuni(
+    [0, 0], [1, 0], "weighted_minkowski",
+    {"q": 2, "pesi": [1e-308, 1e308]}
+)
+assert piccolo_non_nullo > 0
+assert math.isclose(piccolo_non_nullo, 1e-308, rel_tol=1e-12)
+deve_fallire(lambda: p._distanza_numerica(
+    [0], [1e308], "weighted_chebyshev",
+    {"pesi": [1e308]}
+), "rappresentabile")
+deve_fallire(lambda: p._distanza_numerica(
+    [0], [1e308], "weighted_minkowski",
+    {"q": 1, "pesi": [1e308]}
+), "rappresentabile")
+
 # 2. Binarie simmetriche/asimmetriche: zero osservato != mancante.
 vicino(p._distanza_vettori_binari([0, 0], [0, 0], "jaccard"), 0)
 vicino(p._distanza_vettori_binari([0, 1], [1, 1], "hamming"), .5)
