@@ -1271,7 +1271,26 @@ async function testRapportoCumulativoProblemi() {
     bloccanti: [problema], nonBloccanti: [],
     numeroCoppieNonConfrontabili: 3,
     etichette: ["=FORMULA", "B;C", 'Riga "D"', "E"],
-    coppieNonConfrontabili: [[1, 2], [1, 4], [3, 4]]
+    coppieNonConfrontabili: [[1, 2], [1, 4], [3, 4]],
+    analisiCopertura: {
+      numeroCoppie: 3,
+      perBlocco: [{
+        idPercorso: "percorso-1", titolo: "Blocco <binario>",
+        colonne: ["f1", "f2"], coppieConRigaAssente: 1,
+        coppieLocalmenteIndefinite: 2
+      }],
+      esempi: [
+        {righe: [1, 2], blocchi: [
+          {idPercorso: "percorso-1", titolo: "Blocco <binario>", motivo: "locale_indefinita"}
+        ]},
+        {righe: [1, 4], blocchi: [
+          {idPercorso: "percorso-1", titolo: "Blocco <binario>", motivo: "riga_assente"}
+        ]},
+        {righe: [3, 4], blocchi: [
+          {idPercorso: "percorso-1", titolo: "Blocco <binario>", motivo: "locale_indefinita"}
+        ]}
+      ]
+    }
   };
   h.observations.matrixIntercept = () => Promise.reject(errore);
   h.fire("calculate-gower", "click");
@@ -1283,6 +1302,11 @@ async function testRapportoCumulativoProblemi() {
   assert.match(h.element("csv-error").textContent, /Tre coppie/);
   const relazione = h.element("comparison-calculation-problems-body").innerHTML;
   assert.match(relazione, /Tutte le coppie non confrontabili: 3/);
+  assert.match(relazione, /Perché nessun blocco copre queste coppie/);
+  assert.match(relazione, /Blocco &lt;binario&gt;/);
+  assert.match(relazione, /1 coppie con almeno una riga assente/);
+  assert.match(relazione, /distanza locale non definita/);
+  assert.doesNotMatch(relazione, /Blocco <binario>/);
   assert.match(relazione, /Gruppo &lt;speciale&gt;/);
   assert.doesNotMatch(relazione, /Gruppo <speciale>/);
 
