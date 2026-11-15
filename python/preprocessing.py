@@ -5164,6 +5164,46 @@ def _distanza_coordinate_comuni(
     return risultato
 
 
+def _norma_minkowski_stabile(
+    scarti: list[float], q: float, pesi: list[float] | None = None,
+) -> float:
+    """(sum_k w_k |dx_k|^q)^(1/q) in scala logaritmica.
+
+    Qui i pesi NON sono normalizzati: una moltiplicazione comune dei
+    pesi altera realmente la norma pesata, a differenza della media
+    usata per aggregare blocchi e coordinate osservate pairwise.
+    """
+    if not math.isfinite(q) or q < 1:
+        raise ValueError("L'esponente di Minkowski deve essere finito e almeno 1.")
+    if pesi is None:
+        pesi = [1.0] * len(scarti)
+    if len(pesi) != len(scarti) or any(
+        not math.isfinite(w) or w <= 0 for w in pesi
+    ):
+        raise ValueError("Occorre un peso finito e strettamente positivo per coordinata.")
+    if any(not math.isfinite(d) or d < 0 for d in scarti):
+        raise ValueError("Gli scarti numerici devono essere finiti e non negativi.")
+    massimo = max(scarti, default=0.0)
+    if massimo == 0:
+        return 0.0
+    log_termini = [
+        math.log(w) + q * math.log(d / massimo)
+        for w, d in zip(pesi, scarti) if d > 0
+    ]
+    massimo_log = max(log_termini)
+    log_somma = massimo_log + math.log(
+        math.fsum(math.exp(valore - massimo_log) for valore in log_termini)
+    )
+    # Evita overflow di d**q, di w*d**q e anche della loro somma.
+    log_risultato = math.log(massimo) + log_somma / q
+    if log_risultato > math.log(sys.float_info.max):
+        raise ValueError("La distanza pesata supera l'intervallo numerico rappresentabile.")
+    risultato = math.exp(log_risultato)
+    if not math.isfinite(risultato):
+        raise ValueError("La distanza pesata supera l'intervallo numerico rappresentabile.")
+    return risultato
+
+
 def _distanza_numerica(
     x: list[float],
     y: list[float],
@@ -5176,19 +5216,29 @@ def _distanza_numerica(
     if id_misura == "manhattan":
         return sum(scarti)
     if id_misura == "euclidean":
-        return math.sqrt(sum(scarto**2 for scarto in scarti))
+        risultato = math.hypot(*scarti)
+        if not math.isfinite(risultato):
+            raise ValueError("La distanza euclidea supera l'intervallo numerico rappresentabile.")
+        return risultato
     if id_misura == "chebyshev":
         return max(scarti, default=0.0)
     if id_misura == "minkowski":
-        q = float(parametri["q"])
-        return sum(scarto**q for scarto in scarti) ** (1 / q)
+        return _norma_minkowski_stabile(scarti, float(parametri["q"]))
     if id_misura == "weighted_minkowski":
-        q = float(parametri["q"])
-        pesi = [float(peso) for peso in parametri["pesi"]]
-        return sum(peso * scarto**q for peso, scarto in zip(pesi, scarti)) ** (1 / q)
+        return _norma_minkowski_stabile(
+            scarti, float(parametri["q"]),
+            [float(peso) for peso in parametri["pesi"]],
+        )
     if id_misura == "weighted_chebyshev":
         pesi = [float(peso) for peso in parametri["pesi"]]
-        return max((peso * scarto for peso, scarto in zip(pesi, scarti)), default=0.0)
+        if len(pesi) != len(scarti) or any(
+            not math.isfinite(w) or w <= 0 for w in pesi
+        ):
+            raise ValueError("Occorre un peso finito e strettamente positivo per coordinata.")
+        risultato = max((peso * scarto for peso, scarto in zip(pesi, scarti)), default=0.0)
+        if not math.isfinite(risultato):
+            raise ValueError("La distanza pesata supera l'intervallo numerico rappresentabile.")
+        return risultato
     if id_misura == "standardized_euclidean":
         scale = [float(scala) for scala in parametri["scale"]]
         return math.sqrt(sum((scarto / scala) ** 2 for scarto, scala in zip(scarti, scale)))
