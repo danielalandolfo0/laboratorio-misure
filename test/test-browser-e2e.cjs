@@ -166,6 +166,62 @@ async function gower(browser){
     assert.equal(coperturaMista.errore.analisiCopertura.numeroCoppie, 1);
     assert.equal(coperturaMista.recuperata[0][1], 0);
     assert.ok(coperturaMista.parziali > 0);
+
+    // Stress numerico end-to-end: due pesi globali 1e308 producono
+    // la STESSA media di due pesi unitari; l'API non restituisce NaN.
+    const pesiEstremiBrowser = await page.evaluate(async () => {
+      const csv = "x,y,categoria\n0,0,a\n3,0,b\n0,4,a";
+      const scelte = [
+        {tipo:"auto",metodo:"nessuno"},
+        {tipo:"auto",metodo:"nessuno"},
+        {tipo:"auto",metodo:"auto"}
+      ];
+      const base = {
+        riga:"oggetto",
+        comparabilitaScale:"comparabili",
+        confrontoQuantitativo:"assoluto",
+        aggregazioneScarti:"quadratica",
+        importanzaCoordinate:"uguale",
+        dipendenzaCoordinate:"no",
+        gestioneDipendenzaLineare:"mantieni",
+        riscalamentoConfermato:true,
+        gestioneQuantitativeMiste:"separato",
+        colonne:{
+          x:{ruolo:"quantita",usa:true},
+          y:{ruolo:"quantita",usa:true},
+          categoria:{ruolo:"categoria",usa:true}
+        }
+      };
+      const standard = await window.Preprocessing.calcolaMatrice(
+        csv,scelte,base
+      );
+      const pesato = await window.Preprocessing.calcolaMatrice(
+        csv,scelte,{
+          ...base,modalitaPesiPercorsi:"personalizzati",
+          pesiPercorsi:{"percorso-1":"1e308","percorso-2":"1e308"}
+        }
+      );
+      return {
+        standard:standard.matrice,
+        pesato:pesato.matrice,
+        pesi:pesato.contributi.map(c=>c.peso),
+        sensibilita:pesato.diagnosticaFinale.sensibilitaPesi
+      };
+    });
+    assert.deepEqual(pesiEstremiBrowser.pesi,[1e308,1e308]);
+    for(let i=0;i<3;i++)for(let j=0;j<3;j++){
+      assert.ok(Number.isFinite(pesiEstremiBrowser.pesato[i][j]));
+      assert.ok(Math.abs(
+        pesiEstremiBrowser.pesato[i][j]-pesiEstremiBrowser.standard[i][j]
+      )<1e-10);
+    }
+    assert.equal(pesiEstremiBrowser.sensibilita.numeroBlocchi,2);
+    assert.ok(
+      pesiEstremiBrowser.sensibilita.perBlocco.every(
+        c=>Number.isFinite(c.fattoreDoppio.variazioneMassimaAssoluta)
+      )
+    );
+
     fs.writeFileSync(path.join(OUT,"gower-rapporto.json"),rapportoJson);
 
     // Collaudo del contratto Bray–Curtis 0/0 con il VERO motore Pyodide.
