@@ -4714,6 +4714,29 @@ def _metadati_gower(
     return metadati
 
 
+def _media_pesata_stabile(
+    termini: list[tuple[float, float]],
+) -> float | None:
+    """Media con pesi finiti positivi, senza overflow del denominatore.
+
+    w/max(w) preserva il rapporto tra i pesi in aritmetica reale.
+    Un termine di peso positivo e distanza zero resta nel denominatore.
+    None indica esclusivamente l'assenza di TUTTI i contributi.
+    """
+    if not termini:
+        return None
+    if any(not math.isfinite(w) or w <= 0 for w, _ in termini):
+        raise ValueError("Ogni contributo richiede un peso finito strettamente positivo.")
+    if any(not math.isfinite(d) for _, d in termini):
+        raise ValueError("Ogni contributo deve avere una dissimilarita' finita.")
+    massimo = max(w for w, _ in termini)
+    relativi = [w / massimo for w, _ in termini]
+    totale = math.fsum(relativi)
+    if totale <= 0:
+        raise ValueError("La somma dei pesi positivi non e' rappresentabile.")
+    return math.fsum(r * d for r, (_, d) in zip(relativi, termini)) / totale
+
+
 def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, Any]) -> dict[str, Any]:
     piano = crea_piano_confronto(risultato, interpretazione)
     if not piano["completo"]:
@@ -4728,8 +4751,7 @@ def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, 
 
     for i in range(n):
         for k in range(i + 1, n):
-            somma = 0.0
-            peso = 0.0
+            contributi_validi: list[tuple[float, float]] = []
             assenze_condivise_osservate = False
             for variabile in metadati:
                 a = variabile["valori"][i]
@@ -4759,12 +4781,10 @@ def calcola_matrice_gower(risultato: dict[str, Any], interpretazione: dict[str, 
                     contributo = 0.0 if scala == 0 else abs(float(a) - float(b)) / scala
                     if variabile.get("limita"):
                         contributo = min(contributo, 1.0)
-                somma += variabile["peso"] * contributo
-                peso += variabile["peso"]
-            distanza = (
-                somma / peso if peso > 0
-                else 0.0 if assenze_condivise_osservate else None
-            )
+                contributi_validi.append((variabile["peso"], contributo))
+            distanza = _media_pesata_stabile(contributi_validi)
+            if distanza is None and assenze_condivise_osservate:
+                distanza = 0.0
             matrice[i][k] = distanza
             matrice[k][i] = distanza
 
@@ -6835,8 +6855,7 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
     contributi_massimi = 0
     for i in range(n):
         for k in range(i + 1, n):
-            numeratore = 0.0
-            denominatore = 0.0
+            contributi_validi: list[tuple[float, float]] = []
             percorsi_disponibili = 0
             for componente in componenti:
                 posizione_i = componente["posizioni"].get(i)
@@ -6847,8 +6866,7 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
                 if valore is None:
                     continue
                 peso = float(componente["percorso"]["pesoAggregazione"])
-                numeratore += peso * float(valore)
-                denominatore += peso
+                contributi_validi.append((peso, float(valore)))
                 percorsi_disponibili += 1
             contributi_minimi = min(contributi_minimi, percorsi_disponibili)
             contributi_massimi = max(contributi_massimi, percorsi_disponibili)
@@ -6856,7 +6874,7 @@ def calcola_matrice(risultato: dict[str, Any], interpretazione: dict[str, Any]) 
                 coppie_con_copertura_parziale += 1
                 if percorsi_disponibili == 1:
                     coppie_con_solo_un_percorso += 1
-            distanza = None if denominatore == 0 else numeratore / denominatore
+            distanza = _media_pesata_stabile(contributi_validi)
             matrice_finale[i][k] = distanza
             matrice_finale[k][i] = distanza
 
