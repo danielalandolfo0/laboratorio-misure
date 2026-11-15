@@ -6363,6 +6363,11 @@ def _valida_matrice_finale(
             x = matrice[i][j]
             y = matrice[j][i]
             if x is None or y is None:
+                if x is not None or y is not None:
+                    raise ValueError(
+                        f"La disponibilita' della matrice finale non e' simmetrica: "
+                        f"({i + 1}, {j + 1})."
+                    )
                 if i != j:
                     non_disponibili.append((i, j))
                 else:
@@ -6376,13 +6381,21 @@ def _valida_matrice_finale(
                 raise ValueError(f"La matrice finale non e' simmetrica: ({i + 1}, {j + 1}).")
             if i == j and abs(float(x)) > 1e-12:
                 raise ValueError(f"La diagonale della matrice finale deve essere nulla (riga {i + 1}).")
-            if float(x) < -1e-12 or float(x) > 1 + 1e-12:
+            # Verificare ENTRAMBI i triangoli: la vicinanza fra x e y
+            # non autorizza un valore fuori dominio nell'altro triangolo.
+            if any(float(v) < -1e-12 or float(v) > 1 + 1e-12 for v in (x, y)):
                 raise ValueError(f"Dissimilarita' fuori dall'intervallo [0,1]: ({i + 1}, {j + 1}).")
-            # Soltanto arrotondamenti numerici trascurabili ai confini.
-            if 0 > x > -1e-12 or 1 < x < 1 + 1e-12:
-                matrice[i][j] = min(1.0, max(0.0, float(x)))
-            if 0 > y > -1e-12 or 1 < y < 1 + 1e-12:
-                matrice[j][i] = min(1.0, max(0.0, float(y)))
+            if i == j:
+                # Una diagonale numericamente nulla è riportata esattamente a 0.
+                matrice[i][i] = 0.0
+            else:
+                # Scarti di arrotondamento entro la tolleranza sono ricondotti
+                # a un unico valore; scarti maggiori sono già stati rifiutati.
+                # L'output è così esattamente simmetrico, non solo 'quasi'.
+                media = (float(x) / 2.0) + (float(y) / 2.0)
+                valore = min(1.0, max(0.0, media))
+                matrice[i][j] = valore
+                matrice[j][i] = valore
 
     if non_disponibili:
         esempi = "; ".join(
