@@ -4343,4 +4343,87 @@ finally:
     p.calcola_matrice_gower = gower_prima
     p._calcola_matrice_specializzata = speciale_prima
 
+# Priorità 2: per coppie scoperte il rapporto specifica i percorsi
+# responsabili, distinguendo una riga esclusa da una distanza locale
+# indefinita. Il calcolo di questi dettagli non sostituisce alcuno zero.
+copertura_sintetica = p._analisi_copertura_non_confrontabili([
+    {
+        "percorso": {
+            "idPercorso": "percorso-1", "titolo": "Quantità",
+            "colonne": ["x"],
+        },
+        "posizioni": {0: 0, 2: 1},
+        "matrice": [[0.0, 0.1], [0.1, 0.0]],
+    },
+    {
+        "percorso": {
+            "idPercorso": "percorso-2", "titolo": "Categorie",
+            "colonne": ["categoria"],
+        },
+        "posizioni": {0: 0, 1: 1, 2: 2},
+        "matrice": [
+            [0.0, None, 0.0],
+            [None, 0.0, 0.5],
+            [0.0, 0.5, 0.0],
+        ],
+    },
+], [[1, 2]])
+assert copertura_sintetica["numeroCoppie"] == 1
+assert copertura_sintetica["perBlocco"][0]["coppieConRigaAssente"] == 1
+assert copertura_sintetica["perBlocco"][1]["coppieLocalmenteIndefinite"] == 1
+assert [
+    item["motivo"] for item in copertura_sintetica["esempi"][0]["blocchi"]
+] == ["riga_assente", "locale_indefinita"]
+
+# Scopertura REALE: il binario non ha coordinate comuni e Gower non
+# possiede valori osservati per le stesse due righe.
+csv_scoperto = p.prepara_tabella(p.leggi_csv(
+    "id,flag1,flag2,categoria\n"
+    "A,1,NA,NA\nB,NA,1,NA\nC,1,1,x\nD,0,0,y"
+))
+risposte_scoperto = {
+    "riga": "oggetto",
+    "significatoMancanti": "sconosciuto",
+    "colonne": {
+        "id": {"ruolo": "identificativo", "usa": False},
+        "flag1": {"ruolo": "presenza", "usa": True},
+        "flag2": {"ruolo": "presenza", "usa": True},
+        "categoria": {"ruolo": "categoria", "usa": True},
+    },
+    "gruppi": [
+        {"id": "bin", "nome": "Presenze", "tipo": "vettore_binario"}
+    ],
+    "assegnazioni": {"flag1": "bin", "flag2": "bin"},
+    "misuraBinaria-bin": "jaccard",
+    "mancanti-gruppo-bin": "pairwise",
+}
+piano_scoperto = p.crea_piano_confronto(csv_scoperto, risposte_scoperto)
+assert piano_scoperto["completo"], piano_scoperto
+try:
+    p.calcola_matrice(csv_scoperto, risposte_scoperto)
+    assert False, "Una coppia non coperta dai due percorsi deve bloccare."
+except p.IncompatibilitaCalcolo as errore:
+    rapporto_scoperto = errore.rapportoProblemi
+    assert rapporto_scoperto["coppieNonConfrontabili"] == [[1, 2]]
+    analisi = rapporto_scoperto["analisiCopertura"]
+    assert analisi["numeroCoppie"] == 1
+    assert len(analisi["perBlocco"]) == 2
+    assert all(b["coppieLocalmenteIndefinite"] == 1 for b in analisi["perBlocco"])
+    assert all(b["coppieConRigaAssente"] == 0 for b in analisi["perBlocco"])
+    assert len(analisi["esempi"][0]["blocchi"]) == 2
+
+# Copertura recuperata: la stessa coppia è confrontabile in Gower
+# con contributo ZERO valido; il binario continua a non contribuire.
+csv_recuperato = p.prepara_tabella(p.leggi_csv(
+    "id,flag1,flag2,categoria\n"
+    "A,1,NA,x\nB,NA,1,x\nC,1,1,x\nD,0,0,y"
+))
+piano_recuperato = p.crea_piano_confronto(csv_recuperato, risposte_scoperto)
+assert piano_recuperato["completo"], piano_recuperato
+matrice_recuperata = p.calcola_matrice(csv_recuperato, risposte_scoperto)
+assert matrice_recuperata["matrice"][0][1] == 0.0
+assert matrice_recuperata["diagnosticaFinale"]["coppieCoperturaParziale"] > 0
+assert matrice_recuperata["diagnosticaFinale"]["minContributiPerCoppia"] == 1
+assert matrice_recuperata["diagnosticaFinale"]["coppieNonDisponibili"] == 0
+
 print("Tutti i test Python di preprocessing sono stati superati.")
