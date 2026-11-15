@@ -5261,22 +5261,48 @@ def _distanza_numerica(
             z.append(residuo / cholesky_covarianza[i][i])
         return math.sqrt(sum(valore**2 for valore in z))
     if id_misura == "canberra":
-        return sum(
-            0.0 if abs(a) + abs(b) == 0 else abs(a - b) / (abs(a) + abs(b))
-            for a, b in zip(x, y)
-        )
+        # Ogni termine e' omogeneo di grado zero: a una scala
+        # individuale evita l'inf/inf per a e b molto grandi.
+        termini = []
+        for a, b in zip(x, y):
+            scala = max(abs(a), abs(b))
+            if scala == 0:
+                termini.append(0.0)
+            else:
+                aa, bb = a / scala, b / scala
+                termini.append(abs(aa - bb) / (abs(aa) + abs(bb)))
+        return math.fsum(termini)
     if id_misura == "bray_curtis":
-        denominatore = math.fsum(a + b for a, b in zip(x, y))
-        if denominatore == 0:
-            # 0/0 non e' una distanza definita. L'estensione a zero
-            # richiede la conferma esplicita nel piano di confronto.
+        # Per vettori non negativi la stessa scala positiva su TUTTE
+        # le coordinate si semplifica nel rapporto. Consente somme
+        # originali > DBL_MAX pur con una distanza finita in [0,1].
+        scala = max((max(abs(a), abs(b)) for a, b in zip(x, y)), default=0.0)
+        if scala == 0:
+            # 0/0 non e' definito dalla formula originale.
             return 0.0 if parametri.get("doppioZero") == "zero" else None
-        return math.fsum(scarti) / denominatore
+        numeratore = math.fsum(abs(a / scala - b / scala) for a, b in zip(x, y))
+        denominatore = math.fsum((a / scala + b / scala) for a, b in zip(x, y))
+        if denominatore == 0:
+            raise ValueError("Il denominatore di Bray–Curtis non è positivo.")
+        return numeratore / denominatore
     if id_misura == "chi_square":
-        return math.sqrt(sum(
-            0.0 if a + b == 0 else (a - b) ** 2 / (a + b)
-            for a, b in zip(x, y)
-        ))
+        # Riscrive (a-b)^2/(a+b) come scala*diff_rel^2/somma_rel.
+        # La radice si calcola PRIMA dell'accumulo della scala per
+        # evitare overflow di quadrati e somme non rappresentabili.
+        termini = []
+        for a, b in zip(x, y):
+            scala = max(a, b)
+            if scala == 0:
+                continue
+            aa, bb = a / scala, b / scala
+            termine = scala * (aa - bb) ** 2 / (aa + bb)
+            termini.append(termine)
+        massimo = max(termini, default=0.0)
+        if massimo == 0:
+            return 0.0
+        return math.sqrt(massimo) * math.sqrt(
+            math.fsum(termine / massimo for termine in termini)
+        )
     raise ValueError(f"Misura numerica non riconosciuta: {id_misura}.")
 
 
