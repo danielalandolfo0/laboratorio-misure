@@ -84,18 +84,45 @@
     if (!rapporto || !Array.isArray(rapporto.bloccanti)) return;
     const coppie = rapporto.coppieNonConfrontabili || [];
     const etichette = rapporto.etichette || [];
-    const esempioCoppie = coppie.slice(0, 12).map(([i, j]) =>
-      '<li>Riga ' + escapeHtml(String(i)) + ' (' +
-      escapeHtml(etichette[i - 1] ?? String(i)) + ') e riga ' +
-      escapeHtml(String(j)) + ' (' +
-      escapeHtml(etichette[j - 1] ?? String(j)) + ')</li>'
-    ).join("");
+    const copertura = rapporto.analisiCopertura;
+    const etichetteMotivi = {
+      riga_assente: "almeno una riga assente dal blocco",
+      locale_indefinita: "distanza locale non definita"
+    };
+    const sintesiCopertura = copertura?.perBlocco?.length
+      ? '<h6>Perché nessun blocco copre queste coppie?</h6>' +
+        '<p>Ogni coppia elencata è priva di contributi in tutti i blocchi. ' +
+        'Per ciascuno è indicata la causa, senza attribuire zeri.</p>' +
+        '<ul>' + copertura.perBlocco.map(blocco =>
+          '<li><strong>' + escapeHtml(blocco.titolo) + '</strong> (' +
+          escapeHtml((blocco.colonne || []).join(", ")) + '): ' +
+          escapeHtml(String(blocco.coppieConRigaAssente)) +
+          ' coppie con almeno una riga assente dal risultato locale; ' +
+          escapeHtml(String(blocco.coppieLocalmenteIndefinite)) +
+          ' con distanza locale non definita.</li>'
+        ).join("") + '</ul>'
+      : "";
+    const esempioCoppie = coppie.slice(0, 12).map(([i, j], indice) => {
+      const dettagli = copertura?.esempi?.[indice]?.blocchi || [];
+      const cause = dettagli.length
+        ? '<small>Blocchi: ' + dettagli.map(blocco =>
+            escapeHtml(blocco.titolo) + ' — ' +
+            escapeHtml(etichetteMotivi[blocco.motivo] || blocco.motivo)
+          ).join('; ') + '</small>'
+        : '';
+      return '<li>Riga ' + escapeHtml(String(i)) + ' (' +
+        escapeHtml(etichette[i - 1] ?? String(i)) + ') e riga ' +
+        escapeHtml(String(j)) + ' (' +
+        escapeHtml(etichette[j - 1] ?? String(j)) + ')' +
+        cause + '</li>';
+    }).join("");
     $("comparison-calculation-problems-body").innerHTML =
       '<h5>Rapporto dei problemi riscontrati durante il calcolo</h5>' +
       '<p><strong>' + escapeHtml(String(rapporto.numeroBloccanti || 0)) +
       ' problemi bloccanti.</strong> La matrice non è stata generata: ' +
       'il sito non sostituisce distanze non definite con numeri arbitrari.</p>' +
       elencoProblemiHtml(rapporto.bloccanti) +
+      sintesiCopertura +
       (coppie.length
         ? '<p><strong>Tutte le coppie non confrontabili: ' +
           escapeHtml(String(coppie.length)) +
