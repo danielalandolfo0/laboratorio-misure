@@ -58,6 +58,54 @@ le prime dodici coppie; il CSV diagnostico mantiene l'elenco
 integrale delle coppie. Nessuna di queste informazioni produce
 una distanza sostitutiva.
 
+## Stabilità numerica: pesi e scale estreme
+
+Il motore distingue tra due operazioni matematicamente differenti:
+
+- **Media pesata dei contributi**, in Gower e nell'aggregazione dei
+  blocchi: per pesi positivi finiti \(w_k\), si calcola
+  \[
+  \frac{\sum_k w_k\delta_k}{\sum_k w_k}
+  =\frac{\sum_k (w_k/M)\delta_k}{\sum_k w_k/M},
+  \qquad M=\max_k w_k.
+  \]
+  Questo evita overflow del numeratore o del denominatore quando
+  \(\sum_k w_k\) supera il massimo float. Un contributo **definito
+  zero** mantiene il proprio peso; l'assenza di tutti i contributi
+  resta un errore di copertura.
+- **Distanza di Minkowski pesata, non pairwise**:
+  \[
+  d_{q,w}(x,y)=
+  \left(\sum_k w_k|x_k-y_k|^q\right)^{1/q}.
+  \]
+  Qui il peso ha un effetto assoluto sulla distanza, quindi
+  **non** viene diviso per la somma dei pesi. Il calcolo usa la
+  log-sum-exp per evitare overflow delle potenze intermedie.
+  Nel confronto pairwise delle sole coordinate comuni, invece,
+  è prevista dal contratto una media delle potenze con i pesi
+  rinormalizzati sulle coordinate disponibili; anche questa
+  variante viene calcolata con log-sum-exp.
+
+La diagnostica controfattuale dei pesi globali usa a sua volta
+pesi relativi: il confronto con pesi dimezzati o raddoppiati non
+produce intermedi infiniti. Per l'ipotetica **rimozione** di un
+blocco, somme parziali prefisso/suffisso evitano di perdere
+pesi piccoli sottraendo un peso dominante alla somma totale.
+
+Le distanze euclidea, Canberra, Bray–Curtis e χ² utilizzano forme
+algebricamente equivalenti che evitano, nei casi supportati, il
+quadrato di scarti enormi o rapporti indeterminati \(\infty/\infty\)
+dovuti soltanto agli intermedi. La convenzione Bray–Curtis per
+due vettori nulli resta comunque soggetta alla conferma esplicita.
+
+Le modifiche **non garantiscono** che ogni input numerico estremo
+abbia una rappresentazione IEEE-754 sufficientemente accurata.
+Se il risultato di una distanza pesata supera l'intervallo
+rappresentabile, il motore segnala un errore invece di presentare
+l'infinito come distanza valida. I test includono pesi
+\(10^{308}\), \(10^{-308}\), formule analitiche e un test
+Chromium con Python realmente eseguito nel browser.
+
 ## Funzionalità disponibili
 
 - caricamento locale di tabelle CSV con intestazione;
