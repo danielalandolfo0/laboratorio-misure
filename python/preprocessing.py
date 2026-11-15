@@ -5146,7 +5146,7 @@ def _distanza_coordinate_comuni(
     # somma(w*d^q)/somma(w), sia underflow quando l'unica differenza
     # non nulla ha peso minuscolo rispetto alle altre coordinate.
     log_termini = [
-        math.log(pesi[i]) + q * math.log(d / massimo_scarto)
+        math.log(pesi[i]) + q * (math.log(d) - math.log(massimo_scarto))
         for i, d in zip(comuni, scarti) if d > 0
     ]
     massimo_log = max(log_termini)
@@ -5188,7 +5188,7 @@ def _norma_minkowski_stabile(
     if massimo == 0:
         return 0.0
     log_termini = [
-        math.log(w) + q * math.log(d / massimo)
+        math.log(w) + q * (math.log(d) - math.log(massimo))
         for w, d in zip(pesi, scarti) if d > 0
     ]
     massimo_log = max(log_termini)
