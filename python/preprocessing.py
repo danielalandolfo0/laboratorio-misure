@@ -7433,11 +7433,11 @@ def calcola_matrice_json(testo: str, scelte_json: str = "[]", interpretazione_js
             risultato = prepara_tabella(leggi_csv(testo, config["separatore"]), scelte)
             matrice = calcola_matrice(risultato, interpretazione)
             return json.dumps({"ok": True, "matrice": matrice}, ensure_ascii=False, separators=(",", ":"))
-        except IncompatibilitaCalcolo as errore:
-            return json.dumps(
-                {"ok": False, "errore": str(errore),
-                 "rapportoProblemi": errore.rapportoProblemi},
-                ensure_ascii=False, separators=(",", ":"), allow_nan=False,
-            )
+    except IncompatibilitaCalcolo as errore:
+        return json.dumps(
+            {"ok": False, "errore": str(errore),
+             "rapportoProblemi": errore.rapportoProblemi},
+            ensure_ascii=False, separators=(",", ":"), allow_nan=False,
+        )
     except (ValueError, TypeError, KeyError, json.JSONDecodeError) as errore:
         return json.dumps({"ok": False, "errore": str(errore)}, ensure_ascii=False, separators=(",", ":"))
