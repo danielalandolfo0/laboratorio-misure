@@ -7327,7 +7327,8 @@ def crea_rapporto_json(
             scelte = json.loads(scelte_json or "[]")
             interpretazione = json.loads(interpretazione_json or "{}")
             rapporto = crea_rapporto_calcolo(
-                testo, scelte, interpretazione, nome_file, importazione=config,
+                testo, scelte, interpretazione, nome_file,
+                importazione=(config if json.loads(importazione_json or "{}") else None),
             )
             return json.dumps(
                 {"ok": True, "rapporto": rapporto}, ensure_ascii=False,
