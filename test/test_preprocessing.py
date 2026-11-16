@@ -3321,14 +3321,15 @@ base_griglia = {
     "ritardo-serie": "no",
     "misureTemporaliGruppi": {"serie": "punto"},
 }
+scelta_puntuale = {**base_griglia, "misureGruppi": {"serie": "euclidean"}}
 piano_puntuale_irregolare = p.crea_piano_confronto(
-    dati_griglia_irregolare, base_griglia
+    dati_griglia_irregolare, scelta_puntuale
 )
 assert piano_puntuale_irregolare["completo"], piano_puntuale_irregolare
 percorso_puntuale = piano_puntuale_irregolare["percorsi"][0]
 assert percorso_puntuale["parametri"]["tempi"] == [0, 1, 4]
 assert percorso_puntuale["parametri"]["unitaTempo"] == "ore"
-matrice_puntuale = p.calcola_matrice(dati_griglia_irregolare, base_griglia)
+matrice_puntuale = p.calcola_matrice(dati_griglia_irregolare, scelta_puntuale)
 verifica_matrice_finale(matrice_puntuale, 3)
 quasi_uguali(matrice_puntuale["matrice"][0][1], 2 / 3)
 
