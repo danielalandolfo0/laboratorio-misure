@@ -3418,6 +3418,7 @@ dati_vuoti_irregolari = p.prepara_tabella(p.leggi_csv(
 ))
 scelta_interpolazione = {
     **base_griglia,
+    "misureGruppi": {"serie": "euclidean"},
     "significatoMancanti": "sconosciuto",
     "mancanti-gruppo-serie": "interpola_lineare",
 }
