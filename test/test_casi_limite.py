@@ -341,7 +341,11 @@ assert p._distanza_specializzata(
     [0, 0], [1, 1], "Distanza della corda") is None
 
 csv_profili = "id,x,y\nA,1,0\nB,0,1\nC,-1,0"
-dati_profili = p.prepara_tabella(p.leggi_csv(csv_profili))
+dati_profili = p.prepara_tabella(p.leggi_csv(csv_profili), [
+    {"tipo": "auto", "metodo": "auto"},
+    {"tipo": "numerica", "metodo": "nessuno"},
+    {"tipo": "numerica", "metodo": "nessuno"},
+])
 opzioni_profili = {
     "riga": "oggetto",
     "colonne": {
