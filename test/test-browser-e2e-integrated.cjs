@@ -108,6 +108,10 @@ async function main() {
       name:"test_integrato_gower_gruppi_mancanti.csv",
       mimeType:"text/csv", buffer:Buffer.from(INPUT)
     });
+    await page.locator("#csv-import-stage").waitFor({state:"visible"});
+    assert.equal(await page.locator("#csv-output").isVisible(),false,
+      "Il questionario non deve partire prima della conferma del formato.");
+    await page.locator("#confirm-csv-import").click();
     await page.locator("#csv-output").waitFor({state:"visible"});
     assert.match(await page.locator("#comparison-guide-phase").innerText(),/Indica che cosa rappresenta una riga/);
     await page.locator("#comparison-guide-next").click();
