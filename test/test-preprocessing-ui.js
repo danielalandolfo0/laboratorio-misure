@@ -16,7 +16,7 @@ async function flush() {
   for (let i = 0; i < 6; ++i) await new Promise(setImmediate);
 }
 
-function createHarness() {
+function createHarness(options = {}) {
   const dom = new Map();
   const downloadBlobs = new Map();
   class Element {
@@ -78,6 +78,7 @@ function createHarness() {
     planCalls: [],
     matrixCalls: [],
     tableCalls: [],
+    previewCalls: [],
     planIntercept: null,
     matrixIntercept: null,
     tableIntercept: null,
@@ -165,8 +166,8 @@ function createHarness() {
   }
   const preprocessing = {
     ready: Promise.resolve(),
-    preparaTabella: (text, choices = []) => {
-      observations.tableCalls.push({text, choices});
+    preparaTabella: (text, choices = [], importazione = {}) => {
+      observations.tableCalls.push({text, choices, importazione});
       return observations.tableIntercept?.(text, choices) ||
         Promise.resolve(makeTable(text, choices));
     },
@@ -201,6 +202,17 @@ function createHarness() {
     creaCsv: async () => "csv"
   };
 
+  if (options.conAnteprima) {
+    preprocessing.anteprimaImportazione = (text, config = {}) => {
+      observations.previewCalls.push({text, config});
+      const righe = text.trim().split(/\r?\n/).map(line => line.split(","));
+      return Promise.resolve({
+        ok: true, separatoreRilevato: ",", separatore: config.separatore || ",",
+        intestazioni: righe[0], righe: righe.slice(1, 9),
+        numeroRighe: righe.length - 1, conteggiMarcatori: {na: 1}
+      });
+    };
+  }
   const source = fs.readFileSync("js/preprocessing-ui.js", "utf8");
   vm.runInNewContext(source, {
     window: {Preprocessing: preprocessing},
@@ -228,6 +240,37 @@ function createHarness() {
     };
   }
   return {fire, element, observations, makeTable, makePlan, makeMatrix, customTarget};
+}
+
+async function testConfermaImportazionePrimaDellaTipizzazione() {
+  const h = createHarness({conAnteprima: true});
+  h.fire("csv-file", "change", {target: {files: [{
+    name: "import.csv", type: "text/csv", size: 40,
+    text: async () => "categoria,id\nNA,A\nrosso,B"
+  }]}});
+  await flush();
+  assert.equal(h.element("csv-import-stage").hidden, false);
+  assert.equal(h.element("csv-output").hidden, true);
+  assert.equal(h.observations.tableCalls.length, 0,
+    "Prima della conferma non deve essere richiesta alcuna tipizzazione.");
+  assert.match(h.element("import-marker-options").innerHTML, /occorrenze/);
+  h.fire("import-marker-options", "change", {
+    target: {matches: () => true, value: "na", checked: false}
+  });
+  h.fire("confirm-csv-import", "click");
+  await flush();
+  assert.equal(h.element("csv-import-stage").hidden, true);
+  assert.equal(h.element("csv-output").hidden, false);
+  assert.equal(h.observations.tableCalls[0].importazione.marcatoriMancanti.includes("na"), false);
+  h.fire("edit-csv-import", "click");
+  assert.equal(h.element("csv-import-stage").hidden, false);
+  assert.equal(h.element("csv-output").hidden, true);
+  h.fire("import-marker-options", "change", {
+    target: {matches: () => true, value: "na", checked: true}
+  });
+  h.fire("confirm-csv-import", "click");
+  await flush();
+  assert.equal(h.observations.tableCalls.at(-1).importazione.marcatoriMancanti.includes("na"),true);
 }
 
 async function testGuida() {
@@ -1470,6 +1513,7 @@ async function testConfermaBrayDoppioZero() {
 }
 
 (async () => {
+  await testConfermaImportazionePrimaDellaTipizzazione();
   await testAssegnazioniGruppiObsolete();
   await testProblemiSimultaneiNeiBlocchi();
   await testConfermaBrayDoppioZero();

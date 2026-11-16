@@ -7,6 +7,12 @@
   let tabellaOriginale = null;
   let testoOriginale = "";
   let scelte = [];
+  // Configurazione di importazione separata dalle scelte semantiche.
+  // Viene riapplicata ad ogni richiesta Python sul CSV originale.
+  let importazioneCSV = null;
+  let anteprimaImportazione = null;
+  let nomeFileImportazione = "";
+  let versioneAnteprimaImportazione = 0;
   let interpretazione = { colonne: {}, gruppi: [], assegnazioni: {}, prossimoGruppo: 1 };
   let vista = "lavoro";
   let pianoCorrente = null;
@@ -227,13 +233,13 @@
     interpretazione.riscalamentoConfermato = false;
     try {
       let nuoveScelte = scelte.map(scelta => ({ ...scelta }));
-      let nuovaTabella = await P.preparaTabella(testoOriginale, nuoveScelte);
+      let nuovaTabella = await P.preparaTabella(testoOriginale, nuoveScelte, importazioneCSV || {});
       if (versione !== versionePreparazioneColonne || versioneFile !== versioneDati) return;
       const tipoEffettivo = nuovaTabella.colonne[indice].tipo;
       if ((tipoEffettivo === "binaria" || tipoEffettivo === "non_numerica") && scelte[indice].metodo !== "auto") {
         scelte[indice].metodo = "auto";
         nuoveScelte = scelte.map(scelta => ({ ...scelta }));
-        nuovaTabella = await P.preparaTabella(testoOriginale, nuoveScelte);
+        nuovaTabella = await P.preparaTabella(testoOriginale, nuoveScelte, importazioneCSV || {});
         if (versione !== versionePreparazioneColonne || versioneFile !== versioneDati) return;
       }
       risultato = nuovaTabella;
@@ -494,7 +500,7 @@
         : "Le altre colonne e i gruppi non entrano in questa diagnosi. Nei percorsi misti Gower usa i valori originali e normalizza internamente i contributi quantitativi; i gruppi di coordinate possono invece usare il riscalamento confermato.");
     corpo.textContent = "Analisi preliminare delle colonne quantitative indipendenti…";
     try {
-      const risposta = await P.analizzaDiagnosi(testoOriginale, scelte, nomi);
+      const risposta = await P.analizzaDiagnosi(testoOriginale, scelte, nomi, importazioneCSV || {});
       if (versione !== versioneDiagnosi) return;
       const d = risposta.diagnosi;
       proposteGruppiCorrenti = (risposta.gruppiSuggeriti || []).filter(proposta =>
@@ -1341,7 +1347,8 @@
     try {
       const risposta = await P.calcolaMatrice(
         testoOriginale, scelte.map(scelta => ({ ...scelta })),
-        JSON.parse(JSON.stringify(interpretazione))
+        JSON.parse(JSON.stringify(interpretazione)),
+        importazioneCSV || {}
       );
       if (versione !== versioneMatrice ||
           versioneConfigurazione !== versionePiano ||
@@ -1398,7 +1405,8 @@
         testoOriginale,
         scelte.map(scelta => ({...scelta})),
         JSON.parse(JSON.stringify(interpretazione)),
-        $("csv-file-name").textContent
+        $("csv-file-name").textContent,
+        importazioneCSV || {}
       );
       if (versione !== versioneMatrice ||
           versioneFile !== versioneDati ||
@@ -1448,7 +1456,8 @@
     try {
       const piano = await P.creaPiano(
         testoOriginale, scelte.map(scelta => ({ ...scelta })),
-        JSON.parse(JSON.stringify(interpretazione))
+        JSON.parse(JSON.stringify(interpretazione)),
+        importazioneCSV || {}
       );
       if (versione !== versionePiano || versioneFile !== versioneDati) return;
       nascondiErrore();
@@ -1562,7 +1571,7 @@
   function domandeConfigurazioneGower(profili) {
     if (!profili.length) return "";
     const campi = [];
-    const mancantiCSV = new Set(["", "na", "n/a", "null", "?"]);
+    const mancantiCSV = new Set(importazioneCSV?.marcatoriMancanti || ["", "na", "n/a", "null", "?"]);
     const rispostaMancanti = valoreRisposta("significatoMancanti");
     const rispostaZeri = valoreRisposta("zeriCondivisi");
     const rispostaOrdini = valoreRisposta("ordineLivelli");
@@ -1832,7 +1841,7 @@
         'se ne servono due, correggi prima la codifica nel CSV.</p>' +
         '<p>L’assenza confermata è uno stato osservato per categorie e variabili binarie. ' +
         'Non è automaticamente uno zero per quantità e timestamp.</p></div>');
-      const marcatoriAmmessi = new Set(["", "na", "n/a", "null", "?"]);
+      const marcatoriAmmessi = new Set(importazioneCSV?.marcatoriMancanti || ["", "na", "n/a", "null", "?"]);
       for (const profilo of profiliInclusi) {
         const nome = profilo.nome;
         const indice = risultato.originale.intestazioni.indexOf(nome);
@@ -2562,6 +2571,127 @@
     aggiornaFaseNumerica();
   }
 
+  const MARCATORI_CSV_STANDARD = [
+    ["na", "NA"], ["n/a", "N/A"], ["null", "NULL"],
+    ["?", "?"], ["nan", "NaN"]
+  ];
+
+  function disegnaAnteprimaImportazione() {
+    const config = importazioneCSV || {};
+    const anteprima = anteprimaImportazione || {};
+    $("csv-import-stage").hidden = false;
+    $("import-separator").value = config.separatore || anteprima.separatore || ",";
+    const attivi = new Set(config.marcatoriMancanti || []);
+    $("import-marker-options").innerHTML = MARCATORI_CSV_STANDARD.map(([chiave, nome]) =>
+      '<label><input class="import-marker-choice" type="checkbox" value="' +
+      escapeHtml(chiave) + '"' + (attivi.has(chiave) ? " checked" : "") +
+      '> ' + escapeHtml(nome) +
+      ' (' + escapeHtml(String(anteprima.conteggiMarcatori?.[chiave] || 0)) +
+      ' occorrenze)</label>'
+    ).join("");
+    if (anteprima.erroreAnteprima) {
+      $("import-preview-error").textContent =
+        "Con questo separatore il file non può essere letto: " + anteprima.erroreAnteprima;
+    } else {
+      $("import-preview-error").textContent = "";
+    }
+    const intestazioni = anteprima.intestazioni || [];
+    const righe = anteprima.righe || [];
+    const maxColonne = Math.min(20, intestazioni.length);
+    $("import-preview-head").innerHTML = '<tr>' + intestazioni.slice(0, maxColonne)
+      .map(nome => '<th scope="col">' + escapeHtml(nome) + '</th>').join("") + '</tr>';
+    $("import-preview-body").innerHTML = righe.map(riga =>
+      '<tr>' + riga.slice(0, maxColonne)
+        .map(valore => '<td>' + escapeHtml(valore) + '</td>').join("") + '</tr>'
+    ).join("");
+    $("import-preview-caption").textContent = anteprima.erroreAnteprima
+      ? "Scegli un altro separatore; nessuna colonna è stata ancora interpretata."
+      : "Il file “" + nomeFileImportazione + "” contiene " + anteprima.numeroRighe +
+        " righe di dati e " + intestazioni.length + " colonne. Anteprima di " +
+        righe.length + " righe; i valori sono ancora quelli del CSV originale.";
+    $("confirm-csv-import").disabled = !!anteprima.erroreAnteprima;
+  }
+
+  async function cambiaSeparatoreImportazione(separatore) {
+    if (!testoOriginale || typeof P.anteprimaImportazione !== "function") return;
+    if (!importazioneCSV) return;
+    importazioneCSV.separatore = separatore;
+    const versione = ++versioneAnteprimaImportazione;
+    const versioneFile = versioneDati;
+    $("import-preview-caption").textContent = "Rilettura dell'anteprima…";
+    $("confirm-csv-import").disabled = true;
+    try {
+      const letta = await P.anteprimaImportazione(testoOriginale, {separatore});
+      if (versione !== versioneAnteprimaImportazione || versioneFile !== versioneDati) return;
+      anteprimaImportazione = letta;
+      disegnaAnteprimaImportazione();
+    } catch (errore) {
+      if (versione !== versioneAnteprimaImportazione || versioneFile !== versioneDati) return;
+      $("import-preview-error").textContent = errore.message;
+      $("confirm-csv-import").disabled = true;
+    }
+  }
+
+  function opzioniImportazioneConfermate() {
+    const selezionati = [""]; // Le celle vuote restano sempre mancanti.
+    const standard = MARCATORI_CSV_STANDARD.map(([nome]) => nome);
+    const custom = $("import-custom-markers").value.split(";")
+      .map(x => x.trim().toLocaleLowerCase()).filter(Boolean);
+    const attivi = new Set(importazioneCSV?.marcatoriMancanti || []);
+    return {
+      separatore: $("import-separator").value,
+      marcatoriMancanti: [...new Set([
+        ...selezionati, ...standard.filter(nome => attivi.has(nome)), ...custom
+      ])]
+    };
+  }
+
+  async function confermaImportazione() {
+    if (!testoOriginale || !importazioneCSV || anteprimaImportazione?.erroreAnteprima) return;
+    const versione = ++versioneDati;
+    ++versionePreparazioneColonne;
+    ++versioneAnteprimaImportazione;
+    const pulsante = $("confirm-csv-import");
+    const testoPulsante = pulsante.textContent;
+    pulsante.disabled = true;
+    pulsante.textContent = "Analisi delle colonne…";
+    nascondiErrore();
+    try {
+      const config = opzioniImportazioneConfermate();
+      const nuovaTabella = await P.preparaTabella(testoOriginale, [], config);
+      if (versione !== versioneDati) return;
+      importazioneCSV = config;
+      interpretazione = {colonne: {}, gruppi: [], assegnazioni: {}, prossimoGruppo: 1};
+      riscalamentoConfermato = false;
+      $("row-meaning").value = "";
+      risultato = nuovaTabella;
+      tabellaOriginale = nuovaTabella.originale;
+      scelte = tabellaOriginale.intestazioni.map(() => ({tipo: "auto", metodo: "auto"}));
+      $("csv-import-stage").hidden = true;
+      mostraRisultato(nomeFileImportazione);
+    } catch (errore) {
+      if (versione !== versioneDati) return;
+      $("import-preview-error").textContent = errore.message;
+    } finally {
+      if (versione === versioneDati) {
+        pulsante.disabled = false;
+        pulsante.textContent = testoPulsante;
+      }
+    }
+  }
+
+  function modificaImportazione() {
+    if (!testoOriginale || !importazioneCSV) return;
+    ++versioneDati;
+    ++versionePreparazioneColonne;
+    ++versioneAnteprimaImportazione;
+    nascondiPiano();
+    nascondiErrore();
+    risultato = null;
+    $("csv-output").hidden = true;
+    disegnaAnteprimaImportazione();
+  }
+
   function mostraRisultato(nomeFile) {
     $("csv-file-name").textContent = nomeFile;
     $("csv-dimensions").textContent = `Matrice ${risultato.riepilogo.istanze} × ${risultato.riepilogo.feature} (istanze × feature)`;
@@ -2579,7 +2709,25 @@
     nascondiPiano();
     nascondiErrore();
     $("csv-output").hidden = true;
+    $("csv-import-stage").hidden = true;
     try {
+      // La prima lettura identifica le colonne, ma non tipizza i dati.
+      // L'analisi definitiva aspetta una conferma esplicita del CSV.
+      if (typeof P.anteprimaImportazione === "function") {
+        const preview = await P.anteprimaImportazione(testo, {});
+        if (versione !== versioneDati) return;
+        testoOriginale = testo;
+        nomeFileImportazione = nomeFile;
+        anteprimaImportazione = preview;
+        importazioneCSV = {
+          separatore: preview.separatore,
+          marcatoriMancanti: ["", "na", "n/a", "null", "?"]
+        };
+        $("import-custom-markers").value = "";
+        disegnaAnteprimaImportazione();
+        return;
+      }
+      // Compatibilità con il motore simulato nei test DOM storici.
       const nuovaTabella = await P.preparaTabella(testo, []);
       if (versione !== versioneDati) return;
       interpretazione = { colonne: {}, gruppi: [], assegnazioni: {}, prossimoGruppo: 1 };
@@ -2605,6 +2753,7 @@
     ++versionePreparazioneColonne;
     nascondiPiano();
     $("csv-output").hidden = true;
+    $("csv-import-stage").hidden = true;
     if (file.size > 15 * 1024 * 1024) { mostraErrore("Il file supera il limite iniziale di 15 MB."); return; }
     if (!/\.csv$/i.test(file.name) && file.type !== "text/csv" && file.type !== "text/plain") {
       mostraErrore("Seleziona un file CSV."); return;
@@ -2652,6 +2801,18 @@
 
   $("csv-file").addEventListener("change", evento => elaboraFile(evento.target.files[0]));
   $("load-example-csv").addEventListener("click", () => elaboraTesto(esempio, "esempio.csv"));
+  $("confirm-csv-import").addEventListener("click", confermaImportazione);
+  $("edit-csv-import").addEventListener("click", modificaImportazione);
+  $("import-separator").addEventListener("change", evento =>
+    cambiaSeparatoreImportazione(evento.target.value)
+  );
+  $("import-marker-options").addEventListener("change", evento => {
+    if (!evento.target.matches?.(".import-marker-choice") || !importazioneCSV) return;
+    const nome = evento.target.value;
+    const attivi = new Set(importazioneCSV.marcatoriMancanti);
+    if (evento.target.checked) attivi.add(nome); else attivi.delete(nome);
+    importazioneCSV.marcatoriMancanti = [...attivi];
+  });
   $("view-original").addEventListener("click", () => { vista = "originale"; disegnaTabella(); });
   $("view-work").addEventListener("click", () => { vista = "lavoro"; disegnaTabella(); });
   $("comparison-guide-next").addEventListener("click", () => {

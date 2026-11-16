@@ -51,9 +51,40 @@
     </div>
     <div class="error" id="csv-error" role="alert"></div>
 
+    <section class="csv-output" id="csv-import-stage" hidden aria-labelledby="csv-import-title">
+      <p class="section-label">Passo 1 — prima della tipizzazione</p>
+      <h3 id="csv-import-title">Controlla come leggere il file CSV</h3>
+      <p>Il sito propone un separatore, ma non modifica il file. Conferma anche quali simboli rappresentano valori mancanti: gli altri resteranno etichette letterali. Le caselle completamente vuote restano mancanti.</p>
+      <div class="question-grid">
+        <div class="question-item">
+          <label for="import-separator">Quale carattere separa le colonne?</label>
+          <select id="import-separator">
+            <option value=",">Virgola (,)</option>
+            <option value=";">Punto e virgola (;)</option>
+            <option value="&#9;">Tabulazione (TAB)</option>
+          </select>
+        </div>
+        <div class="question-item">
+          <strong>Quali scritte indicano un valore mancante?</strong>
+          <p>Puoi togliere la selezione da NA, N/A, NULL o ? se sono categorie o testi reali. La scelta vale per il file intero.</p>
+          <div id="import-marker-options"></div>
+          <label for="import-custom-markers">Altri marcatori di mancanza (facoltativi, separati da ;)</label>
+          <input id="import-custom-markers" type="text" placeholder="es. senza dato; non rilevato">
+        </div>
+      </div>
+      <div class="error" id="import-preview-error" role="alert"></div>
+      <p id="import-preview-caption"></p>
+      <div class="table-scroll">
+        <table><thead id="import-preview-head"></thead><tbody id="import-preview-body"></tbody></table>
+      </div>
+      <p>Questa è un'anteprima dei valori originali; i tipi, le trasformazioni e le misure saranno decisi soltanto dopo la conferma.</p>
+      <button type="button" class="primary-action" id="confirm-csv-import">Conferma la lettura e analizza le colonne</button>
+    </section>
+
     <div class="csv-output" id="csv-output" hidden>
       <div class="csv-output-head">
         <div class="csv-file-info"><span>File analizzato</span><strong id="csv-file-name"></strong><small id="csv-dimensions"></small></div>
+        <button class="secondary-action" id="edit-csv-import" type="button">Modifica lettura CSV</button>
         <button class="secondary-action" id="download-work" type="button" disabled hidden>Scarica la tabella trasformata</button>
       </div>
 

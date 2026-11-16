@@ -27,6 +27,10 @@ async function init(page){
 }
 async function upload(page,csv,name){
   await page.locator("#csv-file").setInputFiles({name,mimeType:"text/csv",buffer:Buffer.from(csv)});
+  await page.locator("#csv-import-stage").waitFor({state:"visible"});
+  assert.equal(await page.locator("#csv-output").isVisible(),false,
+    "Il CSV non deve essere tipizzato prima della conferma.");
+  await page.locator("#confirm-csv-import").click();
   await page.locator("#csv-output").waitFor({state:"visible"});
   assert.equal((await page.locator("#csv-file-name").innerText()).trim(),name);
 }
@@ -303,6 +307,71 @@ async function gower(browser){
   }catch(e){await capture("failure");e.message+="\n"+JSON.stringify(errors);throw e}
   finally{await ctx.close()}
 }
+async function importaCsv(browser){
+  const {ctx,page,capture,errors}=await newPage(browser,"importazione-csv",1000);
+  try{
+    await init(page);
+    const csv="id;quantita;categoria\nA;1;NA\nB;2;rosso\nC;3;NA";
+    await page.locator("#csv-file").setInputFiles({
+      name:"separatore-punto-virgola.csv", mimeType:"text/csv",
+      buffer:Buffer.from(csv)
+    });
+    await page.locator("#csv-import-stage").waitFor({state:"visible"});
+    assert.equal(await page.locator("#csv-output").isVisible(),false);
+    assert.equal(await page.locator("#import-separator").inputValue(),";");
+    assert.match(await page.locator("#import-preview-caption").innerText(),/3 righe/);
+    const checkbox=page.locator('.import-marker-choice[value="na"]');
+    assert.equal(await checkbox.isChecked(),true);
+    await checkbox.uncheck();
+    await page.locator("#confirm-csv-import").click();
+    await page.locator("#csv-output").waitFor({state:"visible"});
+    assert.equal(await page.locator("#csv-import-stage").isVisible(),false);
+    const risultati=await page.evaluate(async csv=>{
+      const interpretazione={
+        riga:"oggetto",
+        colonne:{
+          id:{ruolo:"identificativo",usa:false},
+          quantita:{ruolo:"quantita",usa:true},
+          categoria:{ruolo:"categoria",usa:true}
+        }
+      };
+      const literal={separatore:";",marcatoriMancanti:["","?","null","n/a"]};
+      const absent={separatore:";",marcatoriMancanti:["","?","null","n/a","na"]};
+      const a=await window.Preprocessing.preparaTabella(csv,[],literal);
+      const b=await window.Preprocessing.preparaTabella(csv,[],absent);
+      const d1=await window.Preprocessing.calcolaMatrice(csv,[],interpretazione,literal);
+      const d2=await window.Preprocessing.calcolaMatrice(csv,[],interpretazione,absent);
+      const report=await window.Preprocessing.creaRapporto(
+        csv,[],interpretazione,"mio.csv",literal
+      );
+      return {
+        missingLiteral:a.colonne[2].mancanti,
+        missingAbsent:b.colonne[2].mancanti,
+        distanceLiteral:d1.matrice[0][2],
+        distanceAbsent:d2.matrice[0][2],
+        orig:report.sorgente.csvOriginale,
+        reportConfig:report.configurazione.importazioneCSV
+      };
+    },csv);
+    assert.equal(risultati.missingLiteral,0);
+    assert.equal(risultati.missingAbsent,2);
+    equal(risultati.distanceLiteral,0.5);
+    equal(risultati.distanceAbsent,1);
+    assert.equal(risultati.orig,csv);
+    assert.equal(risultati.reportConfig.separatore,";");
+    assert.equal(risultati.reportConfig.marcatoriMancanti.includes("na"),false);
+    await page.locator("#edit-csv-import").click();
+    await page.locator("#csv-import-stage").waitFor({state:"visible"});
+    assert.equal(await page.locator("#csv-output").isVisible(),false);
+    assert.equal(await checkbox.isChecked(),false);
+    await checkbox.check();
+    await page.locator("#confirm-csv-import").click();
+    await page.locator("#csv-output").waitFor({state:"visible"});
+    await capture("success");
+  }catch(e){await capture("failure");e.message+="\n"+JSON.stringify(errors);throw e}
+  finally{await ctx.close()}
+}
+
 async function mobile(browser){
   const {ctx,page,capture,errors}=await newPage(browser,"numerico-mobile",390);
   try{
@@ -380,6 +449,6 @@ async function mobile(browser){
 }
 (async()=>{
   const b=await chromium.launch({headless:true,args:["--no-sandbox"]});
-  try{await gower(b);await mobile(b);console.log("E2E Chromium e Pyodide superato")}
+  try{await importaCsv(b);await gower(b);await mobile(b);console.log("E2E Chromium e Pyodide superato")}
   finally{await b.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});

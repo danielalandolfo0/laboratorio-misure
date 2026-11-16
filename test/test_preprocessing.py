@@ -4500,4 +4500,85 @@ for i in range(3):
     for j in range(3):
         quasi_uguali(gower_calcolata["matrice"][i][j], matrice_unica[i][j])
 
+
+# Importazione: le decisioni precedono la tipizzazione e rimangono
+# in vigore per piano, matrice, diagnosi e rapporto riproducibile.
+csv_import = "id;quantita;categoria\nA;1;NA\nB;2;rosso\nC;3;NA"
+preview = json.loads(p.anteprima_importazione_json(csv_import))
+assert preview["ok"], preview
+assert preview["separatore"] == ";"
+assert preview["separatoreRilevato"] == ";"
+assert preview["intestazioni"] == ["id", "quantita", "categoria"]
+assert preview["conteggiMarcatori"]["na"] == 2
+assert preview["numeroRighe"] == 3
+assert preview["righe"][0] == ["A", "1", "NA"]
+assert json.loads(p.anteprima_importazione_json(
+    csv_import, json.dumps({"separatore": ","})
+))["intestazioni"] == ["id;quantita;categoria"]
+
+import_literal = {"separatore": ";", "marcatoriMancanti": ["", "?", "null", "n/a"]}
+import_assente = {"separatore": ";", "marcatoriMancanti": ["", "na", "?", "null", "n/a"]}
+r_lit = json.loads(p.analizza_csv_json(
+    csv_import, "[]", json.dumps(import_literal)))
+r_def = json.loads(p.analizza_csv_json(
+    csv_import, "[]", json.dumps(import_assente)))
+assert r_lit["ok"] and r_def["ok"], (r_lit, r_def)
+assert r_lit["risultato"]["originale"]["righe"] == r_def["risultato"]["originale"]["righe"]
+assert r_lit["risultato"]["colonne"][2]["mancanti"] == 0
+assert r_def["risultato"]["colonne"][2]["mancanti"] == 2
+assert r_lit["risultato"]["colonne"][2]["tipo"] == "non_numerica"
+
+risposte_import = {
+    "riga": "oggetto", "colonne": {
+        "id": {"ruolo": "identificativo", "usa": False},
+        "quantita": {"ruolo": "quantita", "usa": True},
+        "categoria": {"ruolo": "categoria", "usa": True},
+    }
+}
+piano_import = json.loads(p.crea_piano_json(
+    csv_import, "[]", json.dumps(risposte_import), json.dumps(import_literal)
+))
+assert piano_import["ok"] and piano_import["piano"]["completo"], piano_import
+mat_import = json.loads(p.calcola_matrice_json(
+    csv_import, "[]", json.dumps(risposte_import), json.dumps(import_literal)
+))
+assert mat_import["ok"], mat_import
+quasi_uguali(mat_import["matrice"]["matrice"][0][2], 0.5)
+# Con NA assente, per queste due righe contribuisce soltanto la quantità.
+mat_assente = json.loads(p.calcola_matrice_json(
+    csv_import, "[]", json.dumps(risposte_import), json.dumps(import_assente)
+))
+assert mat_assente["ok"], mat_assente
+quasi_uguali(mat_assente["matrice"]["matrice"][0][2], 1.0)
+report_import = json.loads(p.crea_rapporto_json(
+    csv_import, "[]", json.dumps(risposte_import), "mio.csv",
+    json.dumps(import_literal),
+))
+assert report_import["ok"], report_import
+assert report_import["rapporto"]["configurazione"]["importazioneCSV"] == (
+    p._configurazione_importazione(import_literal)
+)
+assert report_import["rapporto"]["sorgente"]["csvOriginale"] == csv_import
+assert report_import["rapporto"]["risultato"]["matrice"] == mat_import["matrice"]["matrice"]
+assert json.loads(p.analizza_csv_json("x,y\n1,2\n3,4"))["ok"]
+
+# La configurazione non contamina chiamate successive o dirette:
+# la ContextVar viene ripristinata anche in caso di errore.
+assert p.mancante("NA") is True
+assert p.mancante("NaN") is False
+with p._usa_configurazione_importazione(p._configurazione_importazione({
+    "marcatoriMancanti": ["", "nan"]
+})):
+    assert p.mancante("NA") is False
+    assert p.mancante("NaN") is True
+assert p.mancante("NA") is True
+assert p.mancante("NaN") is False
+for cfg in (
+    {"separatore": "|"},
+    {"marcatoriMancanti": "NA"},
+    {"marcatoriMancanti": [12]},
+):
+    response = json.loads(p.analizza_csv_json(csv_import, "[]", json.dumps(cfg)))
+    assert not response["ok"], response
+
 print("Tutti i test Python di preprocessing sono stati superati.")
