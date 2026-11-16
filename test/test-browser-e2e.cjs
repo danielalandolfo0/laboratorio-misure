@@ -328,7 +328,7 @@ async function importaCsv(browser){
     assert.equal(await page.locator("#csv-import-stage").isVisible(),false);
     const risultati=await page.evaluate(async csv=>{
       const interpretazione={
-        riga:"oggetto",
+        riga:"oggetto", significatoMancanti:"sconosciuto",
         colonne:{
           id:{ruolo:"identificativo",usa:false},
           quantita:{ruolo:"quantita",usa:true},

@@ -106,6 +106,39 @@ l'infinito come distanza valida. I test includono pesi
 \(10^{308}\), \(10^{-308}\), formule analitiche e un test
 Chromium con Python realmente eseguito nel browser.
 
+## Passo di importazione: separatore e marcatori mancanti
+
+Prima della tipizzazione delle colonne, il CSV passa per una schermata di
+**anteprima originale**. Il separatore viene proposto automaticamente e
+può essere modificato scegliendo virgola, punto e virgola o tabulazione.
+L'anteprima mostra intestazioni, numero di righe e prime otto righe;
+un separatore incoerente non può essere confermato.
+
+L'utente può indicare quali tra `NA`, `N/A`, `NULL`, `?` e `NaN`
+rappresentano *dati mancanti* anziché etichette letterali, e aggiungere
+altri marcatori separati da punto e virgola. Le celle completamente
+vuote sono sempre considerate mancanti. La regola vale attualmente
+per **tutte le colonne del CSV**, senza modifica dei valori originali.
+La possibilità di avere significati diversi dello stesso token in
+colonne diverse rimane una funzionalità successiva.
+
+Soltanto quando l'utente conferma la lettura il sito riconosce i tipi
+di dato e mostra il questionario; «Modifica lettura CSV» riapre la
+stessa anteprima e invalida il piano precedente. Ogni operazione
+successiva (diagnosi, correzione del preprocessing, piano,
+calcolo e rapporto riproducibile) rilegge il testo con **la medesima
+configurazione**, isolata per richiesta. Il rapporto memorizza nel
+campo `configurazione.importazioneCSV` il separatore e i marcatori
+confermati; il CSV originale viene conservato senza modifiche.
+L'API precedente senza opzioni rimane compatibile con il formato
+automatico e con i marcatori preesistenti.
+
+Un collaudo differenziale usa una colonna `categoria` contenente
+`NA`: se `NA` è una categoria, contribuisce alla dissimilarità;
+se è un mancante, il contributo viene escluso dalla coppia.
+Il risultato è differente e non viene mai deciso dal motore senza
+un'interpretazione coerente del file.
+
 ## Funzionalità disponibili
 
 - caricamento locale di tabelle CSV con intestazione;

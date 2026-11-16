@@ -4529,7 +4529,8 @@ assert r_def["risultato"]["colonne"][2]["mancanti"] == 2
 assert r_lit["risultato"]["colonne"][2]["tipo"] == "non_numerica"
 
 risposte_import = {
-    "riga": "oggetto", "colonne": {
+    "riga": "oggetto", "significatoMancanti": "sconosciuto",
+    "colonne": {
         "id": {"ruolo": "identificativo", "usa": False},
         "quantita": {"ruolo": "quantita", "usa": True},
         "categoria": {"ruolo": "categoria", "usa": True},
