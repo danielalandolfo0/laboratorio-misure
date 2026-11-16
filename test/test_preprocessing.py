@@ -1707,6 +1707,7 @@ base_ordine = {
     "gruppi": [{"id": "serie", "nome": "Serie", "tipo": "tempo"}],
     "assegnazioni": {nome: "serie" for nome in ("t1", "t2", "t3")},
     "ritardo-serie": "si",
+    "metodiAllineamentoTemporaleGruppi": {"serie": "dtw"},
     "campionamentiTemporaliGruppi": {"serie": "regolare"},
     "ordiniTemporaliGruppi": {"serie": "t1; t2; t3"},
 }
