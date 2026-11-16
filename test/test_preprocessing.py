@@ -800,6 +800,7 @@ risposte_con_gruppo = {
     "gruppi": [{"id": "gruppo-1", "nome": "Serie", "tipo": "tempo"}],
     "assegnazioni": {"a": "gruppo-1", "b": "gruppo-1"},
     "ritardo-gruppo-1": "si",
+    "metodiAllineamentoTemporaleGruppi": {"gruppo-1": "dtw"},
     "ordiniTemporaliGruppi": {"gruppo-1": "a; b"},
     "campionamentiTemporaliGruppi": {"gruppo-1": "regolare"},
     "confermeValoriOriginaliGruppi": {"gruppo-1": "si"},
@@ -842,12 +843,15 @@ for risposta_profilo in ("valori_vicini", "proporzioni", "andamento", "ordine"):
         "gruppi": [{"id": "profilo", "nome": "Profilo", "tipo": "ripetute"}],
         "assegnazioni": {"a": "profilo", "b": "profilo", "c": "profilo"},
         "somiglianza-profilo": risposta_profilo,
+        "misureGruppi": ({"profilo": "euclidean"} if risposta_profilo == "valori_vicini" else {}),
     }
     verifica_matrice_finale(p.calcola_matrice(dati_con_gruppo, risposte_profilo), 4)
 
 risposte_tempo_puntuale = {
     **risposte_con_gruppo,
     "ritardo-gruppo-1": "no",
+    "misureTemporaliGruppi": {"gruppo-1": "punto"},
+    "misureGruppi": {"gruppo-1": "euclidean"},
 }
 verifica_matrice_finale(p.calcola_matrice(dati_con_gruppo, risposte_tempo_puntuale), 4)
 
@@ -868,6 +872,7 @@ assert matrice_aitchison["metodo"] == "Distanza composizionale di Aitchison"
 dati_testo = p.prepara_tabella(p.leggi_csv("testo,id\ncasa,A\ncassa,B\ncane,C"))
 risposte_testo = {
     "riga": "oggetto",
+    "misureTestualiPerColonna": {"testo": "levenshtein"},
     "colonne": {
         "testo": {"ruolo": "testo", "usa": True},
         "id": {"ruolo": "identificativo", "usa": False},
@@ -884,6 +889,7 @@ dati_multipercorso_mancanti = p.prepara_tabella(p.leggi_csv(
 ))
 risposte_multipercorso_mancanti = {
     "riga": "oggetto",
+    "misureTestualiPerColonna": {"testo": "levenshtein"},
     "significatoMancanti": "sconosciuto",
     "confrontoQuantitativo": "assoluto",
     "aggregazioneScarti": "quadratica",
@@ -921,6 +927,7 @@ risposte_tempo_mancanti = {
     "gruppi": [{"id": "tempo", "nome": "Serie", "tipo": "tempo"}],
     "assegnazioni": {nome: "tempo" for nome in ("t0", "t1", "t2")},
     "ritardo-tempo": "si",
+    "metodiAllineamentoTemporaleGruppi": {"tempo": "dtw"},
     "ordiniTemporaliGruppi": {"tempo": "t0; t1; t2"},
     "campionamentiTemporaliGruppi": {"tempo": "regolare"},
 }
@@ -972,6 +979,7 @@ risposte_profilo_mancanti = {
     "gruppi": [{"id": "profilo", "nome": "Profilo", "tipo": "ripetute"}],
     "assegnazioni": {nome: "profilo" for nome in ("t0", "t1", "t2")},
     "somiglianza-profilo": "valori_vicini",
+    "misureGruppi": {"profilo": "euclidean"},
     "mancanti-gruppo-profilo": "imputa_mediana",
 }
 matrice_profilo_imputata = p.calcola_matrice(
