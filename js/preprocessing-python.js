@@ -2,6 +2,7 @@
 (function () {
   "use strict";
 
+  let anteprimaImportazionePython = null;
   let analizzaCsvPython = null;
   let creaCsvPython = null;
   let creaPianoPython = null;
@@ -19,6 +20,7 @@
     const risposta = await fetch("python/preprocessing.py?v=20261115-stabilita-pesi1", { cache: "no-cache" });
     if (!risposta.ok) throw new Error("Non è stato possibile caricare il modulo Python di preprocessing.");
     await pyodide.runPythonAsync(await risposta.text());
+    anteprimaImportazionePython = pyodide.globals.get("anteprima_importazione_json");
     analizzaCsvPython = pyodide.globals.get("analizza_csv_json");
     creaCsvPython = pyodide.globals.get("crea_csv_json");
     creaPianoPython = pyodide.globals.get("crea_piano_json");
@@ -27,9 +29,18 @@
     analizzaDiagnosiPython = pyodide.globals.get("analizza_diagnosi_numerica_json");
   })();
 
-  async function preparaTabella(testo, scelte = []) {
+  async function anteprimaImportazione(testo, opzioni = {}) {
     await ready;
-    const risposta = JSON.parse(analizzaCsvPython(testo, JSON.stringify(scelte)));
+    const risposta = JSON.parse(anteprimaImportazionePython(testo, JSON.stringify(opzioni)));
+    if (!risposta.ok) throw new Error(risposta.errore);
+    return risposta;
+  }
+
+  async function preparaTabella(testo, scelte = [], importazione = {}) {
+    await ready;
+    const risposta = JSON.parse(analizzaCsvPython(
+      testo, JSON.stringify(scelte), JSON.stringify(importazione)
+    ));
     if (!risposta.ok) throw new Error(risposta.errore);
     return risposta.risultato;
   }
@@ -41,23 +52,25 @@
     return risposta.csv;
   }
 
-  async function creaPiano(testo, scelte, interpretazione) {
+  async function creaPiano(testo, scelte, interpretazione, importazione = {}) {
     await ready;
     const risposta = JSON.parse(creaPianoPython(
       testo,
       JSON.stringify(scelte),
-      JSON.stringify(interpretazione)
+      JSON.stringify(interpretazione),
+      JSON.stringify(importazione)
     ));
     if (!risposta.ok) throw new Error(risposta.errore);
     return risposta.piano;
   }
 
-  async function calcolaMatrice(testo, scelte, interpretazione) {
+  async function calcolaMatrice(testo, scelte, interpretazione, importazione = {}) {
     await ready;
     const risposta = JSON.parse(calcolaMatricePython(
       testo,
       JSON.stringify(scelte),
-      JSON.stringify(interpretazione)
+      JSON.stringify(interpretazione),
+      JSON.stringify(importazione)
     ));
     if (!risposta.ok) {
       const errore = new Error(risposta.errore);
@@ -69,26 +82,28 @@
     return risposta.matrice;
   }
 
-  async function creaRapporto(testo, scelte, interpretazione, nomeFile) {
+  async function creaRapporto(testo, scelte, interpretazione, nomeFile, importazione = {}) {
     await ready;
     const risposta = JSON.parse(creaRapportoPython(
       testo,
       JSON.stringify(scelte),
       JSON.stringify(interpretazione),
-      nomeFile
+      nomeFile,
+      JSON.stringify(importazione)
     ));
     if (!risposta.ok) throw new Error(risposta.errore);
     return risposta.rapporto;
   }
 
-  async function analizzaDiagnosi(testo, scelte, nomi) {
+  async function analizzaDiagnosi(testo, scelte, nomi, importazione = {}) {
     await ready;
     const risposta = JSON.parse(analizzaDiagnosiPython(
-      testo, JSON.stringify(scelte), JSON.stringify(nomi)
+      testo, JSON.stringify(scelte), JSON.stringify(nomi),
+      JSON.stringify(importazione)
     ));
     if (!risposta.ok) throw new Error(risposta.errore);
     return risposta;
   }
 
-  window.Preprocessing = { ready, preparaTabella, creaCsv, creaPiano, calcolaMatrice, creaRapporto, analizzaDiagnosi };
+  window.Preprocessing = { ready, anteprimaImportazione, preparaTabella, creaCsv, creaPiano, calcolaMatrice, creaRapporto, analizzaDiagnosi };
 })();

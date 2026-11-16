@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import csv
+import contextvars
+from contextlib import contextmanager
 import datetime as dt
 import hashlib
 import io
@@ -14,6 +16,41 @@ from typing import Any
 
 
 MANCANTI = {"", "na", "n/a", "null", "?"}
+_MARCATORI_IMPORTAZIONE = contextvars.ContextVar(
+    "marcatori_importazione", default=frozenset(MANCANTI)
+)
+
+
+def _configurazione_importazione(opzioni: Any = None) -> dict[str, Any]:
+    """Normalizza le scelte di importazione senza modificare il CSV."""
+    if opzioni is None:
+        opzioni = {}
+    if not isinstance(opzioni, dict):
+        raise ValueError("La configurazione di importazione deve essere un oggetto.")
+    separatore = opzioni.get("separatore")
+    if separatore not in {None, ",", ";", "\t"}:
+        raise ValueError("Scegli virgola, punto e virgola o tabulazione come separatore.")
+    marcatori = opzioni.get("marcatoriMancanti", list(MANCANTI))
+    if not isinstance(marcatori, list) or len(marcatori) > 50:
+        raise ValueError("I marcatori mancanti devono essere al massimo 50 simboli.")
+    if any(not isinstance(v, str) or len(v) > 100 for v in marcatori):
+        raise ValueError("Ogni marcatore deve essere un testo di massimo 100 caratteri.")
+    normalizzati = {v.strip().casefold() for v in marcatori}
+    normalizzati.add("")  # Le celle realmente vuote sono sempre mancanti.
+    return {"separatore": separatore, "marcatoriMancanti": sorted(normalizzati)}
+
+
+@contextmanager
+def _usa_configurazione_importazione(configurazione: dict[str, Any]):
+    """La semantica dei marcatori e' limitata alla singola richiesta."""
+    token = _MARCATORI_IMPORTAZIONE.set(
+        frozenset(configurazione["marcatoriMancanti"])
+    )
+    try:
+        yield
+    finally:
+        _MARCATORI_IMPORTAZIONE.reset(token)
+
 INVALIDO = object()
 ASSENZA_GOWER = object()  # Categoria assenza esplicitamente confermata; non equivale a un mancante.
 NUMERO_PUNTO = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
@@ -78,12 +115,15 @@ def rileva_separatore(testo: str) -> str:
     return separatore
 
 
-def leggi_csv(testo: str) -> dict[str, Any]:
+def leggi_csv(testo: str, separatore: str | None = None) -> dict[str, Any]:
     if not isinstance(testo, str) or not testo.strip():
         raise ValueError("Il file CSV è vuoto.")
 
     pulito = testo.lstrip("\ufeff")
-    separatore = rileva_separatore(pulito)
+    if separatore is None:
+        separatore = rileva_separatore(pulito)
+    elif separatore not in {",", ";", "\t"}:
+        raise ValueError("Il separatore CSV deve essere virgola, punto e virgola o tabulazione.")
     try:
         lettore = csv.reader(io.StringIO(pulito, newline=""), delimiter=separatore, strict=True)
         righe = [[campo.strip() for campo in riga] for riga in lettore]
@@ -114,7 +154,7 @@ def leggi_csv(testo: str) -> dict[str, Any]:
 
 
 def mancante(valore: Any) -> bool:
-    return valore is None or str(valore).strip().casefold() in MANCANTI
+    return valore is None or str(valore).strip().casefold() in _MARCATORI_IMPORTAZIONE.get()
 
 
 
@@ -2088,37 +2128,40 @@ def _proponi_gruppi_numerici(
     return proposte
 
 def analizza_diagnosi_numerica_json(
-    testo: str, scelte_json: str = "[]", colonne_json: str = "[]"
+    testo: str, scelte_json: str = "[]", colonne_json: str = "[]",
+    importazione_json: str = "{}",
 ) -> str:
     """Diagnosi esplorativa prima del riscalamento, solo su colonne selezionate."""
     try:
-        scelte = json.loads(scelte_json or "[]")
-        nomi = json.loads(colonne_json or "[]")
-        risultato = prepara_tabella(leggi_csv(testo), scelte)
-        per_nome = {colonna["nome"]: colonna for colonna in risultato["colonne"]}
-        if (
-            not isinstance(nomi, list) or not nomi
-            or len(nomi) != len(set(nomi))
-            or any(
-                not isinstance(nome, str) or nome not in per_nome
-                or per_nome[nome]["tipo"] not in {"numerica", "numerica_costante"}
+        config = _configurazione_importazione(json.loads(importazione_json or "{}"))
+        with _usa_configurazione_importazione(config):
+            scelte = json.loads(scelte_json or "[]")
+            nomi = json.loads(colonne_json or "[]")
+            risultato = prepara_tabella(leggi_csv(testo, config["separatore"]), scelte)
+            per_nome = {colonna["nome"]: colonna for colonna in risultato["colonne"]}
+            if (
+                not isinstance(nomi, list) or not nomi
+                or len(nomi) != len(set(nomi))
+                or any(
+                    not isinstance(nome, str) or nome not in per_nome
+                    or per_nome[nome]["tipo"] not in {"numerica", "numerica_costante"}
+                    for nome in nomi
+                )
+            ):
+                raise ValueError("Seleziona soltanto colonne numeriche valide.")
+            diagnosi = _diagnosi_numerica(nomi, per_nome)
+            statistiche_colonne = [
+                {
+                    "nome": nome, "mancanti": per_nome[nome]["mancanti"],
+                    "statistiche": per_nome[nome].get("statistiche", {}),
+                }
                 for nome in nomi
+            ]
+            return json.dumps(
+                {"ok": True, "diagnosi": diagnosi, "colonne": statistiche_colonne,
+                 "gruppiSuggeriti": _proponi_gruppi_numerici(nomi, diagnosi)},
+                ensure_ascii=False, separators=(",", ":")
             )
-        ):
-            raise ValueError("Seleziona soltanto colonne numeriche valide.")
-        diagnosi = _diagnosi_numerica(nomi, per_nome)
-        statistiche_colonne = [
-            {
-                "nome": nome, "mancanti": per_nome[nome]["mancanti"],
-                "statistiche": per_nome[nome].get("statistiche", {}),
-            }
-            for nome in nomi
-        ]
-        return json.dumps(
-            {"ok": True, "diagnosi": diagnosi, "colonne": statistiche_colonne,
-             "gruppiSuggeriti": _proponi_gruppi_numerici(nomi, diagnosi)},
-            ensure_ascii=False, separators=(",", ":")
-        )
     except (ValueError, TypeError, KeyError, json.JSONDecodeError) as errore:
         return json.dumps(
             {"ok": False, "errore": str(errore)},
@@ -7176,7 +7219,7 @@ def _normalizza_json_rapporto(dato: Any) -> Any:
 
 def crea_rapporto_calcolo(
     testo: str, scelte: list[dict[str, str]],
-    interpretazione: dict[str, Any], nome_file: str = "dati.csv",
+    interpretazione: dict[str, Any], nome_file: str = "dati.csv", importazione: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Rapporto autosufficiente per ricalcolare la matrice sulla stessa logica.
 
@@ -7188,7 +7231,7 @@ def crea_rapporto_calcolo(
         raise ValueError("Le scelte e le risposte per il rapporto devono essere valide.")
     if not isinstance(nome_file, str):
         raise ValueError("Il nome del CSV deve essere una stringa.")
-    tabella = leggi_csv(testo)
+    tabella = leggi_csv(testo, (importazione or {}).get("separatore"))
     preparata = prepara_tabella(tabella, scelte)
     piano = crea_piano_confronto(preparata, interpretazione)
     if not piano["completo"]:
@@ -7201,6 +7244,8 @@ def crea_rapporto_calcolo(
         "sceltePreprocessing": scelte,
         "risposteQuestionario": interpretazione,
     }
+    if importazione is not None:
+        dati_configurazione["importazioneCSV"] = importazione
     canonica = json.dumps(
         dati_configurazione, ensure_ascii=False, sort_keys=True,
         separators=(",", ":"), allow_nan=False,
@@ -7274,18 +7319,20 @@ def crea_rapporto_calcolo(
 
 def crea_rapporto_json(
     testo: str, scelte_json: str = "[]", interpretazione_json: str = "{}",
-    nome_file: str = "dati.csv",
+    nome_file: str = "dati.csv", importazione_json: str = "{}",
 ) -> str:
     try:
-        scelte = json.loads(scelte_json or "[]")
-        interpretazione = json.loads(interpretazione_json or "{}")
-        rapporto = crea_rapporto_calcolo(
-            testo, scelte, interpretazione, nome_file,
-        )
-        return json.dumps(
-            {"ok": True, "rapporto": rapporto}, ensure_ascii=False,
-            separators=(",", ":"), allow_nan=False,
-        )
+        config = _configurazione_importazione(json.loads(importazione_json or "{}"))
+        with _usa_configurazione_importazione(config):
+            scelte = json.loads(scelte_json or "[]")
+            interpretazione = json.loads(interpretazione_json or "{}")
+            rapporto = crea_rapporto_calcolo(
+                testo, scelte, interpretazione, nome_file, importazione=config,
+            )
+            return json.dumps(
+                {"ok": True, "rapporto": rapporto}, ensure_ascii=False,
+                separators=(",", ":"), allow_nan=False,
+            )
     except (ValueError, TypeError, KeyError, json.JSONDecodeError) as errore:
         return json.dumps(
             {"ok": False, "errore": str(errore)}, ensure_ascii=False,
@@ -7293,11 +7340,47 @@ def crea_rapporto_json(
         )
 
 
-def analizza_csv_json(testo: str, scelte_json: str = "[]") -> str:
+def anteprima_importazione_json(testo: str, importazione_json: str = "{}") -> str:
+    """Prelettura delle celle originali: nessuna tipizzazione o imputazione."""
     try:
-        scelte = json.loads(scelte_json or "[]")
-        risultato = prepara_tabella(leggi_csv(testo), scelte)
-        return json.dumps({"ok": True, "risultato": risultato}, ensure_ascii=False, separators=(",", ":"))
+        config = _configurazione_importazione(json.loads(importazione_json or "{}"))
+        rilevato = rileva_separatore(testo)
+        separatore = config["separatore"] or rilevato
+        # Il parsing puo' fallire per un separatore sbagliato: la
+        # schermata resta disponibile per scegliere un altro formato.
+        try:
+            tabella = leggi_csv(testo, separatore)
+        except ValueError as errore:
+            return json.dumps({
+                "ok": True, "separatoreRilevato": rilevato,
+                "separatore": separatore, "erroreAnteprima": str(errore),
+                "intestazioni": [], "righe": [], "numeroRighe": 0,
+                "conteggiMarcatori": {},
+            }, ensure_ascii=False)
+        simboli = {"", "na", "n/a", "null", "?", "nan"}
+        conteggi = {}
+        for riga in tabella["righe"]:
+            for valore in riga:
+                chiave = valore.strip().casefold()
+                if chiave in simboli:
+                    conteggi[chiave] = conteggi.get(chiave, 0) + 1
+        return json.dumps({
+            "ok": True, "separatoreRilevato": rilevato,
+            "separatore": separatore, "intestazioni": tabella["intestazioni"],
+            "righe": tabella["righe"][:8], "numeroRighe": len(tabella["righe"]),
+            "conteggiMarcatori": conteggi,
+        }, ensure_ascii=False, separators=(",", ":"))
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError) as errore:
+        return json.dumps({"ok": False, "errore": str(errore)}, ensure_ascii=False)
+
+
+def analizza_csv_json(testo: str, scelte_json: str = "[]", importazione_json: str = "{}") -> str:
+    try:
+        config = _configurazione_importazione(json.loads(importazione_json or "{}"))
+        with _usa_configurazione_importazione(config):
+            scelte = json.loads(scelte_json or "[]")
+            risultato = prepara_tabella(leggi_csv(testo, config["separatore"]), scelte)
+            return json.dumps({"ok": True, "risultato": risultato}, ensure_ascii=False, separators=(",", ":"))
     except (ValueError, TypeError, json.JSONDecodeError) as errore:
         return json.dumps({"ok": False, "errore": str(errore)}, ensure_ascii=False, separators=(",", ":"))
 
@@ -7315,40 +7398,46 @@ def crea_csv_json(intestazioni_json: str, righe_json: str) -> str:
         return json.dumps({"ok": False, "errore": str(errore)}, ensure_ascii=False, separators=(",", ":"))
 
 
-def crea_piano_json(testo: str, scelte_json: str = "[]", interpretazione_json: str = "{}") -> str:
+def crea_piano_json(testo: str, scelte_json: str = "[]", interpretazione_json: str = "{}", importazione_json: str = "{}") -> str:
     try:
-        scelte = json.loads(scelte_json or "[]")
-        interpretazione = json.loads(interpretazione_json or "{}")
-        risultato = prepara_tabella(leggi_csv(testo), scelte)
-        piano = crea_piano_confronto(risultato, interpretazione)
-        return json.dumps({"ok": True, "piano": piano}, ensure_ascii=False, separators=(",", ":"))
+        config = _configurazione_importazione(json.loads(importazione_json or "{}"))
+        with _usa_configurazione_importazione(config):
+            scelte = json.loads(scelte_json or "[]")
+            interpretazione = json.loads(interpretazione_json or "{}")
+            risultato = prepara_tabella(leggi_csv(testo, config["separatore"]), scelte)
+            piano = crea_piano_confronto(risultato, interpretazione)
+            return json.dumps({"ok": True, "piano": piano}, ensure_ascii=False, separators=(",", ":"))
     except (ValueError, TypeError, json.JSONDecodeError) as errore:
         return json.dumps({"ok": False, "errore": str(errore)}, ensure_ascii=False, separators=(",", ":"))
 
 
-def calcola_gower_json(testo: str, scelte_json: str = "[]", interpretazione_json: str = "{}") -> str:
+def calcola_gower_json(testo: str, scelte_json: str = "[]", interpretazione_json: str = "{}", importazione_json: str = "{}") -> str:
     try:
-        scelte = json.loads(scelte_json or "[]")
-        interpretazione = json.loads(interpretazione_json or "{}")
-        risultato = prepara_tabella(leggi_csv(testo), scelte)
-        gower = calcola_matrice_gower(risultato, interpretazione)
-        return json.dumps({"ok": True, "gower": gower}, ensure_ascii=False, separators=(",", ":"))
+        config = _configurazione_importazione(json.loads(importazione_json or "{}"))
+        with _usa_configurazione_importazione(config):
+            scelte = json.loads(scelte_json or "[]")
+            interpretazione = json.loads(interpretazione_json or "{}")
+            risultato = prepara_tabella(leggi_csv(testo, config["separatore"]), scelte)
+            gower = calcola_matrice_gower(risultato, interpretazione)
+            return json.dumps({"ok": True, "gower": gower}, ensure_ascii=False, separators=(",", ":"))
     except (ValueError, TypeError, json.JSONDecodeError) as errore:
         return json.dumps({"ok": False, "errore": str(errore)}, ensure_ascii=False, separators=(",", ":"))
 
 
-def calcola_matrice_json(testo: str, scelte_json: str = "[]", interpretazione_json: str = "{}") -> str:
+def calcola_matrice_json(testo: str, scelte_json: str = "[]", interpretazione_json: str = "{}", importazione_json: str = "{}") -> str:
     try:
-        scelte = json.loads(scelte_json or "[]")
-        interpretazione = json.loads(interpretazione_json or "{}")
-        risultato = prepara_tabella(leggi_csv(testo), scelte)
-        matrice = calcola_matrice(risultato, interpretazione)
-        return json.dumps({"ok": True, "matrice": matrice}, ensure_ascii=False, separators=(",", ":"))
-    except IncompatibilitaCalcolo as errore:
-        return json.dumps(
-            {"ok": False, "errore": str(errore),
-             "rapportoProblemi": errore.rapportoProblemi},
-            ensure_ascii=False, separators=(",", ":"), allow_nan=False,
-        )
+        config = _configurazione_importazione(json.loads(importazione_json or "{}"))
+        with _usa_configurazione_importazione(config):
+            scelte = json.loads(scelte_json or "[]")
+            interpretazione = json.loads(interpretazione_json or "{}")
+            risultato = prepara_tabella(leggi_csv(testo, config["separatore"]), scelte)
+            matrice = calcola_matrice(risultato, interpretazione)
+            return json.dumps({"ok": True, "matrice": matrice}, ensure_ascii=False, separators=(",", ":"))
+        except IncompatibilitaCalcolo as errore:
+            return json.dumps(
+                {"ok": False, "errore": str(errore),
+                 "rapportoProblemi": errore.rapportoProblemi},
+                ensure_ascii=False, separators=(",", ":"), allow_nan=False,
+            )
     except (ValueError, TypeError, KeyError, json.JSONDecodeError) as errore:
         return json.dumps({"ok": False, "errore": str(errore)}, ensure_ascii=False, separators=(",", ":"))
