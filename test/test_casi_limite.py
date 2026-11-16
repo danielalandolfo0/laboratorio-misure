@@ -327,4 +327,84 @@ gia_esatta = [[0.0, 0.1], [0.1, 0.0]]
 p._valida_matrice_finale(gia_esatta, ["A", "B"])
 assert gia_esatta == [[0.0, 0.1], [0.1, 0.0]]
 
+
+# Una scelta di profilo non autorizza a fondere coseno e corda.
+# La corda non è il coseno: su vettori ortogonali vale sqrt(2) e
+# la normalizzazione teorica per la matrice finale è d_corda/2.
+vicino(p._distanza_specializzata(
+    [3, 4], [6, 8], "Distanza della corda"), 0)
+vicino(p._distanza_specializzata(
+    [1, 0], [0, 1], "Distanza della corda"), math.sqrt(2))
+vicino(p._distanza_specializzata(
+    [1, 0], [-1, 0], "Distanza della corda"), 2)
+assert p._distanza_specializzata(
+    [0, 0], [1, 1], "Distanza della corda") is None
+
+csv_profili = "id,x,y\nA,1,0\nB,0,1\nC,-1,0"
+dati_profili = p.prepara_tabella(p.leggi_csv(csv_profili))
+opzioni_profili = {
+    "riga": "oggetto",
+    "colonne": {
+        "id": {"ruolo": "identificativo", "usa": False},
+        "x": {"ruolo": "quantita", "usa": True},
+        "y": {"ruolo": "quantita", "usa": True},
+    },
+    "gruppi": [{"id": "p", "nome": "Profilo", "tipo": "ripetute"}],
+    "assegnazioni": {"x": "p", "y": "p"},
+    "somiglianza-p": "corda",
+}
+piano_profili = p.crea_piano_confronto(dati_profili, opzioni_profili)
+assert piano_profili["completo"], piano_profili
+assert piano_profili["percorsi"][0]["metodo"] == "Distanza della corda"
+assert piano_profili["percorsi"][0]["normalizzazione"]["metodo"] == "teorica"
+matrice_profili = p.calcola_matrice(dati_profili, opzioni_profili)["matrice"]
+vicino(matrice_profili[0][1], math.sqrt(2) / 2)
+vicino(matrice_profili[0][2], 1)
+vicino(matrice_profili[1][2], math.sqrt(2) / 2)
+
+# Per i testi sono quattro scelte realmente diverse. Senza una
+# risposta il piano è incompleto, non Levenshtein di nascosto.
+csv_testi = "id,testo\nA,ABC\nB,ABD\nC,ABC"
+dati_testi = p.prepara_tabella(p.leggi_csv(csv_testi))
+opzioni_testi = {
+    "riga": "oggetto",
+    "colonne": {
+        "id": {"ruolo": "identificativo", "usa": False},
+        "testo": {"ruolo": "testo", "usa": True},
+    },
+}
+piano_senza_testo = p.crea_piano_confronto(dati_testi, opzioni_testi)
+assert not piano_senza_testo["completo"], piano_senza_testo
+assert piano_senza_testo["percorsi"][0]["metodo"] == "Da decidere"
+opzioni_testi["misureTestualiPerColonna"] = {"testo": "esatta"}
+piano_esatto = p.crea_piano_confronto(dati_testi, opzioni_testi)
+assert piano_esatto["completo"], piano_esatto
+assert piano_esatto["percorsi"][0]["metodo"] == "Uguale o diverso"
+matrice_testi = p.calcola_matrice(dati_testi, opzioni_testi)["matrice"]
+vicino(matrice_testi[0][1], 1)
+vicino(matrice_testi[0][2], 0)
+
+# Anche per una proposta automatica numerica nell'interfaccia guidata
+# serve l'approvazione: il motore espone la proposta ma non calcola.
+csv_numeri = "x,y\n1,2\n2,4\n3,5"
+dati_numeri = p.prepara_tabella(p.leggi_csv(csv_numeri))
+opzioni_numeri = {
+    "riga": "oggetto",
+    "questionarioGuidatoV2": True,
+    "confrontoQuantitativo": "assoluto",
+    "aggregazioneScarti": "quadratica",
+    "gestioneDipendenzaLineare": "mantieni",
+    "colonne": {
+        "x": {"ruolo": "quantita", "usa": True},
+        "y": {"ruolo": "quantita", "usa": True},
+    },
+}
+proposta_numerica = p.crea_piano_confronto(dati_numeri, opzioni_numeri)
+assert not proposta_numerica["completo"], proposta_numerica
+assert any("conferma esplicita" in avviso for percorso in proposta_numerica["percorsi"]
+           for avviso in percorso["avvisi"]), proposta_numerica
+opzioni_numeri["confermaMisuraNumericaProposta"] = "si"
+approvato_numerico = p.crea_piano_confronto(dati_numeri, opzioni_numeri)
+assert approvato_numerico["completo"], approvato_numerico
+
 print("Collaudo trasversale dei casi limite superato.")

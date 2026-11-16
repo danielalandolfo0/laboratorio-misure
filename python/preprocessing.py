@@ -913,8 +913,14 @@ def _blocco_indipendente(nome: str, ruolo: str, analisi: dict[str, Any], interpr
         preferenze = interpretazione.get("misureTestualiPerColonna") or {}
         if not isinstance(preferenze, dict):
             raise ValueError("La scelta delle misure testuali non e' valida.")
-        scelta = preferenze.get(nome, "levenshtein")
-        if scelta == "levenshtein":
+        scelta = preferenze.get(nome, "")
+        if scelta == "esatta":
+            misura = "Uguale o diverso"
+            motivo = (
+                "Due testi coincidono soltanto se le sequenze di caratteri sono "
+                "identiche; non si ammettono errori di digitazione o trasposizioni."
+            )
+        elif scelta == "levenshtein":
             misura = "Distanza di Levenshtein normalizzata"
             motivo = (
                 "Confronta inserimenti, cancellazioni e sostituzioni, "
@@ -936,7 +942,7 @@ def _blocco_indipendente(nome: str, ruolo: str, analisi: dict[str, Any], interpr
         else:
             misura = "Da decidere"
             motivo = "La misura testuale indicata non e' riconosciuta."
-            avvisi.append("Scegli Levenshtein, Damerau–Levenshtein oppure Hamming per questa colonna.")
+            avvisi.append("Scegli esplicitamente uguaglianza esatta, Hamming, Levenshtein o Damerau–Levenshtein.")
             stato = "da_completare"
     elif ruolo == "risultato":
         misura = "Da decidere"
@@ -1075,6 +1081,7 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
             scelte = {
                 "valori_vicini": ("Distanza tra coordinate", "Confronta i valori coordinata per coordinata e riassume il gruppo in un solo contributo."),
                 "proporzioni": ("Dissimilarità coseno", "Confronta la direzione dei profili, riducendo l’effetto della loro grandezza complessiva."),
+                "corda": ("Distanza della corda", "Confronta la distanza euclidea tra i profili normalizzati a norma unitaria; scala teorica 0–2."),
                 "andamento": ("Dissimilarità di Pearson", "Confronta come i valori crescono e diminuiscono rispetto al livello medio del profilo."),
                 "ordine": ("Dissimilarità di Spearman", "Confronta l’ordinamento interno delle coordinate dei due profili."),
                 "ordine_coppie": (
@@ -1093,7 +1100,7 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
             risposta = interpretazione.get(f"ritardo-{gruppo.get('id')}", "")
             if risposta == "si":
                 modi = interpretazione.get("metodiAllineamentoTemporaleGruppi") or {}
-                scelta_allineamento = modi.get(id_gruppo, "dtw") if isinstance(modi, dict) else ""
+                scelta_allineamento = modi.get(id_gruppo, "") if isinstance(modi, dict) else ""
                 if scelta_allineamento == "dtw":
                     misura, motivo = "Dynamic Time Warping", (
                         "Confronta cammini monotoni a costo medio minimo esatto; "
@@ -1110,7 +1117,7 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
                     avvisi.append("Scegli la modalità di allineamento temporale.")
             elif risposta == "no":
                 modi = interpretazione.get("misureTemporaliGruppi") or {}
-                scelta_temporale = modi.get(id_gruppo, "punto") if isinstance(modi, dict) else ""
+                scelta_temporale = modi.get(id_gruppo, "") if isinstance(modi, dict) else ""
                 if scelta_temporale == "punto":
                     misura, motivo = "Distanza punto per punto", (
                         "Confronta osservazioni che corrispondono agli stessi istanti condivisi."
@@ -1220,7 +1227,7 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
             or (
                 tipo_gruppo == "tempo"
                 and interpretazione.get(f"ritardo-{id_gruppo}") == "no"
-                and (interpretazione.get("misureTemporaliGruppi") or {}).get(id_gruppo, "punto") == "punto"
+                and (interpretazione.get("misureTemporaliGruppi") or {}).get(id_gruppo, "") == "punto"
             )
             or (tipo_gruppo == "parti" and interpretazione.get(f"totale-{id_gruppo}") == "no")
         )
@@ -1231,16 +1238,16 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
             )
             stato = "da_completare"
         elif confronto_coordinate and quantitativo:
-            if not scelta and tipo_gruppo == "coordinate":
-                avvisi.append("Scegli una misura per questo gruppo di coordinate.")
-            elif scelta and scelta not in scelte_coordinate:
+            if not scelta:
+                avvisi.append("Scegli esplicitamente una misura per le coordinate di questo gruppo.")
+                stato = "da_completare"
+            elif scelta not in scelte_coordinate:
                 avvisi.append("La misura del gruppo non e' riconosciuta o non e' compatibile.")
                 stato = "da_completare"
             else:
-                # Per i profili gia' guidati e le serie sincronizzate si
-                # conserva il precedente comportamento euclideo finche'
-                # l'utente non indica una misura diversa.
-                id_misura = scelta or "euclidean"
+                # Il confronto coordinato richiede una scelta distinta
+                # anche per serie sincronizzate e profili di misure.
+                id_misura = scelta
                 misura = scelte_coordinate[id_misura]
                 motivo = (
                     "Confronta gli scarti fra le coordinate del solo gruppo, "
@@ -1510,6 +1517,7 @@ MISURE_SPECIALIZZATE_CALCOLABILI = {
     "Dissimilarità di Dice",
     "Distanza tra coordinate",
     "Dissimilarità coseno",
+    "Distanza della corda",
     "Dissimilarità di Pearson",
     "Dissimilarità di Spearman",
     "Dissimilarità di Kendall τ-b",
@@ -2538,6 +2546,18 @@ def _specifica_misura_numerica(
                 "la matrice trasformata rimane disponibile per consultazione."
             )
 
+    # Il nuovo questionario non può trattare una proposta automatica come
+    # una decisione dell'utente. Le API storiche rimangono compatibili:
+    # per i percorsi guidati il consenso alla proposta è un atto distinto.
+    if (interpretazione.get("questionarioGuidatoV2")
+            and manuale in {"", "automatico"}
+            and interpretazione.get("confermaMisuraNumericaProposta") != "si"):
+        avvisi.append(
+            "La misura proposta richiede una conferma esplicita: "
+            "scegli una misura diversa oppure approva la proposta nell'editor del piano."
+        )
+        stato = "da_completare"
+
     misura = REGISTRO_MISURE_NUMERICHE[id_misura]
     return {
         "idMisura": id_misura,
@@ -3339,7 +3359,7 @@ def _limite_teorico_percorso(percorso: dict[str, Any]) -> float | None:
     if percorso.get("tipoGruppo") == "vettore_binario":
         return 1.0
     if misura in {
-        "Dissimilarità coseno", "Dissimilarità di Pearson",
+        "Dissimilarità coseno", "Distanza della corda", "Dissimilarità di Pearson",
         "Dissimilarità di Spearman",
     }:
         return 2.0
@@ -5946,6 +5966,12 @@ def _distanza_specializzata(
         )
     if metodo in {"Distanza tra coordinate", "Distanza punto per punto"}:
         return math.sqrt(sum((a - b) ** 2 for a, b in zip(x, y)))
+    if metodo == "Distanza della corda":
+        norma_x = math.hypot(*x)
+        norma_y = math.hypot(*y)
+        if norma_x == 0 or norma_y == 0:
+            return None
+        return math.hypot(*(a / norma_x - b / norma_y for a, b in zip(x, y)))
     if metodo == "Dissimilarità coseno":
         norma_x = math.sqrt(sum(valore**2 for valore in x))
         norma_y = math.sqrt(sum(valore**2 for valore in y))
@@ -6208,7 +6234,8 @@ def _calcola_matrice_specializzata(
                 matrice[k][i] = distanza
         limite = (
             2.0 if metodo in {
-                "Dissimilarità coseno", "Dissimilarità di Pearson", "Dissimilarità di Spearman"
+                "Dissimilarità coseno", "Distanza della corda",
+                "Dissimilarità di Pearson", "Dissimilarità di Spearman"
             } else 1.0 if metodo in {
                 "Dissimilarità di Kendall τ-b", "Distanza di Hellinger",
                 "Distanza di Jensen–Shannon",

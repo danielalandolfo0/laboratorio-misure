@@ -175,6 +175,36 @@ di domande e rami possibili, ma non può sovrascrivere le
 decisioni concordate nella principale (per esempio non si
 dimezzano automaticamente i pesi in presenza di correlazioni).
 
+## Scelta guidata delle misure locali
+
+La fase 4 segue il principio **prima l'obiettivo, poi la misura**:
+scarti tra coordinate, quantità relative, forma e direzione dei profili,
+confronto di ranghi, corrispondenza di testi, presenze e assenze,
+distribuzioni, composizioni, serie temporali rigide o elastiche.
+Sono esposte soltanto le opzioni realmente calcolabili dal motore.
+
+Le misure per le coordinate possono essere scelte direttamente nel
+piano, suddivise per differenze geometriche, correlazioni statistiche
+fra colonne, quantità e frequenze. Se l'utente mantiene una proposta
+automatica, nella modalità guidata deve **approvarla esplicitamente**:
+il piano rimane incompleto fino alla conferma.
+
+Le colonne testuali non adottano più Levenshtein senza domanda:
+l'utente sceglie fra coincidenza delle etichette (0/1), Hamming,
+Levenshtein o Damerau–Levenshtein. Nei profili è disponibile anche
+la **distanza della corda**, normalizzata sul limite teorico 2;
+per un vettore nullo il confronto direzionale rimane non definito.
+Per i gruppi di coordinate, le serie sincronizzate e i confronti
+punto a punto viene richiesta una misura esplicita, non Euclidea
+per impostazione nascosta. Analogamente, DTW e LCSS non sono
+assegnate prima della scelta dell'utente.
+
+Il nuovo file di approfondimento
+`Architettura Decisionale e Metodologica per il Calcolo di Distanze
+e Dissimilarità su Dati Eterogenei` è usato per formulare le domande;
+il TeX Overleaf concordato rimane la fonte prioritaria delle decisioni,
+dell'ordine delle fasi, dei pesi e della formula finale.
+
 ## Funzionalità disponibili
 
 - caricamento locale di tabelle CSV con intestazione;

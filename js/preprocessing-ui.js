@@ -976,7 +976,7 @@
 
   function editorMisuraNumerica(percorso) {
     const opzioni = [
-      ["automatico", "Usa la misura proposta dal sito"],
+      ["automatico", "Confermo la misura proposta: " + percorso.metodo],
       ["euclidean", "Vicinanza complessiva (euclidea)"], ["manhattan", "Somma le differenze (Manhattan)"],
       ["chebyshev", "Conta la maggiore differenza (Chebyshev)"], ["minkowski", "Regola l’importanza degli scarti (Minkowski)"],
       ["weighted_minkowski", "Dai importanza diversa alle colonne (Minkowski pesata)"],
@@ -988,6 +988,23 @@
       ["bray_curtis", "Confronta quantità complessive (Bray–Curtis)"], ["chi_square", "Dai rilievo alle componenti piccole (chi-quadrato)"]
     ];
     const scelta = interpretazione.misuraNumericaManuale || "automatico";
+    const famiglie = [
+      ["Differenze nelle coordinate", ["manhattan", "euclidean", "chebyshev",
+        "minkowski", "weighted_minkowski", "weighted_chebyshev"]],
+      ["Relazioni fra coordinate", ["mahalanobis", "mahalanobis_ridge", "mahalanobis_pinv"]],
+      ["Quantità e frequenze", ["canberra", "bray_curtis", "chi_square"]]
+    ];
+    const opzioniPerId = new Map(opzioni);
+    const menuMisure = '<option value="automatico"' +
+      (scelta === "automatico" ? ' selected' : '') + '>' +
+      escapeHtml(opzioniPerId.get("automatico")) + '</option>' +
+      famiglie.map(([famiglia, ids]) =>
+        '<optgroup label="' + escapeHtml(famiglia) + '">' +
+        ids.map(id => '<option value="' + id + '"' +
+          (id === scelta ? ' selected' : '') + '>' +
+          escapeHtml(opzioniPerId.get(id)) + '</option>').join('') +
+        '</optgroup>'
+      ).join("");
     const esponente = ["minkowski", "weighted_minkowski"].includes(scelta);
     const pesata = ["weighted_minkowski", "weighted_chebyshev"].includes(scelta);
     const colonne = percorso.colonne;
@@ -1015,15 +1032,15 @@
     return `<div class="numeric-measure-editor">
       <label for="numeric-measure-choice"><strong>Come vuoi confrontare le righe?</strong></label>
       <select id="numeric-measure-choice">
-        ${opzioni.map(([id, nome]) => `<option value="${id}"${id === scelta ? " selected" : ""}>${escapeHtml(nome)}</option>`).join("")}
+        ${menuMisure}
       </select>
-      <p>Non serve conoscere il nome delle misure: scegli l’obiettivo che preferisci. Il sito verifica se è compatibile con i dati.</p>
+      <p>Manhattan somma gli scarti; Euclidea dà più influenza a quelli grandi; Chebyshev guarda il massimo. Minkowski permette di scegliere esponente e pesi. Mahalanobis tiene conto delle relazioni fra colonne, quando la covarianza lo consente. Canberra confronta differenze relative; Bray–Curtis confronta abbondanze complessive; chi-quadrato accentua differenze nelle componenti piccole. La proposta del sito richiede una conferma esplicita.</p>
       ${brayInfo}
       ${esponente ? `<label for="numeric-measure-q">Quanto vuoi dare rilievo alle differenze grandi? (q ≥ 1)</label><p>Con 1 sommi tutte le differenze; con 2 quelle grandi hanno maggiore influenza. Per altre scelte serve un valore almeno pari a 1.</p><input id="numeric-measure-q" type="number" min="1" step="0.5" value="${escapeHtml(interpretazione.ordineMisuraManuale || "2")}">` : ""}
       ${pesata ? `<label for="numeric-measure-weights">Quanto conta ogni colonna? ${colonne.map(escapeHtml).join(", ")}</label><input id="numeric-measure-weights" type="text" value="${escapeHtml(interpretazione.pesiMisuraManuale || colonne.map(() => "1").join("; "))}"><small>Inserisci un numero positivo per colonna, separando con punto e virgola. Usa 1 per tutte se devono avere la stessa importanza.</small>` : ""}
       ${scelta === "mahalanobis_ridge" ? `<label for="numeric-measure-lambda">Regolarizzazione λ (numero strettamente positivo)</label><input id="numeric-measure-lambda" type="text" inputmode="decimal" value="${escapeHtml(interpretazione.lambdaMahalanobis ?? "")}" placeholder="es. 1"><small>Il sito calcola S + λI sulle coordinate originali. λ ha le unità al quadrato dei dati; non viene scelto automaticamente. Se λ è troppo piccolo, il calcolo resta bloccato.</small>` : ""}
       ${scelta === "mahalanobis_pinv" ? `<label for="numeric-measure-tolerance">Soglia relativa della pseudoinversa (tra 1e-12 e 0.1)</label><input id="numeric-measure-tolerance" type="text" inputmode="decimal" value="${escapeHtml(interpretazione.tolleranzaPseudoinversa ?? "")}" placeholder="es. 1e-10"><small>Gli autovalori non superiori a questa frazione del massimo sono scartati. La matrice può descrivere una pseudometrica: scarti in direzioni scartate contano zero.</small>` : ""}
-      <button class="secondary-action" id="apply-numeric-measure" type="button">Applica misura</button>
+      <button class="secondary-action" id="apply-numeric-measure" type="button">Conferma questa misura</button>
     </div>`;
   }
 
@@ -2003,15 +2020,15 @@
         domande.push(domandeMancantiNumerici(quantitativeConMancanti));
       }
       domande.push(domandaAdattiva(
-        "confrontoQuantitativo", "Che cosa rappresentano i numeri che vuoi confrontare?",
-        "Scegli la risposta più vicina ai tuoi dati. Non occorre conoscere alcuna formula.",
-        [["assoluto", "Misure di caratteristiche, per esempio età, altezza o temperatura"], ["abbondanza", "Quantità o conteggi, per esempio specie, prodotti o eventi"], ["frequenze", "Frequenze: voglio dare rilievo anche alle componenti rare"], ["relativo", "Misure per cui conta soprattutto la differenza percentuale o proporzionale"], ["ignoto", "Non lo so — usa la scelta consigliata"]]
+        "confrontoQuantitativo", "Quale differenza tra le righe vuoi misurare?",
+        "Scegli prima lo scopo, poi conferma la misura proposta nel piano. Per confrontare direzione, forma o ranghi, crea nella fase precedente un gruppo «Misurazioni dello stesso profilo».",
+        [["assoluto", "Quanto differiscono i valori delle caratteristiche"], ["abbondanza", "Quanto differiscono le quantità complessive (Bray–Curtis)"], ["frequenze", "Quanto differiscono le componenti, dando rilievo a quelle piccole (χ²)"], ["relativo", "Quanto differiscono i valori in proporzione alle loro grandezze (Canberra)"], ["ignoto", "Non so ancora: mostrami una proposta da confermare"]]
       ));
 
       const confronto = valoreRisposta("confrontoQuantitativo");
       if (confronto === "ignoto") domande.push(notaAutomatica(
-        "Scelta consigliata automatica",
-        "Il sito proporrà una scelta motivata dalla diagnosi, da confermare. I valori estremi e le correlazioni sono indizi, non regole che determinano automaticamente la misura corretta."
+        "Proposta da confermare",
+        "I dati forniscono indizi per una proposta, non determinano il significato della dissimilarità. La misura dovrà essere confermata nell’editor del piano."
       ));
       if (confronto === "assoluto") {
         if (quantitativeIndipendenti.length >= 2) domande.push(domandaAdattiva(
@@ -2021,13 +2038,13 @@
           "ignoto"
         ));
         domande.push(notaAutomatica(
-          "Scelta automatica della misura",
-          "Il sito ha analizzato valori estremi, dispersioni e correlazioni. La tua scelta determinerà la misura; i riscalamenti saranno usati soltanto dove pertinenti."
+          "Proposta del sito (non ancora approvata)",
+          "Il sito propone una misura sulla base di ciò che hai dichiarato. Potrai approvarla o sostituirla nel piano. La distribuzione dei dati, da sola, non rende una formula obbligatoria."
         ));
         if (valoreRisposta("dipendenzaCoordinate") !== "si") domande.push(domandaAdattiva(
           "aggregazioneScarti", "Quali differenze tra due righe ti interessano di più?",
-          "Se non hai una preferenza, lascia che il sito scelga. Potrai cambiare la misura alla fine.",
-          [["automatico", "Non ho preferenze: scegli il sito"], ["lineare", "Conta la somma delle differenze"], ["quadratica", "Dai più rilievo alle differenze grandi"], ["massimo", "Conta soprattutto la differenza più grande"], ["minkowski", "Voglio regolare io la sensibilità (avanzato)"]],
+          "Scegli la sensibilità agli scarti oppure chiedi una proposta che dovrai confermare nel piano.",
+          [["automatico", "Mostrami una proposta da valutare e approvare"], ["lineare", "Conta la somma delle differenze"], ["quadratica", "Dai più rilievo alle differenze grandi"], ["massimo", "Conta soprattutto la differenza più grande"], ["minkowski", "Voglio regolare io la sensibilità (avanzato)"]],
           "automatico"
         ));
         if (valoreRisposta("dipendenzaCoordinate") !== "si" && valoreRisposta("aggregazioneScarti") === "minkowski") domande.push(domandaInput(
@@ -2144,17 +2161,25 @@
       !interpretazione.assegnazioni[profilo.nome] &&
       interpretazione.colonne[profilo.nome]?.ruolo === "testo"
     ).forEach(profilo => {
-      const scelta = interpretazione.misureTestualiPerColonna?.[profilo.nome] || "levenshtein";
+      const scelta = interpretazione.misureTestualiPerColonna?.[profilo.nome] || "";
       domande.push('<div class="question-item"><label><strong>Come confrontare i testi nella colonna “' +
         escapeHtml(profilo.nome) + '”?</strong><select class="text-measure-setting" ' +
         'data-text-measure-column="' + escapeHtml(profilo.nome) + '">' +
+        '<option value=""' + (!scelta ? " selected" : "") +
+        '>Scegli che tipo di differenza conta per questi testi</option>' +
+        '<option value="esatta"' + (scelta === "esatta" ? " selected" : "") +
+        '>Coincidenza delle etichette: uguale o diverso (0/1)</option>' +
         '<option value="levenshtein"' + (scelta === "levenshtein" ? " selected" : "") +
         '>Levenshtein: consenti inserimenti, cancellazioni e sostituzioni</option>' +
         '<option value="hamming"' + (scelta === "hamming" ? " selected" : "") +
         '>Hamming: conta le posizioni diverse nelle sequenze allineate</option>' +
         '<option value="damerau_levenshtein"' + (scelta === "damerau_levenshtein" ? " selected" : "") +
         '>Damerau–Levenshtein: consenti anche lo scambio di caratteri vicini</option>' +
-        '</select></label><p>Hamming richiede che tutte le sequenze confrontate abbiano ' +
+        '</select></label><p>Se contano solo le etichette, scegli coincidenza esatta ' +
+        '(dopo la rimozione degli spazi esterni). Se ogni posizione ha lo stesso ' +
+        'significato, scegli Hamming. Se sono ammesse aggiunte o cancellazioni, ' +
+        'scegli Levenshtein; Damerau considera anche caratteri adiacenti scambiati. ' +
+        'Hamming richiede che tutte le sequenze confrontate abbiano ' +
         'la stessa lunghezza. Levenshtein e Damerau–Levenshtein ammettono lunghezze diverse. ' +
         'La versione CSV di Damerau–Levenshtein usa la distanza completa con trasposizioni ' +
         'adiacenti e la divide per la lunghezza maggiore per ottenere valori in [0,1].</p></div>');
@@ -2342,8 +2367,17 @@
       if (!valido) return;
       if (gruppo.tipo === "ripetute") domande.push(domandaAdattiva(
         `somiglianza-${gruppo.id}`, `Nel gruppo “${escapeHtml(gruppo.nome)}”, quando due righe devono essere considerate simili?`,
-        "Le colonne formano un unico profilo: scegli quale aspetto deve contare.",
-        [["valori_vicini", "Quando hanno valori vicini"], ["proporzioni", "Quando mantengono proporzioni simili"], ["andamento", "Quando crescono e diminuiscono nello stesso modo"], ["ordine", "Quando ordinano le caratteristiche nello stesso modo (Spearman)"], ["ordine_coppie", "Quando concordano nell’ordine delle coppie di caratteristiche, anche con pari merito (Kendall τ-b)"], ["ignoto", "Non lo so"]]
+        "Prima decidi la proprietà da preservare. Coseno e corda ignorano un fattore di scala comune; Pearson ignora anche una traslazione comune; " +
+        "Spearman e Kendall usano gli ordini, non gli scarti numerici. Profili nulli e alcuni profili costanti possono rendere il confronto non definito.",
+        [
+          ["valori_vicini", "Conta quanto differiscono i singoli valori (Manhattan, Euclidea, Chebyshev…)"],
+          ["proporzioni", "Conta solo la direzione del profilo (coseno)"],
+          ["corda", "Conta la distanza tra profili portati a lunghezza unitaria (corda)"],
+          ["andamento", "Conta la forma rispetto alla media, non il livello assoluto (Pearson)"],
+          ["ordine", "Conta la graduatoria delle caratteristiche, anche con pari merito (Spearman)"],
+          ["ordine_coppie", "Conta se le coppie di caratteristiche mantengono lo stesso ordine (Kendall τ-b)"],
+          ["ignoto", "Non so quale proprietà voglio confrontare: guida necessaria"]
+        ]
       ));
       if (gruppo.tipo === "tempo") {
         const ordine = interpretazione.ordiniTemporaliGruppi?.[gruppo.id] || "";
@@ -2379,8 +2413,8 @@
         ));
         const id = gruppo.id;
         const ritardo = valoreRisposta(`ritardo-${id}`);
-        const misuraTempo = interpretazione.misureTemporaliGruppi?.[id] || "punto";
-        const allineamento = interpretazione.metodiAllineamentoTemporaleGruppi?.[id] || "dtw";
+        const misuraTempo = interpretazione.misureTemporaliGruppi?.[id] || "";
+        const allineamento = interpretazione.metodiAllineamentoTemporaleGruppi?.[id] || "";
         const penale = interpretazione.penalizzazioniDTWGruppi?.[id] || "no";
         const valoreTempo = (chiave, fallback = "") => escapeHtml(
           interpretazione[chiave]?.[id] ?? fallback
@@ -2415,8 +2449,9 @@
           domande.push('<div class="question-item"><label><strong>Come confrontare ' +
             'le variazioni senza consentire ritardi?</strong>' +
             selezioneTempo("misureTemporaliGruppi",
-              [["punto", "Valori agli stessi istanti (punto a punto)"],
-               ["pendenze", "Variazioni per unità di tempo (pendenze)"]],
+              [["", "Scegli che cosa conta nella sincronia"],
+               ["punto", "Livello agli stessi istanti: scarti punto per punto (poi scegli la misura)"],
+               ["pendenze", "Velocità di cambiamento: confronta le pendenze (STS)"]],
               misuraTempo) + '</label><p>Le pendenze richiedono i timestamp ' +
             'reali e non distinguono serie che differiscono soltanto ' +
             'per una costante additiva.</p></div>');
@@ -2425,8 +2460,9 @@
           domande.push('<div class="question-item"><label><strong>Quale ' +
             'allineamento vuoi usare?</strong>' +
             selezioneTempo("metodiAllineamentoTemporaleGruppi",
-              [["dtw", "DTW: minimo esatto del costo medio per cammino"],
-               ["lcss", "LCSS: sottosequenza comune entro tolleranze"]],
+              [["", "Scegli come tollerare ritardi ed eventi non allineati"],
+               ["dtw", "DTW: riallinea gli eventi, minimizzando il costo medio"],
+               ["lcss", "LCSS: trova una sottosequenza che coincide entro tolleranze"]],
               allineamento) + '</label></div>');
           if (allineamento === "dtw") {
             domande.push('<div class="question-item"><strong>Parametri DTW</strong>' +
@@ -2503,7 +2539,7 @@
       const misuraPerCoordinate = gruppo.tipo === "coordinate"
         || (gruppo.tipo === "ripetute" && valoreRisposta(`somiglianza-${gruppo.id}`) === "valori_vicini")
         || (gruppo.tipo === "tempo" && valoreRisposta(`ritardo-${gruppo.id}`) === "no" &&
-            (interpretazione.misureTemporaliGruppi?.[gruppo.id] || "punto") === "punto")
+            (interpretazione.misureTemporaliGruppi?.[gruppo.id] || "") === "punto")
         || (gruppo.tipo === "parti" && valoreRisposta(`totale-${gruppo.id}`) === "no");
       const metodiPreliminari = membri.map(profilo =>
         risultato.colonne.find(colonna => colonna.nome === profilo.nome)
@@ -2543,8 +2579,7 @@
           '</select></label></div>');
       }
       if (misuraPerCoordinate) {
-        const idMisura = interpretazione.misureGruppi?.[gruppo.id] ||
-          (gruppo.tipo === "coordinate" ? "" : "euclidean");
+        const idMisura = interpretazione.misureGruppi?.[gruppo.id] || "";
         const opzioniGruppo = [
           ["euclidean", "Euclidea: combina gli scarti dando maggior rilievo a quelli grandi"],
           ["manhattan", "Manhattan: somma le differenze assolute"],
@@ -2573,12 +2608,14 @@
             '" placeholder="es. 1; 2; 0,5"></label>' +
             '<p>Ogni peso deve essere strettamente positivo. Il numero dei pesi deve coincidere con quello delle colonne del gruppo.</p>';
         }
-        domande.push('<div class="question-item"><label><strong>Quale misura vuoi usare per il gruppo “' +
+        domande.push('<div class="question-item"><label><strong>Quale regola combina gli scarti nel gruppo “' +
           escapeHtml(gruppo.nome) + '”?</strong><select class="group-measure-setting" data-group-id="' +
           escapeHtml(gruppo.id) + '">' + menuMisure +
-          '</select></label><p>La scelta riguarda solo questo gruppo. Indica se vuoi ' +
-          'considerare tutte le differenze, soprattutto quella maggiore, oppure importanze diverse. ' +
-          'Gli altri gruppi potranno usare altri criteri e contribuire alla stessa matrice.</p>' +
+          '</select></label><p>Prima hai deciso che cosa rappresenta il gruppo. ' +
+          'Ora scegli come riassumere gli scarti: Manhattan li somma linearmente; ' +
+          'Euclidea combina i quadrati; Chebyshev considera soltanto il massimo; ' +
+          'Minkowski regola l’effetto degli scarti grandi (q ≥ 1); la versione pesata ' +
+          'permette importanze interne diverse. La scelta non si applica agli altri blocchi.</p>' +
           parametriMisura + '</div>');
       }
 
@@ -2941,6 +2978,7 @@
       return;
     }
     nascondiErrore();
+    interpretazione.questionarioGuidatoV2 = true;
     vaiAllaFase("misure");
   });
   $("back-to-selection").addEventListener("click", () => vaiAllaFase("selezione"));
@@ -3000,6 +3038,7 @@
     }
     if (evento.target.id !== "numeric-measure-choice") return;
     interpretazione.misuraNumericaManuale = evento.target.value;
+    delete interpretazione.confermaMisuraNumericaProposta;
     annullaScelteNormalizzazione();
     delete interpretazione.confermaValoriOriginaliNumerici;
     const nomi = pianoCorrente?.percorsi.find(p => p.tipo === "numerico")?.colonne || [];
@@ -3011,6 +3050,8 @@
   $("comparison-plan-paths").addEventListener("click", evento => {
     if (evento.target.id !== "apply-numeric-measure") return;
     interpretazione.misuraNumericaManuale = $("numeric-measure-choice").value;
+    interpretazione.confermaMisuraNumericaProposta =
+      interpretazione.misuraNumericaManuale === "automatico" ? "si" : undefined;
     annullaScelteNormalizzazione();
     delete interpretazione.confermaValoriOriginaliNumerici;
     const q = $("numeric-measure-q");

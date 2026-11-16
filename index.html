@@ -230,7 +230,16 @@
 
         <section id="phase-measures" aria-labelledby="phase-measures-title" hidden>
           <h4 id="phase-measures-title" tabindex="-1">Fase 4 — Come confrontare le caratteristiche?</h4>
-          <p>Per ogni percorso definisci il significato della differenza, la misura locale e le convenzioni necessarie. Le misure suggerite non sostituiscono le decisioni semantiche: il piano segnalerà le informazioni mancanti.</p>
+          <p>Per ogni blocco chiediti prima <strong>che cosa deve contare come differenza</strong>; poi scegli la misura che rappresenta quella decisione. Una proposta del sito è sempre distinta dalla tua conferma.</p>
+          <details class="comparison-glossary">
+            <summary>Quali confronti posso scegliere? Guida breve alle principali famiglie</summary>
+            <p><strong>Numeri e coordinate:</strong> Manhattan somma gli scarti, Euclidea accentua quelli grandi, Chebyshev considera il massimo, Minkowski permette di regolare esponente e pesi; Mahalanobis considera anche le relazioni fra colonne.</p>
+            <p><strong>Abbondanze:</strong> Canberra confronta scarti relativi per componente, Bray–Curtis differenze rispetto al totale, il chi-quadrato simmetrico dà maggiore importanza alle componenti con massa piccola.</p>
+            <p><strong>Profili:</strong> in un gruppo «Misurazioni dello stesso profilo», coseno e corda confrontano la direzione, Pearson le variazioni rispetto alla media, Spearman e Kendall l'ordine interno delle caratteristiche.</p>
+            <p><strong>Categorie e presenze:</strong> Gower tratta variabili nominali, ordinali e binarie confermate. Per vettori binari puoi usare Hamming, Rogers–Tanimoto, Jaccard o Dice: cambia il ruolo delle assenze e delle presenze condivise.</p>
+            <p><strong>Testi:</strong> coincidenza esatta, Hamming per posizioni allineate, Levenshtein per inserimenti e cancellazioni, Damerau–Levenshtein anche per scambi di lettere vicine. <strong>Distribuzioni:</strong> Hellinger o Jensen–Shannon. <strong>Composizioni:</strong> Aitchison quando applicabile.</p>
+            <p><strong>Serie temporali:</strong> confronto sincronizzato sui valori o sulle pendenze; DTW per riallineare eventi; LCSS per trovare eventi simili entro tolleranze. Non vengono inventati timestamp o ricampionamenti.</p>
+          </details>
           <button type="button" class="secondary-action" id="back-to-selection">Rivedi colonne e gruppi</button>
                 <section class="comparison-guide" id="comparison-guide" aria-labelledby="comparison-guide-heading">
         <h4 id="comparison-guide-heading">Indicazione per proseguire</h4>
@@ -415,7 +424,7 @@
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
   <script defer src="js/preprocessing-python.js?v=20261116-importazione1"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261116-fasi2"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261116-misure1"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>
