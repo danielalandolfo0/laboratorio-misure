@@ -993,6 +993,7 @@ dati_testo_mancante = p.prepara_tabella(p.leggi_csv(
 ))
 risposte_testo_mancante = {
     "riga": "oggetto",
+    "misureTestualiPerColonna": {"testo": "levenshtein"},
     "significatoMancanti": "sconosciuto",
     "colonne": {
         "testo": {"ruolo": "testo", "usa": True},
