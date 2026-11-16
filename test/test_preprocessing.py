@@ -1505,6 +1505,7 @@ risposte_blocchi_eterogenei = {
         **{nome: "coordinate" for nome in ("c1", "c2")},
     },
     "ritardo-tempo": "si",
+    "metodiAllineamentoTemporaleGruppi": {"tempo": "dtw"},
     "ordiniTemporaliGruppi": {"tempo": "t1; t2; t3"},
     "campionamentiTemporaliGruppi": {"tempo": "regolare"},
     "somiglianza-profilo": "andamento",
