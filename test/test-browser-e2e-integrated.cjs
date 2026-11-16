@@ -113,9 +113,8 @@ async function main() {
       "Il questionario non deve partire prima della conferma del formato.");
     await page.locator("#confirm-csv-import").click();
     await page.locator("#csv-output").waitFor({state:"visible"});
-    assert.match(await page.locator("#comparison-guide-phase").innerText(),/Indica che cosa rappresenta una riga/);
-    await page.locator("#comparison-guide-next").click();
-    assert.equal(await page.locator("#row-meaning").evaluate(e=>e===document.activeElement),true);
+    assert.match(await page.locator("#questionnaire-progress").innerText(),/Fase 1 di 4/);
+    assert.equal(await page.locator("#phase-preprocessing").isVisible(),false);
     await choose("#row-meaning","oggetto");
     checkpoint("CSV caricato con Pyodide: 6 righe, 9 colonne");
 
@@ -125,6 +124,17 @@ async function main() {
     for(let i=0;i<names.length;i++){
       await choose('.semantic-role[data-semantic-column="'+i+'"]',roles[i]);
     }
+    await page.locator("#confirm-semantic-types").click();
+    assert.equal(await page.locator("#phase-preprocessing").isVisible(),true);
+    assert.equal(await page.locator("#phase-selection").isVisible(),false);
+    assert.equal(await page.locator("#prepare-comparison-plan").isVisible(),false);
+    // Il preprocessing è confermato prima della selezione definitiva.
+    await page.locator("#scaling-wrap").waitFor({state:"visible"});
+    await choose('#scaling-body .column-choice[data-column="2"][data-choice="metodo"]',"nessuno");
+    await choose('#scaling-body .column-choice[data-column="3"][data-choice="metodo"]',"log1p");
+    await page.locator("#confirm-numeric-scaling").click();
+    await page.locator("#confirm-preprocessing-phase").click();
+    checkpoint("Conferma riscalamento c1 originale, c2 log(1+x)");
     // Il ruolo "testo" e' inizialmente escluso per prudenza:
     // l'utente deve riabilitare esplicitamente il suo confronto.
     const textUsed=page.locator('.semantic-use[data-semantic-column="7"]');
@@ -141,6 +151,8 @@ async function main() {
     for(const col of ["p1","p2","p3"])await assign(col,"gruppo-2");
     await choose('.group-config[data-group-id="gruppo-1"] .group-type',"coordinate");
     await choose('.group-config[data-group-id="gruppo-2"] .group-type',"distribuzione");
+    await page.locator("#confirm-selection-phase").click();
+    assert.equal(await page.locator("#phase-measures").isVisible(),true);
     checkpoint("Riconosciuti due gruppi e tre colonne standard indipendenti");
 
     // Interpretazione di Gower e della distribuzione: decisioni esplicite.
@@ -171,13 +183,6 @@ async function main() {
     await enter('.group-measure-parameter[data-group-id="gruppo-1"][data-parameter="pesi"]',"1; 4",true);
     await answer("mancanti-gruppo-gruppo-1","pairwise");
     checkpoint("Minkowski pesata pairwise, q=2, pesi 1;4");
-
-    // Trasformazioni esplicite, non applicate alle distribuzioni.
-    await page.locator("#scaling-wrap").waitFor({state:"visible"});
-    await choose('#scaling-body .column-choice[data-column="2"][data-choice="metodo"]',"nessuno");
-    await choose('#scaling-body .column-choice[data-column="3"][data-choice="metodo"]',"log1p");
-    await page.locator("#confirm-numeric-scaling").click();
-    checkpoint("Conferma riscalamento c1 originale, c2 log(1+x)");
 
     // Le due conferme di compatibilità non sono scelte dal sito.
     const confirmMixed='.group-preprocessing-confirmation[data-group-id="gruppo-1"][data-kind="misti"]';

@@ -21,6 +21,27 @@
   let versioneDiagnosi = 0;
   let proposteGruppiCorrenti = [];
   let riscalamentoConfermato = false;
+  // Tipi -> preprocessing -> selezione/gruppi -> misure: l'ordine
+  // precede il piano, che resta la fonte di verifica matematica.
+  const FASI_QUESTIONARIO = ["semantica", "preprocessing", "selezione", "misure"];
+  let faseQuestionario = "semantica";
+
+  function mostraFaseQuestionario() {
+    if (!risultato) return;
+    const nodi = ["phase-semantics", "phase-preprocessing", "phase-selection", "phase-measures"];
+    const indice = FASI_QUESTIONARIO.indexOf(faseQuestionario);
+    nodi.forEach((nome, i) => { $(nome).hidden = i !== indice; });
+    const titoli = ["Significato delle colonne", "Diagnosi e preprocessing",
+      "Selezione delle colonne e dei gruppi", "Misure e parametri"];
+    $("questionnaire-progress").textContent =
+      "Fase " + (indice + 1) + " di 4 — " + titoli[indice];
+  }
+
+  function vaiAllaFase(fase) {
+    if (!FASI_QUESTIONARIO.includes(fase)) throw new Error("Fase non riconosciuta.");
+    faseQuestionario = fase;
+    aggiornaFaseNumerica();
+  }
   // Revisione incrementata a ogni modifica che invalida il piano.
   // Le risposte asincrone obsolete non devono mostrare un piano o una
   // matrice riferiti a scelte non più correnti.
@@ -344,6 +365,11 @@
   let prossimoCampoGuida = null;
   function aggiornaGuida() {
     if (!risultato) return;
+    if (faseQuestionario !== "misure") {
+      $("comparison-guide").hidden = true;
+      prossimoCampoGuida = null;
+      return;
+    }
     const domande = $("adaptive-questions");
     const campoVuoto = selettore => Array.from(domande.querySelectorAll(selettore))
       .find(c => !c.disabled && !String(c.value || "").trim());
@@ -471,7 +497,7 @@
     if (!risultato) return [];
     return risultato.colonne.filter(colonna => {
       const risposta = interpretazione.colonne[colonna.nome];
-      return risposta?.usa && risposta.ruolo === "quantita" &&
+      return risposta?.ruolo === "quantita" &&
         ["numerica", "numerica_costante"].includes(colonna.tipo);
     });
   }
@@ -671,8 +697,8 @@
     // tutte le altre colonne del CSV siano numeriche. In un dataset misto
     // possono esserci gruppi di coordinate che usano il riscalamento.
     const quantitativi = colonneNumericheDaRiscalare();
-    return quantitativi.length >= 2 &&
-      !["relativo", "abbondanza", "frequenze"].includes(valoreRisposta("confrontoQuantitativo"));
+    // Il riscalamento viene confermato prima della scelta delle misure.
+    return quantitativi.length >= 2;
   }
 
   function aggiornaVisibilitaTrasformazione() {
@@ -694,10 +720,14 @@
   function aggiornaFaseNumerica() {
     const numerico = richiedeRiscalamentoConfermato();
     const pronto = !numerico || riscalamentoConfermato;
-    // Le domande devono essere visibili prima della conferma del riscalamento.
-    $("adaptive-questions").hidden = false;
-    $("prepare-comparison-plan").hidden = !pronto;
+    $("adaptive-questions").hidden = faseQuestionario !== "misure";
+    $("prepare-comparison-plan").hidden = !pronto || faseQuestionario !== "misure";
+    $("confirm-preprocessing-phase").disabled = !pronto;
+    $("phase-preprocessing-help").textContent = pronto
+      ? "Puoi selezionare le colonne. Se una misura successiva risulta incompatibile, torna qui."
+      : "Conferma le trasformazioni quantitative proposte o modificate.";
     aggiornaVisibilitaTrasformazione();
+    mostraFaseQuestionario();
     aggiornaGuida();
   }
 
@@ -1814,6 +1844,13 @@
       return `<tr>
         <th scope="row">${escapeHtml(profilo.nome)}</th>
         <td><select class="column-choice semantic-role" data-semantic-column="${indice}" aria-label="Significato della colonna ${escapeHtml(profilo.nome)}">${opzioniRuolo(risposta.ruolo)}</select></td>
+      </tr>`;
+    }).join("");
+    $("selection-body").innerHTML = profili.map((profilo, indice) => {
+      const risposta = interpretazione.colonne[profilo.nome];
+      return `<tr>
+        <th scope="row">${escapeHtml(profilo.nome)}</th>
+        <td>${escapeHtml(etichettaRuolo(risposta.ruolo))}</td>
         <td><label class="comparison-toggle"><input class="semantic-use" type="checkbox" data-semantic-column="${indice}"${risposta.usa ? " checked" : ""}><span>${risposta.usa ? "Sì" : "No"}</span></label></td>
       </tr>`;
     }).join("");
@@ -2662,6 +2699,7 @@
       if (versione !== versioneDati) return;
       importazioneCSV = config;
       interpretazione = {colonne: {}, gruppi: [], assegnazioni: {}, prossimoGruppo: 1};
+      faseQuestionario = "semantica";
       riscalamentoConfermato = false;
       $("row-meaning").value = "";
       risultato = nuovaTabella;
@@ -2731,6 +2769,7 @@
       const nuovaTabella = await P.preparaTabella(testo, []);
       if (versione !== versioneDati) return;
       interpretazione = { colonne: {}, gruppi: [], assegnazioni: {}, prossimoGruppo: 1 };
+      faseQuestionario = "semantica";
       riscalamentoConfermato = false;
       $("row-meaning").value = "";
       testoOriginale = testo;
@@ -2822,6 +2861,42 @@
     campo.focus?.({preventScroll:true});
   });
   $("download-work").addEventListener("click", scaricaTabella);
+  $("confirm-semantic-types").addEventListener("click", () => {
+    if (!$("row-meaning").value) {
+      mostraErrore("Indica che cosa rappresenta ogni riga prima di confermare le colonne.");
+      $("row-meaning").focus?.();
+      return;
+    }
+    nascondiErrore();
+    vaiAllaFase("preprocessing");
+  });
+  $("back-to-semantics").addEventListener("click", () => vaiAllaFase("semantica"));
+  $("confirm-preprocessing-phase").addEventListener("click", () => {
+    if (richiedeRiscalamentoConfermato() && !riscalamentoConfermato) {
+      mostraErrore("Conferma il preprocessing numerico prima di selezionare le colonne.");
+      return;
+    }
+    nascondiErrore();
+    vaiAllaFase("selezione");
+  });
+  $("back-to-preprocessing").addEventListener("click", () => vaiAllaFase("preprocessing"));
+  $("confirm-selection-phase").addEventListener("click", () => {
+    if (!Object.values(interpretazione.colonne).some(colonna => colonna.usa)) {
+      mostraErrore("Seleziona almeno una colonna per il confronto.");
+      return;
+    }
+    const incompleto = interpretazione.gruppi.find(gruppo =>
+      gruppo.tipo === "altro" &&
+      Object.values(interpretazione.assegnazioni).includes(gruppo.id));
+    if (incompleto) {
+      mostraErrore("Indica il significato del gruppo “" + incompleto.nome +
+        "” oppure lascia le sue colonne indipendenti.");
+      return;
+    }
+    nascondiErrore();
+    vaiAllaFase("misure");
+  });
+  $("back-to-selection").addEventListener("click", () => vaiAllaFase("selezione"));
   $("confirm-numeric-scaling").addEventListener("click", confermaRiscalamentoNumerico);
   $("prepare-comparison-plan").addEventListener("click", preparaPiano);
   $("calculate-gower").addEventListener("click", calcolaMatrice);
@@ -2922,28 +2997,32 @@
     spiegazione.hidden = !apri;
   });
   $("meaning-body").addEventListener("change", evento => {
+    if (!evento.target.matches(".semantic-role")) return;
     const indice = Number(evento.target.dataset.semanticColumn);
-    if (!Number.isInteger(indice)) return;
+    if (!Number.isInteger(indice) || !risultato?.questionario?.colonne[indice]) return;
     const profilo = risultato.questionario.colonne[indice];
-    if (evento.target.matches(".semantic-role")) {
-      interpretazione.colonne[profilo.nome].ruolo = evento.target.value;
-      if (["identificativo", "data", "testo", "risultato"].includes(evento.target.value)) {
-        interpretazione.colonne[profilo.nome].usa = false;
-        const riga = evento.target.closest("tr");
-        const casella = riga.querySelector(".semantic-use");
-        casella.checked = false;
-        casella.nextElementSibling.textContent = "No";
-      }
-    }
-    if (evento.target.matches(".semantic-use")) {
-      interpretazione.colonne[profilo.nome].usa = evento.target.checked;
-      evento.target.nextElementSibling.textContent = evento.target.checked ? "Sì" : "No";
+    interpretazione.colonne[profilo.nome].ruolo = evento.target.value;
+    if (["identificativo", "data", "testo", "risultato"].includes(evento.target.value)) {
+      interpretazione.colonne[profilo.nome].usa = false;
     }
     annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
     invalidaPesiPerStruttura();
     riscalamentoConfermato = false;
     interpretazione.riscalamentoConfermato = false;
+    faseQuestionario = "semantica";
+    disegnaQuestionario();
+  });
+  $("selection-body").addEventListener("change", evento => {
+    if (!evento.target.matches(".semantic-use")) return;
+    const indice = Number(evento.target.dataset.semanticColumn);
+    if (!Number.isInteger(indice) || !risultato?.questionario?.colonne[indice]) return;
+    const profilo = risultato.questionario.colonne[indice];
+    interpretazione.colonne[profilo.nome].usa = evento.target.checked;
+    annullaScelteNormalizzazione();
+    annullaConfermeCompatibilita();
+    invalidaPesiPerStruttura();
+    // La selezione successiva non annulla le trasformazioni confermate.
     disegnaQuestionario();
   });
   $("adaptive-questions").addEventListener("input", evento => {
@@ -3201,8 +3280,6 @@
     annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
     invalidaPesiPerStruttura();
-    riscalamentoConfermato = false;
-    interpretazione.riscalamentoConfermato = false;
     creaGruppo();
     disegnaQuestionario();
   });
@@ -3237,8 +3314,6 @@
     if (gruppoId !== precedenteGruppo) invalidaPesiPerStruttura();
     annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
-    riscalamentoConfermato = false;
-    interpretazione.riscalamentoConfermato = false;
     disegnaQuestionario();
   });
   $("group-config-list").addEventListener("change", evento => {
@@ -3258,8 +3333,6 @@
       annullaScelteNormalizzazione();
       annullaConfermeCompatibilita();
     }
-    riscalamentoConfermato = false;
-    interpretazione.riscalamentoConfermato = false;
     disegnaQuestionario();
   });
   $("group-config-list").addEventListener("input", evento => {
@@ -3284,8 +3357,6 @@
     Object.keys(interpretazione.assegnazioni).forEach(nome => {
       if (interpretazione.assegnazioni[nome] === gruppoId) delete interpretazione.assegnazioni[nome];
     });
-    riscalamentoConfermato = false;
-    interpretazione.riscalamentoConfermato = false;
     disegnaQuestionario();
   });
 

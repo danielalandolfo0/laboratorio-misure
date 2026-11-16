@@ -47,7 +47,15 @@ async function gower(browser){
     await init(page);
     await upload(page,"colore,forma,id\nrosso,tondo,A\nblu,tondo,B\nblu,quadro,C\nrosso,quadro,D","categorie.csv");
     await page.locator("#row-meaning").selectOption("oggetto");
-    await role(page,0,"categoria");await role(page,1,"categoria");await role(page,2,"identificativo");await omit(page,2);
+    await role(page,0,"categoria");await role(page,1,"categoria");await role(page,2,"identificativo");
+    assert.equal(await page.locator("#phase-selection").isVisible(),false);
+    assert.equal(await page.locator("#phase-measures").isVisible(),false);
+    await page.locator("#confirm-semantic-types").click();
+    assert.equal(await page.locator("#phase-preprocessing").isVisible(),true);
+    await page.locator("#confirm-preprocessing-phase").click();
+    await omit(page,2);
+    await page.locator("#confirm-selection-phase").click();
+    assert.equal(await page.locator("#phase-measures").isVisible(),true);
     await page.locator("#prepare-comparison-plan").click();
     await page.locator("#comparison-plan").waitFor({state:"visible"});
     assert.equal(await page.locator("#gower-actions").isVisible(),true,
@@ -378,12 +386,17 @@ async function mobile(browser){
     await init(page);
     await upload(page,"x,y,id\n0,1,A\n1,4,B\n2,2,C\n3,3,D","numerico.csv");
     await page.locator("#row-meaning").selectOption("oggetto");
-    await role(page,0,"quantita");await role(page,1,"quantita");await role(page,2,"identificativo");await omit(page,2);
+    await role(page,0,"quantita");await role(page,1,"quantita");await role(page,2,"identificativo");
+    await page.locator("#confirm-semantic-types").click();
     assert.equal(await page.locator("#scaling-wrap").isVisible(),true);
     assert.equal(await page.locator("#prepare-comparison-plan").isVisible(),false);
     await page.locator('#scaling-body select[data-column="0"][data-choice="metodo"]').selectOption("nessuno");
     await page.locator('#scaling-body select[data-column="1"][data-choice="metodo"]').selectOption("log1p");
     await page.locator("#confirm-numeric-scaling").click();
+    assert.equal(await page.locator("#prepare-comparison-plan").isVisible(),false);
+    await page.locator("#confirm-preprocessing-phase").click();
+    await omit(page,2);
+    await page.locator("#confirm-selection-phase").click();
     assert.equal(await page.locator("#prepare-comparison-plan").isVisible(),true);
     const answer=async(id,value)=>{
       const input=page.locator('[data-answer="'+id+'"]');

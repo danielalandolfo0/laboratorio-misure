@@ -277,9 +277,24 @@ async function testGuida() {
   const h=createHarness();
   h.fire("load-example-csv","click");
   await flush();
-  assert.match(h.element("comparison-guide-phase").textContent,/Indica che cosa rappresenta una riga/);
+  assert.match(h.element("questionnaire-progress").textContent,/Fase 1 di 4/);
+  assert.equal(h.element("phase-selection").hidden,true);
+  h.fire("confirm-semantic-types","click");
+  assert.notEqual(h.element("csv-error").textContent,"");
   h.fire("row-meaning","change",{value:"oggetto"});
-  assert.doesNotMatch(h.element("comparison-guide-phase").textContent,/Indica che cosa rappresenta una riga/);
+  h.fire("confirm-semantic-types","click");
+  assert.match(h.element("questionnaire-progress").textContent,/Fase 2 di 4/);
+  assert.equal(h.element("phase-preprocessing").hidden,false);
+  assert.equal(h.element("phase-selection").hidden,true);
+  h.fire("confirm-preprocessing-phase","click");
+  assert.equal(h.element("phase-selection").hidden,true);
+  h.fire("confirm-numeric-scaling","click");
+  h.fire("confirm-preprocessing-phase","click");
+  assert.match(h.element("questionnaire-progress").textContent,/Fase 3 di 4/);
+  h.fire("confirm-selection-phase","click");
+  assert.match(h.element("questionnaire-progress").textContent,/Fase 4 di 4/);
+  h.fire("back-to-selection","click");
+  assert.match(h.element("questionnaire-progress").textContent,/Fase 3 di 4/);
 }
 
 async function testStaleFiles() {
@@ -510,7 +525,13 @@ async function testRiscalamentoNumericoInTabellaMista() {
   assert.match(h.element("scaling-body").innerHTML, /c2/);
   assert.match(h.element("adaptive-questions").innerHTML, /id="gestioneQuantitativeMiste"/);
   assert.doesNotMatch(h.element("adaptive-questions").innerHTML, /id="confrontoQuantitativo"/);
+  h.fire("row-meaning","change",{value:"oggetto"});
+  h.fire("confirm-semantic-types","click");
   h.fire("confirm-numeric-scaling", "click");
+  assert.equal(h.element("prepare-comparison-plan").hidden, true,
+    "La misura non deve comparire prima della scelta delle colonne.");
+  h.fire("confirm-preprocessing-phase","click");
+  h.fire("confirm-selection-phase","click");
   assert.equal(h.element("prepare-comparison-plan").hidden, false);
   assert.equal(h.element("view-work").disabled, false);
   assert.match(h.element("preview-head").innerHTML, /c1/);

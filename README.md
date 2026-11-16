@@ -139,6 +139,37 @@ se è un mancante, il contributo viene escluso dalla coppia.
 Il risultato è differente e non viene mai deciso dal motore senza
 un'interpretazione coerente del file.
 
+## Questionario in quattro fasi (ordine dell'Overleaf principale)
+
+Il percorso operativo separa, dopo la conferma del CSV:
+
+1. **Tipizzazione semantica:** conferma del significato delle righe e
+   dei ruoli proposti per tutte le colonne. Le proposte non cambiano
+   automaticamente il significato dei valori.
+2. **Preprocessing preliminare:** diagnosi e riscalamenti proposti
+   per le colonne quantitative, con possibili modifiche per colonna
+   e conferma esplicita *prima* della selezione definitiva.
+3. **Selezione e blocchi:** scelta delle colonne da confrontare
+   e assegnazione a gruppi disgiunti. Cambiare la selezione non
+   cancella automaticamente i riscalamenti già approvati.
+4. **Misure e parametri:** domande adattive per ogni tipo di dato,
+   scelte sui mancanti, convenzioni, pesi e piano di confronto;
+   il calcolo produce sempre un'unica matrice finale.
+
+La navigazione permette di tornare a una fase precedente; modificare
+la semantica o il preprocessing rende obsolete le decisioni
+dipendenti e richiede una nuova conferma. Le condizioni numeriche
+e la completezza del piano restano verificate anche dal backend.
+
+**Gerarchia delle fonti:** la bozza principale *Architettura
+decisionale per il calcolo di distanze e dissimilarità su dati
+eterogenei* definisce i requisiti, compreso l'ordine
+preprocessing → colonne/blocchi → misure. La bozza supplementare
+*Architettura Decisionale e Metodologica...* offre esempi
+di domande e rami possibili, ma non può sovrascrivere le
+decisioni concordate nella principale (per esempio non si
+dimezzano automaticamente i pesi in presenza di correlazioni).
+
 ## Funzionalità disponibili
 
 - caricamento locale di tabelle CSV con intestazione;
