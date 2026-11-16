@@ -41,6 +41,13 @@
     if (!FASI_QUESTIONARIO.includes(fase)) throw new Error("Fase non riconosciuta.");
     faseQuestionario = fase;
     aggiornaFaseNumerica();
+    const titolo = {
+      semantica: "phase-semantics-title",
+      preprocessing: "phase-preprocessing-title",
+      selezione: "phase-selection-title",
+      misure: "phase-measures-title"
+    }[fase];
+    $(titolo).focus?.({preventScroll: true});
   }
   // Revisione incrementata a ogni modifica che invalida il piano.
   // Le risposte asincrone obsolete non devono mostrare un piano o una
@@ -512,15 +519,16 @@
     const corpo = $("numeric-preliminary-content");
     const versione = ++versioneDiagnosi;
     proposteGruppiCorrenti = [];
-    const nomi = colonneNumericheSelezionate().map(c => c.nome);
+    const nomi = colonneNumericheDaRiscalare().map(c => c.nome);
     if (nomi.length < 2) {
       contenitore.hidden = true;
       corpo.innerHTML = "";
+      $("numeric-group-proposals").innerHTML = "";
       return;
     }
     contenitore.hidden = false;
     $("numeric-preliminary-scope").textContent =
-      `Analisi delle ${nomi.length} caratteristiche quantitative indipendenti: ${nomi.join(", ")}. ` +
+      `Analisi preliminare delle ${nomi.length} colonne quantitative, prima della selezione: ${nomi.join(", ")}. ` +
       (tabellaInteramenteNumerica()
         ? "Questa diagnosi orienta la scelta della misura e del riscalamento; non modifica i dati."
         : "Le altre colonne e i gruppi non entrano in questa diagnosi. Nei percorsi misti Gower usa i valori originali e normalizza internamente i contributi quantitativi; i gruppi di coordinate possono invece usare il riscalamento confermato.");
@@ -530,7 +538,10 @@
       if (versione !== versioneDiagnosi) return;
       const d = risposta.diagnosi;
       proposteGruppiCorrenti = (risposta.gruppiSuggeriti || []).filter(proposta =>
-        Array.isArray(proposta.colonne) && proposta.colonne.length >= 2
+        Array.isArray(proposta.colonne) && proposta.colonne.length >= 2 &&
+        proposta.colonne.every(nome =>
+          !interpretazione.assegnazioni[nome] && interpretazione.colonne[nome]?.usa
+        )
       );
       const estreme = risposta.colonne.filter(c => c.statistiche.estremi > 0);
       const asimmetriche = d.colonneAsimmetriche || [];
@@ -685,7 +696,8 @@
         : '<div class="question-item"><strong>Nessun gruppo proposto automaticamente</strong>' +
           '<p>Puoi comunque creare gruppi manualmente: nessuna regola statistica ' +
           'puo sostituire il significato delle variabili.</p></div>';
-      corpo.innerHTML = spiegazioni.join("") + proposteHtml + dettaglio;
+      corpo.innerHTML = spiegazioni.join("") + dettaglio;
+      $("numeric-group-proposals").innerHTML = proposteHtml;
     } catch (errore) {
       if (versione !== versioneDiagnosi) return;
       corpo.textContent = "Non è stato possibile completare la diagnosi: " + errore.message;
@@ -698,7 +710,7 @@
     // possono esserci gruppi di coordinate che usano il riscalamento.
     const quantitativi = colonneNumericheDaRiscalare();
     // Il riscalamento viene confermato prima della scelta delle misure.
-    return quantitativi.length >= 2;
+    return quantitativi.length >= 1;
   }
 
   function aggiornaVisibilitaTrasformazione() {
@@ -734,7 +746,7 @@
   function confermaRiscalamentoNumerico() {
     if (!richiedeRiscalamentoConfermato()) return;
     const colonne = colonneNumericheDaRiscalare();
-    if (colonne.length < 2) return;
+    if (colonne.length < 1) return;
     annullaConfermeCompatibilita();
     riscalamentoConfermato = true;
     interpretazione.riscalamentoConfermato = true;
@@ -3243,7 +3255,7 @@
     interpretazione.significatoEstremi = evento.target.value;
     disegnaQuestionario();
   });
-  $("numeric-preliminary-content").addEventListener("click", evento => {
+  $("numeric-group-proposals").addEventListener("click", evento => {
     const pulsante = evento.target.closest(".apply-group-proposal");
     if (!pulsante) return;
     const indice = Number(pulsante.dataset.proposalIndex);

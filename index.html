@@ -104,7 +104,7 @@
           <p>1. Significato → 2. Preprocessing → 3. Colonne e gruppi → 4. Misure e confronto</p>
         </nav>
         <section id="phase-semantics" aria-labelledby="phase-semantics-title">
-          <h4 id="phase-semantics-title">Fase 1 — Conferma il significato dei dati</h4>
+          <h4 id="phase-semantics-title" tabindex="-1">Fase 1 — Conferma il significato dei dati</h4>
           <p>Le proposte sono basate sul CSV, non sono interpretazioni definitive. Correggi i ruoli prima di procedere.</p>
         <div class="question-grid">
           <div class="question-item">
@@ -135,18 +135,18 @@
         </section>
 
         <section id="phase-preprocessing" aria-labelledby="phase-preprocessing-title" hidden>
-          <h4 id="phase-preprocessing-title">Fase 2 — Diagnosi e preprocessing preliminare</h4>
+          <h4 id="phase-preprocessing-title" tabindex="-1">Fase 2 — Diagnosi e preprocessing preliminare</h4>
           <p>Prima della selezione definitiva delle colonne, esamina le trasformazioni quantitative proposte, anche per le colonne che potresti escludere in seguito. Modifica ogni trasformazione se necessario: il CSV originale non cambia.</p>
                 <section class="numeric-preliminary-diagnosis" id="numeric-preliminary-diagnosis" aria-labelledby="numeric-preliminary-title" hidden>
         <h3 id="numeric-preliminary-title">Prima di confrontare i dati: che cosa abbiamo trovato?</h3>
-        <p id="numeric-preliminary-scope">Il sito analizza le caratteristiche quantitative indipendenti selezionate, senza includere i gruppi strutturati.</p>
+        <p id="numeric-preliminary-scope">Il sito analizza le caratteristiche quantitative prima della selezione definitiva e della formazione dei blocchi.</p>
         <div id="numeric-preliminary-content" aria-live="polite"></div>
       </section>
 
 
                 <div class="scaling-wrap" id="scaling-wrap" hidden>
         <h3>Riscalamento delle variabili numeriche</h3>
-        <p>Controlla la trasformazione proposta per ogni quantità selezionata. La tabella trasformata comparirà solo dopo la conferma; alcuni confronti richiedono invece i valori originali.</p>
+        <p>Controlla la trasformazione proposta per ogni colonna quantitativa. La tabella trasformata comparirà solo dopo la conferma; alcuni confronti richiedono invece i valori originali.</p>
         <p>Il sito suggerisce come rendere confrontabili le colonne. Puoi lasciare le scelte proposte oppure cambiarle. Nessuna trasformazione modifica il file originale.</p>
         <details class="scaling-explanation">
           <summary>Vuoi sapere come funzionano i diversi riscalamenti?</summary>
@@ -193,7 +193,7 @@
         </section>
 
         <section id="phase-selection" aria-labelledby="phase-selection-title" hidden>
-          <h4 id="phase-selection-title">Fase 3 — Scegli colonne e blocchi</h4>
+          <h4 id="phase-selection-title" tabindex="-1">Fase 3 — Scegli colonne e blocchi</h4>
           <p>Ora decidi quali caratteristiche usare. Se alcune descrivono un unico profilo, una serie o una composizione, riuniscile in un gruppo. Nessuna colonna verrà conteggiata in due gruppi.</p>
           <div class="data-table-wrap">
             <table class="data-table">
@@ -220,6 +220,7 @@
         </div>
 
 
+          <div id="numeric-group-proposals"></div>
           <div class="questionnaire-phase-action">
             <button type="button" class="secondary-action" id="back-to-preprocessing">Rivedi preprocessing</button>
             <button type="button" class="action" id="confirm-selection-phase">Conferma colonne e gruppi</button>
@@ -227,7 +228,7 @@
         </section>
 
         <section id="phase-measures" aria-labelledby="phase-measures-title" hidden>
-          <h4 id="phase-measures-title">Fase 4 — Come confrontare le caratteristiche?</h4>
+          <h4 id="phase-measures-title" tabindex="-1">Fase 4 — Come confrontare le caratteristiche?</h4>
           <p>Per ogni percorso definisci il significato della differenza, la misura locale e le convenzioni necessarie. Le misure suggerite non sostituiscono le decisioni semantiche: il piano segnalerà le informazioni mancanti.</p>
           <button type="button" class="secondary-action" id="back-to-selection">Rivedi colonne e gruppi</button>
                 <section class="comparison-guide" id="comparison-guide" aria-labelledby="comparison-guide-heading">
@@ -413,7 +414,7 @@
 
   <script defer src="https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js"></script>
   <script defer src="js/preprocessing-python.js?v=20261116-importazione1"></script>
-  <script defer src="js/preprocessing-ui.js?v=20261116-importazione1"></script>
+  <script defer src="js/preprocessing-ui.js?v=20261116-fasi1"></script>
   <script src="js/misure.js?v=20261016-2"></script>
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>

@@ -273,6 +273,40 @@ async function testConfermaImportazionePrimaDellaTipizzazione() {
   assert.equal(h.observations.tableCalls.at(-1).importazione.marcatoriMancanti.includes("na"),true);
 }
 
+async function testRiscalamentoPrecedeSelezioneConUnaSolaQuantita() {
+  const h = createHarness();
+  h.fire("csv-file", "change", {target: {files: [{
+    name: "una-quantita.csv", type: "text/csv", size: 70,
+    text: async () => "valore,categoria,id\n1,rosso,A\n2,blu,B\n3,rosso,C"
+  }]}});
+  await flush();
+  h.fire("row-meaning","change",{value:"oggetto"});
+  h.fire("confirm-semantic-types","click");
+  assert.equal(h.element("phase-preprocessing").hidden, false);
+  assert.equal(h.element("scaling-wrap").hidden, false,
+    "Il preprocessing riguarda anche una sola colonna quantitativa.");
+  assert.equal(h.element("confirm-preprocessing-phase").disabled, true);
+  h.fire("confirm-numeric-scaling","click");
+  assert.equal(h.element("confirm-preprocessing-phase").disabled, false);
+  h.fire("confirm-preprocessing-phase","click");
+  assert.equal(h.element("phase-selection").hidden, false);
+  assert.equal(h.element("phase-measures").hidden, true);
+  const deselect = h.customTarget(".semantic-use", {semanticColumn:"1"}, "");
+  deselect.checked = false;
+  h.fire("selection-body","change",{target:deselect});
+  assert.equal(h.element("confirm-numeric-scaling").hidden, true,
+    "Selezionare una colonna non annulla i riscalamenti già confermati.");
+  h.fire("confirm-selection-phase","click");
+  assert.equal(h.element("phase-measures").hidden, false);
+  assert.equal(h.element("prepare-comparison-plan").hidden, false);
+  h.fire("back-to-selection","click");
+  h.fire("back-to-preprocessing","click");
+  assert.equal(h.element("confirm-numeric-scaling").hidden,true,
+    "Un semplice ritorno alla fase precedente non cancella una decisione.");
+  h.fire("back-to-semantics","click");
+  assert.equal(h.element("phase-semantics").hidden,false);
+}
+
 async function testGuida() {
   const h=createHarness();
   h.fire("load-example-csv","click");
@@ -1535,6 +1569,7 @@ async function testConfermaBrayDoppioZero() {
 
 (async () => {
   await testConfermaImportazionePrimaDellaTipizzazione();
+  await testRiscalamentoPrecedeSelezioneConUnaSolaQuantita();
   await testAssegnazioniGruppiObsolete();
   await testProblemiSimultaneiNeiBlocchi();
   await testConfermaBrayDoppioZero();

@@ -334,6 +334,22 @@ async function importaCsv(browser){
     await page.locator("#confirm-csv-import").click();
     await page.locator("#csv-output").waitFor({state:"visible"});
     assert.equal(await page.locator("#csv-import-stage").isVisible(),false);
+    await page.locator("#row-meaning").selectOption("oggetto");
+    await role(page,0,"identificativo");
+    await role(page,1,"quantita");
+    await role(page,2,"categoria");
+    await page.locator("#confirm-semantic-types").click();
+    assert.equal(await page.locator("#phase-preprocessing").isVisible(),true);
+    assert.equal(await page.locator("#confirm-preprocessing-phase").isDisabled(),true);
+    // Una sola colonna quantitativa richiede comunque la conferma
+    // della trasformazione prima di selezionare le colonne.
+    assert.equal(await page.locator("#scaling-wrap").isVisible(),true);
+    await page.locator("#confirm-numeric-scaling").click();
+    await page.locator("#confirm-preprocessing-phase").click();
+    assert.equal(await page.locator("#phase-selection").isVisible(),true);
+    await page.locator("#confirm-selection-phase").click();
+    assert.equal(await page.locator("#phase-measures").isVisible(),true);
+    assert.equal(await page.locator("#prepare-comparison-plan").isVisible(),true);
     const risultati=await page.evaluate(async csv=>{
       const interpretazione={
         riga:"oggetto", significatoMancanti:"sconosciuto",
