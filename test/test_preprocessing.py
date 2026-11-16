@@ -2407,7 +2407,8 @@ quasi_uguali(risultato_ranghi_simboli["matrice"][0][1], 1)
 quasi_uguali(risultato_ranghi_simboli["matrice"][0][2], .5)
 assert risultato_ranghi_simboli["etichette"] == ["A", "B", "C", "D"]
 
-# Levenshtein resta il default e ha senso per lunghezze non uguali.
+# Levenshtein è disponibile ma richiede una scelta esplicita anche
+# quando le lunghezze differiscono: nessuna sostituzione automatica.
 dati_hamming_misto = p.prepara_tabella(p.leggi_csv(
     "codice,id\nABC,A\nABCD,B\nBCA,C"
 ))
@@ -2426,13 +2427,17 @@ assert not piano_hamming_incompatibile["completo"]
 assert any("lunghezza differente" in messaggio
            for percorso in piano_hamming_incompatibile["percorsi"]
            for messaggio in percorso["avvisi"])
-assert p.crea_piano_confronto(
+assert not p.crea_piano_confronto(
     dati_hamming_misto,
     {**risposte_testo_hamming, "misureTestualiPerColonna": {}},
 )["completo"]
+assert p.crea_piano_confronto(
+    dati_hamming_misto,
+    {**risposte_testo_hamming, "misureTestualiPerColonna": {"codice": "levenshtein"}},
+)["completo"]
 assert p.calcola_matrice(
     dati_hamming_misto,
-    {**risposte_testo_hamming, "misureTestualiPerColonna": {}},
+    {**risposte_testo_hamming, "misureTestualiPerColonna": {"codice": "levenshtein"}},
 )["metodo"] == "Distanza di Levenshtein normalizzata"
 assert not p.crea_piano_confronto(
     dati_hamming_misto,
