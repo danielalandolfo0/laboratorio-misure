@@ -731,13 +731,22 @@
 
   function aggiornaFaseNumerica() {
     const numerico = richiedeRiscalamentoConfermato();
-    const pronto = !numerico || riscalamentoConfermato;
+    const ciSonoAnomalie = colonneNumericheDaRiscalare().some(
+      colonna => colonna.statistiche?.estremi > 0
+    );
+    const outlierConfermati = !ciSonoAnomalie ||
+      interpretazione.significatoEstremi === "reali";
+    const pronto = (!numerico || riscalamentoConfermato) && outlierConfermati;
     $("adaptive-questions").hidden = faseQuestionario !== "misure";
     $("prepare-comparison-plan").hidden = !pronto || faseQuestionario !== "misure";
     $("confirm-preprocessing-phase").disabled = !pronto;
     $("phase-preprocessing-help").textContent = pronto
       ? "Puoi selezionare le colonne. Se una misura successiva risulta incompatibile, torna qui."
-      : "Conferma le trasformazioni quantitative proposte o modificate.";
+      : ciSonoAnomalie && !outlierConfermati
+        ? "Prima di procedere, conferma che i valori estremi siano reali. " +
+          "Se sono errori, sono da verificare oppure non ne conosci il significato, " +
+          "il preprocessing resta sospeso."
+        : "Conferma le trasformazioni quantitative proposte o modificate.";
     aggiornaVisibilitaTrasformazione();
     mostraFaseQuestionario();
     aggiornaGuida();
@@ -1924,11 +1933,21 @@
           escapeHtml(nome) + '”</strong>' + righe.join("") + '</div>');
       }
     }
-    if (colonneIncluse.some(colonna => colonna.statistiche?.estremi > 0)) domande.push(domandaAdattiva(
-      "significatoEstremi", "Alcuni valori sono molto lontani dagli altri: sono corretti?",
-      "Il sito li ha individuati automaticamente. Indica se rappresentano situazioni reali o possibili errori.",
-      [["reali", "Sì, confermo che sono casi reali"], ["errori", "No, probabilmente sono errori"], ["controllare", "Voglio controllarli prima del calcolo"], ["ignoto", "Non lo so"]]
-    ));
+    const anomalieQuantitative = colonneNumericheDaRiscalare().some(
+      colonna => colonna.statistiche?.estremi > 0
+    );
+    $("preprocessing-questions").innerHTML = anomalieQuantitative
+      ? domandaAdattiva(
+          "significatoEstremi", "Alcuni valori sono molto lontani dagli altri: sono corretti?",
+          "Rispondi prima di confermare il preprocessing. Un valore reale non viene eliminato; " +
+            "un possibile errore richiede la verifica del CSV. " +
+            "Questa è una segnalazione statistica, non una prova di errore.",
+          [["reali", "Sì, confermo che sono casi reali"],
+           ["errori", "No, probabilmente sono errori"],
+           ["controllare", "Voglio controllarli prima del calcolo"],
+           ["ignoto", "Non lo so: sospendi la decisione"]]
+        )
+      : "";
     if (ruoliInclusi.has("presenza")) domande.push(domandaAdattiva(
       "zeriCondivisi", "Due assenze in comune rendono simili due righe?",
       "Nella Gower con presenze asimmetriche, due assenze condivise non forniscono un contributo. Puoi modificare questa scelta per ciascuna colonna.",
@@ -2873,6 +2892,16 @@
     campo.focus?.({preventScroll:true});
   });
   $("download-work").addEventListener("click", scaricaTabella);
+  $("preprocessing-questions").addEventListener("change", evento => {
+    if (!evento.target.matches(".semantic-answer") ||
+        evento.target.dataset.answer !== "significatoEstremi") return;
+    interpretazione.significatoEstremi = evento.target.value;
+    annullaScelteNormalizzazione();
+    annullaConfermeCompatibilita();
+    riscalamentoConfermato = false;
+    interpretazione.riscalamentoConfermato = false;
+    disegnaQuestionario();
+  });
   $("confirm-semantic-types").addEventListener("click", () => {
     if (!$("row-meaning").value) {
       mostraErrore("Indica che cosa rappresenta ogni riga prima di confermare le colonne.");
@@ -2884,6 +2913,12 @@
   });
   $("back-to-semantics").addEventListener("click", () => vaiAllaFase("semantica"));
   $("confirm-preprocessing-phase").addEventListener("click", () => {
+    if (colonneNumericheDaRiscalare().some(colonna => colonna.statistiche?.estremi > 0)
+        && interpretazione.significatoEstremi !== "reali") {
+      mostraErrore("Verifica prima i valori estremi; se sono errori o non sei sicuro, " +
+        "la selezione delle colonne resta sospesa.");
+      return;
+    }
     if (richiedeRiscalamentoConfermato() && !riscalamentoConfermato) {
       mostraErrore("Conferma il preprocessing numerico prima di selezionare le colonne.");
       return;
@@ -3253,6 +3288,8 @@
   $("numeric-preliminary-content").addEventListener("change", evento => {
     if (!evento.target.matches(".multivariate-extremes-choice")) return;
     interpretazione.significatoEstremi = evento.target.value;
+    riscalamentoConfermato = false;
+    interpretazione.riscalamentoConfermato = false;
     disegnaQuestionario();
   });
   $("numeric-group-proposals").addEventListener("click", evento => {

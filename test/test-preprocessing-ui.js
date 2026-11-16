@@ -307,6 +307,37 @@ async function testRiscalamentoPrecedeSelezioneConUnaSolaQuantita() {
   assert.equal(h.element("phase-semantics").hidden,false);
 }
 
+async function testConfermaOutlierPrecedenteAlleMisure() {
+  const h=createHarness();
+  h.observations.tableIntercept = (text, choices) => {
+    const tabella = h.makeTable(text, choices);
+    tabella.colonne[0].statistiche.estremi = 1;
+    return Promise.resolve(tabella);
+  };
+  h.fire("csv-file","change",{target:{files:[{
+    name:"estremi.csv",type:"text/csv",size:65,
+    text:async()=>"x,y,id\n1,2,A\n2,3,B\n80,4,C"
+  }]}});
+  await flush();
+  h.fire("row-meaning","change",{value:"oggetto"});
+  h.fire("confirm-semantic-types","click");
+  assert.match(h.element("preprocessing-questions").innerHTML,
+    /id="significatoEstremi"/);
+  assert.equal(h.element("confirm-preprocessing-phase").disabled,true);
+  h.fire("confirm-numeric-scaling","click");
+  assert.equal(h.element("confirm-preprocessing-phase").disabled,true,
+    "Il riscalamento da solo non conferma che un outlier sia un dato reale.");
+  h.fire("preprocessing-questions","change",{target:h.customTarget(
+    ".semantic-answer",{answer:"significatoEstremi"},"reali"
+  )});
+  assert.equal(h.element("confirm-preprocessing-phase").disabled,true,
+    "Cambiare l'interpretazione degli outlier richiede una nuova conferma delle trasformazioni.");
+  h.fire("confirm-numeric-scaling","click");
+  assert.equal(h.element("confirm-preprocessing-phase").disabled,false);
+  h.fire("confirm-preprocessing-phase","click");
+  assert.equal(h.element("phase-selection").hidden,false);
+}
+
 async function testGuida() {
   const h=createHarness();
   h.fire("load-example-csv","click");
@@ -1570,6 +1601,7 @@ async function testConfermaBrayDoppioZero() {
 (async () => {
   await testConfermaImportazionePrimaDellaTipizzazione();
   await testRiscalamentoPrecedeSelezioneConUnaSolaQuantita();
+  await testConfermaOutlierPrecedenteAlleMisure();
   await testAssegnazioniGruppiObsolete();
   await testProblemiSimultaneiNeiBlocchi();
   await testConfermaBrayDoppioZero();

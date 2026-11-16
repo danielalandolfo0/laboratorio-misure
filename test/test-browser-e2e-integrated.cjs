@@ -128,6 +128,13 @@ async function main() {
     assert.equal(await page.locator("#phase-preprocessing").isVisible(),true);
     assert.equal(await page.locator("#phase-selection").isVisible(),false);
     assert.equal(await page.locator("#prepare-comparison-plan").isVisible(),false);
+    // Gli outlier vengono interpretati PRIMA della conferma delle
+    // trasformazioni. Non si nasconde la domanda nella fase misure.
+    const outlierPre=page.locator('#preprocessing-questions [data-answer="significatoEstremi"]');
+    if(await outlierPre.count()) {
+      await outlierPre.selectOption("reali");
+      assert.equal(await page.locator("#confirm-preprocessing-phase").isDisabled(),true);
+    }
     // Il preprocessing è confermato prima della selezione definitiva.
     await page.locator("#scaling-wrap").waitFor({state:"visible"});
     await choose('#scaling-body .column-choice[data-column="2"][data-choice="metodo"]',"nessuno");
@@ -157,8 +164,6 @@ async function main() {
 
     // Interpretazione di Gower e della distribuzione: decisioni esplicite.
     await answer("significatoMancanti","sconosciuto");
-    const outlier=page.locator('[data-answer="significatoEstremi"]');
-    if(await outlier.count())await answer("significatoEstremi","reali");
     await answer("ordineLivelli","si");
     await gowerField("ordiniLivelliGower","livello","basso; medio; alto");
     await gowerField("modalitaIntervalliGower","livello","personalizzati");

@@ -149,6 +149,11 @@ Il percorso operativo separa, dopo la conferma del CSV:
 2. **Preprocessing preliminare:** diagnosi e riscalamenti proposti
    per le colonne quantitative, con possibili modifiche per colonna
    e conferma esplicita *prima* della selezione definitiva.
+   Quando la diagnostica rileva valori estremi nelle quantità,
+   la conferma che si tratti di osservazioni reali precede la
+   conclusione del preprocessing. Errori, casi da verificare e
+   significati ignoti sospendono il passaggio: nessun outlier viene
+   eliminato automaticamente.
 3. **Selezione e blocchi:** scelta delle colonne da confrontare
    e assegnazione a gruppi disgiunti. Cambiare la selezione non
    cancella automaticamente i riscalamenti già approvati.
