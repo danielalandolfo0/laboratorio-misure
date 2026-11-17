@@ -66,6 +66,13 @@ async function gower(browser){
     assert.equal(await rows.count(),4);
     equal(number(await rows.nth(0).locator("td").nth(1).innerText()),.5);
     equal(number(await rows.nth(0).locator("td").nth(2).innerText()),1);
+    await rows.nth(0).click();
+    await page.locator("#nearest-ranking").waitFor({state:"visible"});
+    const vicini=page.locator("#nearest-ranking-list li");
+    assert.equal(await vicini.count(),3);
+    assert.match(await page.locator("#nearest-ranking-title").innerText(),/A/);
+    assert.match(await vicini.nth(0).innerText(),/B/);
+    assert.match(await vicini.nth(2).innerText(),/C/);
     const pending=page.waitForEvent("download");
     await page.locator("#download-gower").click();
     const download=await pending;

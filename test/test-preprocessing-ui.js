@@ -30,6 +30,7 @@ function createHarness(options = {}) {
       this.value = "";
       this.style = {};
       this.dataset = {};
+      this.scrollCalls = 0;
       this.classList = {
         add() {}, remove() {}, toggle() {}
       };
@@ -58,6 +59,7 @@ function createHarness(options = {}) {
     getAttribute() { return "false"; }
     querySelector() { return null; }
     querySelectorAll() { return []; }
+    scrollIntoView() { this.scrollCalls++; }
     get outerHTML() { return '<div></div>'; }
   }
   const element = id => {
@@ -283,6 +285,8 @@ async function testRiscalamentoPrecedeSelezioneConUnaSolaQuantita() {
   h.fire("row-meaning","change",{value:"oggetto"});
   h.fire("confirm-semantic-types","click");
   assert.equal(h.element("phase-preprocessing").hidden, false);
+  assert.equal(h.element("phase-preprocessing").scrollCalls, 1,
+    "Il cambio di fase deve portare la schermata all'inizio del nuovo blocco.");
   assert.equal(h.element("scaling-wrap").hidden, false,
     "Il preprocessing riguarda anche una sola colonna quantitativa.");
   assert.equal(h.element("confirm-preprocessing-phase").disabled, true);
@@ -290,6 +294,7 @@ async function testRiscalamentoPrecedeSelezioneConUnaSolaQuantita() {
   assert.equal(h.element("confirm-preprocessing-phase").disabled, false);
   h.fire("confirm-preprocessing-phase","click");
   assert.equal(h.element("phase-selection").hidden, false);
+  assert.equal(h.element("phase-selection").scrollCalls, 1);
   assert.equal(h.element("phase-measures").hidden, true);
   const deselect = h.customTarget(".semantic-use", {semanticColumn:"1"}, "");
   deselect.checked = false;
@@ -1499,6 +1504,39 @@ async function testAssegnazioniGruppiObsolete() {
   );
 }
 
+async function testGraduatoriaRighePerVicinanza() {
+  const h = createHarness();
+  h.fire("load-example-csv", "click");
+  await flush();
+  h.fire("row-meaning", "change", {value: "oggetto"});
+  h.fire("prepare-comparison-plan", "click");
+  await flush();
+  const matrice = h.makeMatrix();
+  matrice.etichette = ["A", "B", "C", "D"];
+  matrice.matrice = [
+    [0, .4, .2, null],
+    [.4, 0, .3, .8],
+    [.2, .3, 0, .6],
+    [null, .8, .6, 0]
+  ];
+  h.observations.matrixIntercept = () => Promise.resolve(matrice);
+  h.fire("calculate-gower", "click");
+  await flush();
+  assert.match(h.element("gower-matrix-body").innerHTML, /matrix-row-button/);
+  h.fire("gower-matrix-body", "click", {
+    target: {
+      closest: selettore => selettore === "tr[data-matrix-row]"
+        ? {dataset: {matrixRow: "0"}} : null
+    }
+  });
+  assert.equal(h.element("nearest-ranking").hidden, false);
+  assert.match(h.element("nearest-ranking-title").textContent, /“A”/);
+  const lista = h.element("nearest-ranking-list").innerHTML;
+  assert.ok(lista.indexOf("C") < lista.indexOf("B"));
+  assert.ok(lista.indexOf("B") < lista.indexOf("D"));
+  assert.match(lista, /Non confrontabile/);
+}
+
 async function testProblemiSimultaneiNeiBlocchi() {
   const h = createHarness();
   h.fire("load-example-csv", "click");
@@ -1606,6 +1644,7 @@ async function testConfermaBrayDoppioZero() {
   await testProblemiSimultaneiNeiBlocchi();
   await testConfermaBrayDoppioZero();
   await testRapportoCumulativoProblemi();
+  await testGraduatoriaRighePerVicinanza();
   await testModalitaPesiGlobali();
   await testLogaritmoStrettamentePositivo();
   await testMarcatoriMancantiMisti();

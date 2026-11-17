@@ -318,6 +318,23 @@ header p {
 .gower-matrix-table th,
 .gower-matrix-table td { min-width: 82px; text-align: right; }
 .gower-matrix-table th:first-child { position: sticky; left: 0; text-align: left; background: rgba(241, 247, 255, .98); }
+.gower-matrix-table tbody tr { cursor: pointer; }
+.gower-matrix-table tbody tr:hover td,
+.gower-matrix-table tbody tr:hover th,
+.gower-matrix-table tbody tr.selected-matrix-row td,
+.gower-matrix-table tbody tr.selected-matrix-row th { background: rgba(8, 124, 255, .09); }
+.matrix-row-button { padding: 5px 7px; color: var(--blue-dark); background: transparent; border: 0; border-radius: 7px; cursor: pointer; font: inherit; font-weight: 720; text-align: left; }
+.matrix-row-button:focus-visible { outline: 3px solid rgba(8, 124, 255, .28); outline-offset: 2px; }
+.nearest-ranking { margin-top: 16px; padding: 16px; border: 1px solid rgba(8, 124, 255, .18); border-radius: 14px; background: rgba(8, 124, 255, .045); }
+.nearest-ranking[hidden] { display: none; }
+.nearest-ranking h6 { margin: 0 0 5px; font-size: .92rem; }
+.nearest-ranking > p { margin: 0 0 12px; color: var(--muted); font-size: .74rem; }
+.nearest-ranking ol { margin: 0; padding-left: 28px; }
+.nearest-ranking li { padding: 7px 4px; border-bottom: 1px solid rgba(111, 124, 148, .12); }
+.nearest-ranking li:last-child { border-bottom: 0; }
+.nearest-ranking-entry { display: flex; justify-content: space-between; gap: 18px; }
+.nearest-ranking-value { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.nearest-ranking-unavailable { color: var(--muted); }
 .section-divider { display: flex; align-items: center; gap: 13px; margin-bottom: 18px; color: var(--muted); font-size: .76rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .section-divider::before,
 .section-divider::after { content: ""; height: 1px; flex: 1; background: var(--line); }

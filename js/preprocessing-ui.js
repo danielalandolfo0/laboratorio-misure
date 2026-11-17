@@ -50,6 +50,13 @@
       selezione: "phase-selection-title",
       misure: "phase-measures-title"
     }[fase];
+    const sezione = $({
+      semantica: "phase-semantics",
+      preprocessing: "phase-preprocessing",
+      selezione: "phase-selection",
+      misure: "phase-measures"
+    }[fase]);
+    sezione.scrollIntoView?.({behavior: "smooth", block: "start"});
     $(titolo).focus?.({preventScroll: true});
   }
   // Revisione incrementata a ogni modifica che invalida il piano.
@@ -1340,14 +1347,51 @@
     aggiornaGuida();
   }
 
+  function mostraGraduatoriaRiga(indiceSelezionato) {
+    if (!matriceCorrente || !Number.isInteger(indiceSelezionato)) return;
+    const etichette = matriceCorrente.etichette || [];
+    const riga = matriceCorrente.matrice?.[indiceSelezionato];
+    if (!riga || indiceSelezionato < 0 || indiceSelezionato >= etichette.length) return;
+    const graduatoria = etichette.map((etichetta, indice) => ({
+      etichetta, indice, valore: riga[indice]
+    })).filter(voce => voce.indice !== indiceSelezionato);
+    graduatoria.sort((a, b) => {
+      const aDefinita = Number.isFinite(a.valore);
+      const bDefinita = Number.isFinite(b.valore);
+      if (aDefinita !== bDefinita) return aDefinita ? -1 : 1;
+      if (aDefinita && a.valore !== b.valore) return a.valore - b.valore;
+      return a.indice - b.indice;
+    });
+    $("nearest-ranking-title").textContent =
+      "Righe ordinate per vicinanza a “" + etichette[indiceSelezionato] + "”";
+    $("nearest-ranking-list").innerHTML = graduatoria.map(voce => {
+      const definita = Number.isFinite(voce.valore);
+      return '<li' + (definita ? '' : ' class="nearest-ranking-unavailable"') + '>' +
+        '<span class="nearest-ranking-entry"><span>' + escapeHtml(voce.etichetta) +
+        '</span><strong class="nearest-ranking-value">' +
+        (definita ? escapeHtml(formatoNumero(voce.valore)) : 'Non confrontabile') +
+        '</strong></span></li>';
+    }).join("");
+    $("gower-matrix-body").querySelectorAll("tr[data-matrix-row]").forEach(rigaTabella => {
+      const selezionata = Number(rigaTabella.dataset.matrixRow) === indiceSelezionato;
+      rigaTabella.classList.toggle("selected-matrix-row", selezionata);
+      rigaTabella.querySelector(".matrix-row-button")?.setAttribute(
+        "aria-pressed", String(selezionata)
+      );
+    });
+    $("nearest-ranking").hidden = false;
+  }
+
   function disegnaMatrice(risposta) {
     const limite = Math.min(12, risposta.etichette.length);
     const etichette = risposta.etichette.slice(0, limite);
     $("gower-matrix-head").innerHTML = `<tr><th>Riga</th>${etichette.map(etichetta => `<th>${escapeHtml(etichetta)}</th>`).join("")}</tr>`;
-    $("gower-matrix-body").innerHTML = risposta.matrice.slice(0, limite).map((riga, indice) => `<tr>
-      <th scope="row">${escapeHtml(etichette[indice])}</th>
+    $("gower-matrix-body").innerHTML = risposta.matrice.slice(0, limite).map((riga, indice) => `<tr data-matrix-row="${indice}">
+      <th scope="row"><button class="matrix-row-button" type="button" aria-pressed="false">${escapeHtml(etichette[indice])}</button></th>
       ${riga.slice(0, limite).map(valore => `<td>${valore === null ? "—" : escapeHtml(formatoNumero(valore))}</td>`).join("")}
     </tr>`).join("");
+    $("nearest-ranking").hidden = true;
+    $("nearest-ranking-list").innerHTML = "";
     $("gower-result-title").textContent = risposta.metodo;
     const avvisiFinali = risposta.diagnosticaFinale?.avvisi || [];
     const stati = risposta.diagnosticaMancantiSemantici;
@@ -2707,6 +2751,7 @@
     aggiornaVisibilitaTrasformazione(null);
     disegnaTabella();
     disegnaQuestionario();
+    vaiAllaFase("semantica");
   }
 
   async function elaboraTesto(testo, nomeFile) {
@@ -2902,6 +2947,11 @@
   $("calculate-gower").addEventListener("click", calcolaMatrice);
   $("download-uncovered-pairs").addEventListener("click", scaricaCoppieNonConfrontabili);
   $("download-gower").addEventListener("click", scaricaMatrice);
+  $("gower-matrix-body").addEventListener("click", evento => {
+    const riga = evento.target.closest?.("tr[data-matrix-row]");
+    if (!riga) return;
+    mostraGraduatoriaRiga(Number(riga.dataset.matrixRow));
+  });
   $("comparison-plan-paths").addEventListener("change", evento => {
     if (evento.target.matches(".global-weights-mode")) {
       interpretazione.modalitaPesiPercorsi = evento.target.value;
