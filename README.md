@@ -192,7 +192,9 @@ il piano rimane incompleto fino alla conferma.
 Le colonne testuali non adottano più Levenshtein senza domanda:
 l'utente sceglie fra coincidenza delle etichette (0/1), Hamming,
 Levenshtein o Damerau–Levenshtein. Nei profili è disponibile anche
-la **distanza della corda**, normalizzata sul limite teorico 2;
+la **distanza della corda**, normalizzata sul limite teorico coerente con il
+dominio: $\sqrt{2}$ per coordinate tutte non negative e 2 quando sono
+ammesse coordinate firmate;
 per un vettore nullo il confronto direzionale rimane non definito.
 Per i gruppi di coordinate, le serie sincronizzate e i confronti
 punto a punto viene richiesta una misura esplicita, non Euclidea
@@ -527,10 +529,11 @@ esegui:
 npm test
 ```
 
-I sei file in `examples/collaudo/` verificano rispettivamente il percorso
-euclideo ordinario, la combinazione scala robusta–Manhattan, Mahalanobis,
-il ripiego euclideo per covarianza singolare, max-abs per dati sparsi e Gower
-per dati misti. Gli stessi casi sono inclusi nei test automatici.
+I file in `examples/collaudo/` coprono i percorsi numerici ordinari, outlier,
+Mahalanobis, covarianza singolare, dati sparsi, Gower, Bray--Curtis con vettori
+nulli, serie con timestamp per riga e aggregazioni multiblocco. Gli stessi casi
+sono inclusi nei test automatici. Per una presentazione commentata si può usare
+`examples/DEMO_GUIDATA.md` ed eseguire `python3 examples/demo_flussi.py`.
 
 ## Come contribuire
 
