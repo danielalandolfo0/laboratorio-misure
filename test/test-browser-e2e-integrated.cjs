@@ -265,12 +265,6 @@ async function main() {
     const expectedAB=(2*.3+1/3+3*coordinateAB+4*1)/10;
     approx(ab,expectedAB);
     approx(ae,19/21);
-    const dettagliPesi = page.locator("#gower-diagnostics");
-    assert.equal(await dettagliPesi.isVisible(), true);
-    assert.match(await dettagliPesi.innerText(), /Influenza dei pesi e dei blocchi/);
-    assert.equal(await dettagliPesi.locator("tbody tr").count(), 4);
-    assert.match(await dettagliPesi.innerText(), /peso ×0,5/i);
-    assert.match(await dettagliPesi.innerText(), /peso ×2/i);
     checkpoint("Matrice 6×6: A/B e A/E coincidono con le formule");
 
     const pending=page.waitForEvent("download");
@@ -293,44 +287,6 @@ async function main() {
     approx(parseValue(clean[1][2]),expectedAB,1e-9);
     approx(parseValue(clean[1][5]),19/21,1e-9);
     fs.writeFileSync(path.join(OUT,"four-block-export.csv"),csv);
-
-    const pendingReport=page.waitForEvent("download");
-    await page.locator("#download-report").click();
-    const reportFile=await pendingReport;
-    assert.equal(reportFile.suggestedFilename(),"rapporto_calcolo.json");
-    const content=fs.readFileSync(await reportFile.path(),"utf8");
-    const report=JSON.parse(content);
-    assert.equal(report.formato,"laboratorio-misure/rapporto-calcolo");
-    assert.equal(report.sorgente.csvOriginale,INPUT);
-    assert.equal(report.sorgente.nomeFile,"test_integrato_gower_gruppi_mancanti.csv");
-    assert.equal(report.riproducibilita.sha256CsvOriginale,
-      crypto.createHash("sha256").update(INPUT,"utf8").digest("hex"));
-    assert.equal(report.piano.conteggioPercorsi,4);
-    assert.equal(report.piano.completo,true);
-    assert.equal(report.piano.pesaturaGlobale.modalita,"personalizzati");
-    assert.deepEqual(report.piano.percorsi.map(p=>p.pesoAggregazione),[2,1,3,4]);
-    assert.deepEqual(report.risultato.contributi.map(c=>c.peso),[2,1,3,4]);
-    assert.deepEqual(report.risultato.etichette,["A","B","C","D","E","F"]);
-    approx(report.risultato.matrice[0][1],expectedAB,1e-9);
-    approx(report.risultato.matrice[0][4],19/21,1e-9);
-    assert.equal(report.risultato.csvMatrice,csv.replace(/^\uFEFF/,""));
-    assert.ok(report.risultato.diagnosticaFinale);
-    const sensitivity = report.risultato.diagnosticaFinale.sensibilitaPesi;
-    assert.equal(sensitivity.numeroBlocchi, 4);
-    assert.equal(sensitivity.perBlocco.length, 4);
-    assert.equal(sensitivity.coppieTotali, 15);
-    assert.deepEqual(sensitivity.perBlocco.map(x=>x.pesoOriginale),[2,1,3,4]);
-    assert.ok(sensitivity.perBlocco.every(x =>
-      x.fattoreMezzo.variazioneMassimaAssoluta >= 0 &&
-      x.fattoreDoppio.variazioneMassimaAssoluta >= 0 &&
-      x.senzaBlocco.coppieConfrontabili +
-        x.senzaBlocco.coppieSenzaAltroContributo === x.coppieDefinite
-    ));
-    assert.ok(report.configurazione.risposteQuestionario);
-    assert.ok(report.piano.percorsi.some(p=>p.normalizzazione.metodo==="robusta"));
-    assert.ok(report.piano.percorsi.some(p=>p.metodo==="Dynamic Time Warping")===false);
-    fs.writeFileSync(path.join(OUT,"four-block-rapporto.json"),content);
-    checkpoint("Rapporto JSON completo: input, decisioni, quattro percorsi, diagnostica e matrice");
 
     assert.match(await page.locator("#comparison-guide-phase").innerText(),/La matrice è pronta/);
     await snapshot("success");

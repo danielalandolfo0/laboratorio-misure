@@ -555,7 +555,6 @@
     $("calculate-gower").disabled = false;
     $("calculate-gower").textContent = "Calcola la matrice finale";
     $("download-gower").disabled = true;
-    $("download-report").disabled = true;
     azzeraProblemiCalcolo();
     aggiornaVisibilitaTrasformazione();
     aggiornaGuida();
@@ -1341,114 +1340,6 @@
     aggiornaGuida();
   }
 
-  function disegnaDiagnosticaFinale(risposta) {
-    const contenitore = $("gower-diagnostics");
-    const analisi = risposta.diagnosticaFinale?.sensibilitaPesi;
-    const distribuzione = risposta.diagnosticaFinale?.distribuzioneDissimilarita;
-    const presentazioneDistribuzione = distribuzione?.numeroCoppie > 0
-      ? '<section class="final-distribution" aria-label="Distribuzione delle dissimilarità">' +
-        '<h6>Distribuzione delle dissimilarità finali</h6>' +
-        '<p>Si considera una volta ogni coppia di righe distinte (' +
-        escapeHtml(String(distribuzione.numeroCoppie)) +
-        ' confronti), senza contare la diagonale né duplicare le coppie simmetriche. ' +
-        'I valori sono descrittivi: non modificano la matrice.</p>' +
-        '<p>Minimo: <strong>' + escapeHtml(formatoNumero(distribuzione.minimo)) +
-        '</strong>; massimo: <strong>' + escapeHtml(formatoNumero(distribuzione.massimo)) +
-        '</strong>; media: <strong>' + escapeHtml(formatoNumero(distribuzione.media)) +
-        '</strong>; mediana: <strong>' + escapeHtml(formatoNumero(distribuzione.mediana)) +
-        '</strong>; primo e terzo quartile: <strong>' +
-        escapeHtml(formatoNumero(distribuzione.primoQuartile)) + '</strong> e <strong>' +
-        escapeHtml(formatoNumero(distribuzione.terzoQuartile)) + '</strong>.</p>' +
-        '<ul class="final-distribution-list">' +
-        (distribuzione.intervalli || []).map(voce => {
-          const percentuale = Math.max(0, Math.min(
-            100, 100 * Number(voce.frazione)
-          ));
-          const intervallo = '[' + formatoNumero(voce.inizio) + '; ' +
-            formatoNumero(voce.fine) + (voce.fineInclusa ? ']' : ')');
-          return '<li><span class="final-distribution-range">' +
-            escapeHtml(intervallo) + '</span>' +
-            '<span class="final-distribution-track" aria-hidden="true">' +
-            '<span style="width: ' + percentuale + '%"></span></span>' +
-            '<span class="final-distribution-count">' +
-            escapeHtml(String(voce.coppie)) + ' (' +
-            escapeHtml(formatoNumero(percentuale)) + '%)</span></li>';
-        }).join('') +
-        '</ul>' +
-        '<p>Coppie a distanza zero: ' +
-        escapeHtml(String(distribuzione.coppieZero)) +
-        '; coppie a distanza uno: ' + escapeHtml(String(distribuzione.coppieUno)) +
-        ' (con tolleranza numerica 10⁻¹²). I quartili sono calcolati con ' +
-        'interpolazione lineare sui confronti ordinati.</p></section>'
-      : '';
-    if (!analisi?.perBlocco?.length) {
-      contenitore.innerHTML = presentazioneDistribuzione;
-      contenitore.hidden = !presentazioneDistribuzione;
-      return;
-    }
-    const nulle = analisi.blocchiSempreNulli || [];
-    const presentazioneNulle = nulle.length
-      ? '<p class="final-diagnostics-warning"><strong>Attenzione ai blocchi con distanza nulla.</strong> ' +
-        nulle.map(voce =>
-          '«' + escapeHtml(voce.titolo) + '» (peso ' +
-          escapeHtml(formatoNumero(voce.peso)) + ', ' +
-          escapeHtml(String(voce.coppieDefinite)) +
-          ' coppie definite): distanza zero per tutte le coppie in cui contribuisce. ' +
-          (voce.attenuazioneMassimaRimuovendolo === null
-            ? 'La sua rimozione potrebbe lasciare alcune coppie senza confronto.'
-            : 'Variazione massima ipotetica senza questo blocco, ' +
-              'fra le coppie ancora confrontabili: ' +
-              escapeHtml(formatoNumero(voce.attenuazioneMassimaRimuovendolo)) + '.')
-        ).join(' ') +
-        ' Questi zeri sono contributi validi e restano nel denominatore.</p>'
-      : '<p>Nessun blocco ha distanza nulla su tutti i confronti locali disponibili.</p>';
-    if (analisi.numeroBlocchi === 1) {
-      contenitore.innerHTML = presentazioneDistribuzione +
-        '<h6>Influenza dei pesi e dei blocchi</h6>' +
-        '<p>È presente un unico blocco: moltiplicarne il peso per un ' +
-        'fattore positivo non cambia la matrice. Non si può rimuoverlo ' +
-        'senza perdere il confronto.</p>' + presentazioneNulle;
-      contenitore.hidden = false;
-      return;
-    }
-    const righe = analisi.perBlocco.map(voce => {
-      const rim = voce.senzaBlocco;
-      const maxRim = rim.variazioneMassimaAssoluta === null
-        ? 'Non definibile' : formatoNumero(rim.variazioneMassimaAssoluta);
-      return '<tr><th scope="row">' + escapeHtml(voce.titolo) +
-        '</th><td>' + escapeHtml(formatoNumero(voce.pesoOriginale)) +
-        '</td><td>' + escapeHtml(String(voce.coppieDefinite)) +
-        ' / ' + escapeHtml(String(analisi.coppieTotali)) +
-        '</td><td>' + escapeHtml(formatoNumero(
-          voce.fattoreMezzo.variazioneMassimaAssoluta
-        )) + '</td><td>' + escapeHtml(formatoNumero(
-          voce.fattoreDoppio.variazioneMassimaAssoluta
-        )) + '</td><td>' + escapeHtml(maxRim) +
-        ' (' + escapeHtml(String(rim.coppieConfrontabili)) + ' coppie)</td><td>' +
-        escapeHtml(String(rim.coppieSenzaAltroContributo)) + '</td></tr>';
-    }).join("");
-    contenitore.innerHTML = presentazioneDistribuzione +
-      '<h6>Influenza dei pesi e dei blocchi</h6>' +
-      '<p>Analisi non bloccante: si varia <strong>un solo peso globale per volta</strong> ' +
-      'a metà o al doppio, mantenendo fisse le misure e le normalizzazioni locali. ' +
-      'Le differenze indicate sono i massimi scarti assoluti dalla matrice attuale, ' +
-      'nell’intervallo [0,1]. La rimozione è soltanto ipotetica.</p>' +
-      presentazioneNulle +
-      '<div class="data-table-wrap"><table class="data-table final-diagnostics-table">' +
-      '<thead><tr><th scope="col">Blocco</th><th scope="col">Peso</th>' +
-      '<th scope="col">Coppie locali disponibili</th>' +
-      '<th scope="col">Variazione max, peso ×0,5</th>' +
-      '<th scope="col">Variazione max, peso ×2</th>' +
-      '<th scope="col">Variazione max senza blocco</th>' +
-      '<th scope="col">Coppie non confrontabili senza blocco</th>' +
-      '</tr></thead><tbody>' + righe + '</tbody></table></div>' +
-      '<p>La rimozione di un blocco non è una nuova scelta applicata alla matrice: ' +
-      'si confrontano soltanto le coppie che resterebbero definite. ' +
-      'Le medie, i massimi e i conteggi completi sono registrati nel rapporto JSON. ' +
-      'Una variazione elevata non indica da sola un errore.</p>';
-    contenitore.hidden = false;
-  }
-
   function disegnaMatrice(risposta) {
     const limite = Math.min(12, risposta.etichette.length);
     const etichette = risposta.etichette.slice(0, limite);
@@ -1464,9 +1355,7 @@
       ? ` Marcatori nel CSV: ${stati.totali?.sconosciuto || 0} sconosciuti, ${stati.totali?.non_applicabile || 0} non applicabili, ${stati.totali?.assenza || 0} assenze realmente osservate confermate.`
       : "";
     $("gower-result-caption").textContent = `${risposta.etichette.length} × ${risposta.etichette.length}. ${risposta.nota}${limite < risposta.etichette.length ? ` Anteprima delle prime ${limite} righe.` : ""}${diagnosticaMista}${avvisiFinali.length ? " Diagnostica (non bloccante): " + avvisiFinali.join(" ") : ""}`;
-    disegnaDiagnosticaFinale(risposta);
     $("download-gower").disabled = false;
-    $("download-report").disabled = false;
     $("gower-result").hidden = false;
     aggiornaGuida();
   }
@@ -1478,7 +1367,6 @@
     const versioneFile = versioneDati;
     const versioneConfigurazione = versionePiano;
     const pulsante = $("calculate-gower");
-    $("download-report").disabled = true;
     const testo = pulsante.textContent;
     pulsante.disabled = true;
     pulsante.textContent = "Calcolo…";
@@ -1502,7 +1390,6 @@
       matriceCorrente = null;
       $("gower-result").hidden = true;
       $("download-gower").disabled = true;
-      $("download-report").disabled = true;
       disegnaProblemiCalcolo(errore.rapportoProblemi);
       mostraErrore(errore.message);
     } finally {
@@ -1523,64 +1410,6 @@
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-  }
-
-  async function scaricaRapporto() {
-    // Il rapporto incorpora la sorgente e l'intera matrice. Si calcola
-    // nuovamente nello stesso motore, evitando di assemblare in JS un
-    // "piano" e una matrice appartenenti a revisioni differenti.
-    if (!matriceCorrente || !pianoCorrente?.completo) return;
-    const versione = versioneMatrice;
-    const versioneFile = versioneDati;
-    const versioneConfigurazione = versionePiano;
-    const matriceAttuale = matriceCorrente;
-    const pulsante = $("download-report");
-    const etichetta = pulsante.textContent;
-    pulsante.disabled = true;
-    pulsante.textContent = "Preparazione rapporto…";
-    try {
-      const rapporto = await P.creaRapporto(
-        testoOriginale,
-        scelte.map(scelta => ({...scelta})),
-        JSON.parse(JSON.stringify(interpretazione)),
-        $("csv-file-name").textContent,
-        importazioneCSV || {}
-      );
-      if (versione !== versioneMatrice ||
-          versioneFile !== versioneDati ||
-          versioneConfigurazione !== versionePiano ||
-          matriceCorrente !== matriceAttuale) return;
-      if (rapporto.risultato.csvMatrice !== matriceAttuale.csv) {
-        throw new Error(
-          "La matrice del rapporto non coincide con quella visualizzata. " +
-          "Ricalcola la matrice prima di esportare il rapporto."
-        );
-      }
-      const json = JSON.stringify(rapporto, null, 2) + "\n";
-      const url = URL.createObjectURL(new Blob([json], {
-        type: "application/json;charset=utf-8"
-      }));
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "rapporto_calcolo.json";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      nascondiErrore();
-    } catch (errore) {
-      if (versione !== versioneMatrice ||
-          versioneFile !== versioneDati ||
-          versioneConfigurazione !== versionePiano) return;
-      mostraErrore(errore.message);
-    } finally {
-      if (versione === versioneMatrice &&
-          versioneFile === versioneDati &&
-          versioneConfigurazione === versionePiano) {
-        pulsante.disabled = false;
-        pulsante.textContent = etichetta;
-      }
-    }
   }
 
   async function preparaPiano() {
@@ -3073,7 +2902,6 @@
   $("calculate-gower").addEventListener("click", calcolaMatrice);
   $("download-uncovered-pairs").addEventListener("click", scaricaCoppieNonConfrontabili);
   $("download-gower").addEventListener("click", scaricaMatrice);
-  $("download-report").addEventListener("click", scaricaRapporto);
   $("comparison-plan-paths").addEventListener("change", evento => {
     if (evento.target.matches(".global-weights-mode")) {
       interpretazione.modalitaPesiPercorsi = evento.target.value;

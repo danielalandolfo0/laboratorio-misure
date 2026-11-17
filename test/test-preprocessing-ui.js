@@ -1606,8 +1606,6 @@ async function testConfermaBrayDoppioZero() {
   await testProblemiSimultaneiNeiBlocchi();
   await testConfermaBrayDoppioZero();
   await testRapportoCumulativoProblemi();
-  await testDiagnosticaSensibilitaPesi();
-  await testRapportoCompletoEConcorrenza();
   await testModalitaPesiGlobali();
   await testLogaritmoStrettamentePositivo();
   await testMarcatoriMancantiMisti();

@@ -75,38 +75,6 @@ async function gower(browser){
     assert.equal(m.length,5);assert.ok(m.every(row=>row.length===5));
     equal(number(m[1][2]),.5);equal(number(m[1][3]),1);
     fs.writeFileSync(path.join(OUT,"gower-export.csv"),csv);
-    assert.equal(await page.locator("#download-report").isEnabled(), true);
-    const rapportoDownload=page.waitForEvent("download");
-    await page.locator("#download-report").click();
-    const rapportoScaricato=await rapportoDownload;
-    assert.equal(rapportoScaricato.suggestedFilename(),"rapporto_calcolo.json");
-    const rapportoJson=fs.readFileSync(await rapportoScaricato.path(),"utf8");
-    const rapporto=JSON.parse(rapportoJson);
-    const originale="colore,forma,id\nrosso,tondo,A\nblu,tondo,B\nblu,quadro,C\nrosso,quadro,D";
-    assert.equal(rapporto.formato,"laboratorio-misure/rapporto-calcolo");
-    assert.equal(rapporto.versioneSchema,1);
-    assert.equal(rapporto.sorgente.nomeFile,"categorie.csv");
-    assert.equal(rapporto.sorgente.csvOriginale,originale);
-    assert.equal(rapporto.configurazione.risposteQuestionario.riga,"oggetto");
-    assert.equal(rapporto.riproducibilita.sha256CsvOriginale,
-      crypto.createHash("sha256").update(originale,"utf8").digest("hex"));
-    assert.equal(rapporto.piano.completo,true);
-    assert.equal(rapporto.piano.rapportoProblemi.numeroBloccanti,0);
-    assert.equal(rapporto.piano.rapportoProblemi.calcoloConsentito,true);
-    assert.equal(rapporto.piano.conteggioPercorsi,1);
-    assert.ok(rapporto.preprocessing.analisiColonne.length===3);
-    assert.deepEqual(rapporto.risultato.etichette,["A","B","C","D"]);
-    equal(rapporto.risultato.matrice[0][1],.5);
-    assert.equal(rapporto.risultato.csvMatrice,csv.replace(/^\uFEFF/,""));
-    assert.ok(rapporto.risultato.diagnosticaFinale);
-    const diagSingolo=rapporto.risultato.diagnosticaFinale.sensibilitaPesi;
-    assert.equal(diagSingolo.numeroBlocchi,1);
-    assert.equal(diagSingolo.coppieTotali,6);
-    assert.ok(diagSingolo.perBlocco[0].fattoreMezzo.variazioneMassimaAssoluta < 1e-12);
-    assert.ok(diagSingolo.perBlocco[0].fattoreDoppio.variazioneMassimaAssoluta < 1e-12);
-    assert.equal(await page.locator("#gower-diagnostics").isVisible(),true);
-    assert.match(await page.locator("#gower-diagnostics").innerText(),/unico blocco/);
-    assert.match(rapporto.avvisoRiservatezza,/CSV/);
     // Il bridge Pyodide conserva il rapporto delle coppie mancanti
     // senza sostituirle con zero e senza rendere disponibile una matrice.
     const erroreCoppie = await page.evaluate(async () => {
@@ -234,8 +202,6 @@ async function gower(browser){
       )
     );
 
-    fs.writeFileSync(path.join(OUT,"gower-rapporto.json"),rapportoJson);
-
     // Collaudo del contratto Bray–Curtis 0/0 con il VERO motore Pyodide.
     // Il piano deve chiedere la decisione; la scelta "indefinita"
     // deve mantenere la coppia priva di contributo e bloccare la matrice.
@@ -303,14 +269,6 @@ async function gower(browser){
     await page.locator("#gower-result").waitFor({state:"visible"});
     const customized=page.locator("#gower-matrix-body tr");
     equal(number(await customized.nth(0).locator("td").nth(1).innerText()),.1);
-    const attesaRapportoModificato=page.waitForEvent("download");
-    await page.locator("#download-report").click();
-    const nuovoRapporto=JSON.parse(fs.readFileSync(
-      await (await attesaRapportoModificato).path(),"utf8"
-    ));
-    equal(nuovoRapporto.risultato.matrice[0][1],.1);
-    assert.notDeepEqual(nuovoRapporto.risultato.matrice,rapporto.risultato.matrice);
-    assert.ok(nuovoRapporto.configurazione.risposteQuestionario.dissimilaritaCategorieGower);
     await capture("success");
   }catch(e){await capture("failure");e.message+="\n"+JSON.stringify(errors);throw e}
   finally{await ctx.close()}
@@ -439,17 +397,6 @@ async function mobile(browser){
     const matrix=fs.readFileSync(await downloaded.path(),"utf8").trim().split(/\r?\n/);
     assert.equal(matrix.length,5);
     fs.writeFileSync(path.join(OUT,"numerico-mobile-export.csv"),matrix.join("\n"));
-    const rapportoMobileDownload=page.waitForEvent("download");
-    await page.locator("#download-report").click();
-    const rapportoMobile=JSON.parse(fs.readFileSync(
-      await (await rapportoMobileDownload).path(),"utf8"
-    ));
-    assert.equal(rapportoMobile.sorgente.nomeFile,"numerico.csv");
-    assert.equal(rapportoMobile.piano.conteggioPercorsi,1);
-    assert.equal(rapportoMobile.risultato.matrice.length,4);
-    assert.ok(rapportoMobile.piano.percorsi[0].preelaborazione);
-    assert.equal(rapportoMobile.risultato.csvMatrice,
-      matrix.join("\n").replace(/^\uFEFF/,""));
     const layout = await page.evaluate(() => {
       const root = document.documentElement;
       const visible = [...document.querySelectorAll(

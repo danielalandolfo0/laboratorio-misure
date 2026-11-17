@@ -312,22 +312,6 @@ header p {
 .gower-result[hidden] { display: none; }
 .gower-actions .action { width: auto; margin: 0; }
 .gower-result { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
-.final-diagnostics { margin: 10px 0 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: rgba(245,248,255,.55); }
-.final-diagnostics[hidden] { display: none; }
-.final-diagnostics h6 { margin: 0 0 8px; font-size: .9rem; }
-.final-diagnostics p { margin: 8px 0; color: var(--muted); font-size: .76rem; line-height: 1.5; }
-.final-diagnostics .final-diagnostics-warning { color: #75480a; }
-.final-distribution { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
-.final-distribution-list { list-style: none; padding: 0; margin: 10px 0 12px; display: grid; gap: 7px; }
-.final-distribution-list li { display: grid; grid-template-columns: 88px minmax(50px, 1fr) 95px; align-items: center; gap: 10px; font-size: .75rem; }
-.final-distribution-range { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.final-distribution-track { display: block; height: 12px; border-radius: 7px; background: #e3eaf6; overflow: hidden; }
-.final-distribution-track > span { display: block; height: 100%; border-radius: inherit; background: var(--blue); }
-.final-distribution-count { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.final-diagnostics-table { min-width: 770px; }
-.final-diagnostics-table th, .final-diagnostics-table td { font-size: .75rem; padding: 8px 10px; }
-.final-diagnostics-table th { white-space: normal; }
-.final-diagnostics-table th:first-child { position: sticky; left: 0; background: #f5f8ff; text-align: left; min-width: 160px; }
 .gower-result h5 { margin: 0; font-size: 1rem; }
 .gower-result > p { margin: 5px 0 11px; color: var(--muted); font-size: .74rem; line-height: 1.45; }
 .gower-matrix-table { min-width: max-content; }
