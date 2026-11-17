@@ -25,6 +25,8 @@
   // precede il piano, che resta la fonte di verifica matematica.
   const FASI_QUESTIONARIO = ["semantica", "preprocessing", "selezione", "misure"];
   let faseQuestionario = "semantica";
+  let indiceDomandaFocalizzata = 0;
+  let mostraTutteDomande = false;
 
   function mostraFaseQuestionario() {
     if (!risultato) return;
@@ -41,6 +43,7 @@
     if (!FASI_QUESTIONARIO.includes(fase)) throw new Error("Fase non riconosciuta.");
     faseQuestionario = fase;
     aggiornaFaseNumerica();
+    aggiornaDomandeFocalizzate();
     const titolo = {
       semantica: "phase-semantics-title",
       preprocessing: "phase-preprocessing-title",
@@ -343,19 +346,19 @@
     const selezionato = valoreRisposta(id) || predefinito;
     return `<div class="question-item">
       <label for="${id}">${titolo}</label>
-      <p>${testo}</p>
       <select class="semantic-answer" id="${id}" data-answer="${id}">
         ${predefinito ? "" : '<option value="">Scegli una risposta</option>'}
         ${opzioni.map(([valore, etichetta]) => `<option value="${valore}"${selezionato === valore ? " selected" : ""}>${etichetta}</option>`).join("")}
       </select>
+      <details class="question-help"><summary>Perché me lo chiedi?</summary><p>${testo}</p></details>
     </div>`;
   }
 
   function domandaInput(id, titolo, testo, placeholder, tipo = "text") {
     return `<div class="question-item">
       <label for="${id}">${titolo}</label>
-      <p>${testo}</p>
       <input class="semantic-input" id="${id}" data-answer="${id}" type="${tipo}" value="${escapeHtml(valoreRisposta(id))}" placeholder="${escapeHtml(placeholder)}">
+      <details class="question-help"><summary>Come rispondere</summary><p>${testo}</p></details>
     </div>`;
   }
 
@@ -370,6 +373,73 @@
   // Il suggerimento non approva alcuna interpretazione e non sostituisce
   // la validazione del piano; porta soltanto alla prossima decisione.
   let prossimoCampoGuida = null;
+
+  function campoCompilato(campo) {
+    if (!campo || campo.disabled) return true;
+    if (campo.type === "checkbox" || campo.type === "radio") return campo.checked;
+    return String(campo.value || "").trim() !== "";
+  }
+
+  function domandeInterattive() {
+    return Array.from($("adaptive-questions").querySelectorAll(".question-item"))
+      .filter(card => card.querySelector("select:not([disabled]), input:not([disabled]), textarea:not([disabled])"));
+  }
+
+  function aggiornaDomandeFocalizzate(preferisciIncompleta = false) {
+    const contenitore = $("adaptive-questions");
+    const cards = domandeInterattive();
+    const note = Array.from(contenitore.querySelectorAll(".question-item"))
+      .filter(card => !cards.includes(card));
+    note.forEach(card => { card.hidden = !mostraTutteDomande; });
+    if (!cards.length) {
+      $("question-focus").hidden = true;
+      return;
+    }
+    const incompleta = card => Array.from(card.querySelectorAll("select, input, textarea"))
+      .some(campo => !campoCompilato(campo));
+    if (preferisciIncompleta) {
+      const prima = cards.findIndex(incompleta);
+      if (prima >= 0) indiceDomandaFocalizzata = prima;
+    }
+    indiceDomandaFocalizzata = Math.max(0, Math.min(indiceDomandaFocalizzata, cards.length - 1));
+    cards.forEach((card, indice) => {
+      const richiesta = incompleta(card);
+      card.classList.toggle("required-decision", richiesta);
+      card.hidden = !mostraTutteDomande && indice !== indiceDomandaFocalizzata;
+      card.setAttribute("aria-current", indice === indiceDomandaFocalizzata ? "step" : "false");
+      let badge = card.querySelector(".decision-badge");
+      if (richiesta && !badge) {
+        badge = document.createElement("span");
+        badge.className = "decision-badge";
+        badge.textContent = "Decisione necessaria";
+        card.prepend(badge);
+      } else if (!richiesta && badge) badge.remove();
+    });
+    const mancanti = cards.filter(incompleta).length;
+    $("question-focus-status").textContent = mostraTutteDomande
+      ? `${cards.length} decisioni mostrate · ${mancanti} da completare`
+      : `Decisione ${indiceDomandaFocalizzata + 1} di ${cards.length} · ${mancanti} da completare`;
+    $("question-focus-previous").disabled = indiceDomandaFocalizzata === 0 || mostraTutteDomande;
+    $("question-focus-next").disabled = indiceDomandaFocalizzata === cards.length - 1 || mostraTutteDomande;
+    $("question-focus-all").textContent = mostraTutteDomande
+      ? "Mostra una domanda per volta" : "Mostra tutte le domande e i dettagli";
+    $("question-focus-all").setAttribute("aria-pressed", String(mostraTutteDomande));
+    $("question-focus").hidden = faseQuestionario !== "misure";
+  }
+
+  function focalizzaCampo(campo) {
+    const card = campo?.closest?.(".question-item");
+    if (card) {
+      const cards = domandeInterattive();
+      const indice = cards.indexOf(card);
+      if (indice >= 0) {
+        mostraTutteDomande = false;
+        indiceDomandaFocalizzata = indice;
+        aggiornaDomandeFocalizzate();
+      }
+    }
+  }
+
   function aggiornaGuida() {
     if (!risultato) return;
     if (faseQuestionario !== "misure") {
@@ -2673,6 +2743,7 @@
       }
     });
     $("adaptive-questions").innerHTML = domande.join("");
+    aggiornaDomandeFocalizzate(true);
     aggiornaFaseNumerica();
   }
 
@@ -2925,8 +2996,23 @@
   $("comparison-guide-next").addEventListener("click", () => {
     const campo = prossimoCampoGuida;
     if (!campo) return;
+    focalizzaCampo(campo);
     campo.scrollIntoView?.({block:"center"});
     campo.focus?.({preventScroll:true});
+  });
+  $("question-focus-previous").addEventListener("click", () => {
+    indiceDomandaFocalizzata--;
+    aggiornaDomandeFocalizzate();
+    domandeInterattive()[indiceDomandaFocalizzata]?.querySelector("select, input, textarea")?.focus?.();
+  });
+  $("question-focus-next").addEventListener("click", () => {
+    indiceDomandaFocalizzata++;
+    aggiornaDomandeFocalizzate();
+    domandeInterattive()[indiceDomandaFocalizzata]?.querySelector("select, input, textarea")?.focus?.();
+  });
+  $("question-focus-all").addEventListener("click", () => {
+    mostraTutteDomande = !mostraTutteDomande;
+    aggiornaDomandeFocalizzate();
   });
   $("download-work").addEventListener("click", scaricaTabella);
   $("preprocessing-questions").addEventListener("change", evento => {

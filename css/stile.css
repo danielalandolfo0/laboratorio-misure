@@ -180,10 +180,16 @@ header p {
 .interpretation-wrap h4 { margin: 24px 0 9px; font-size: .92rem; }
 .question-grid { display: grid; gap: 12px; margin-top: 18px; }
 .question-grid-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.question-item { padding: 14px; background: rgba(255, 255, 255, .38); border: 1px solid rgba(111, 124, 148, .13); border-radius: 16px; }
-.question-item label { display: block; margin: 0 0 8px; }
+.question-item { position: relative; padding: 20px; background: rgba(255, 255, 255, .48); border: 1px solid rgba(111, 124, 148, .15); border-radius: 16px; }
+.question-item[hidden] { display: none !important; }
+.question-item label { display: block; margin: 0 0 12px; font-size: 1rem; font-weight: 720; line-height: 1.35; }
+.question-item.required-decision { border: 2px solid rgba(8, 124, 255, .45); box-shadow: 0 12px 30px rgba(8, 70, 145, .08); }
+.decision-badge { display: inline-block; margin-bottom: 10px; padding: 4px 8px; color: var(--blue-dark); background: rgba(8, 124, 255, .1); border-radius: 999px; font-size: .65rem; font-weight: 780; letter-spacing: .04em; text-transform: uppercase; }
 .question-item .gower-setting { display: block; width: 100%; max-width: 100%; margin: 6px 0 12px; box-sizing: border-box; }
 .question-item p { margin: 0 0 10px; color: var(--muted); font-size: .75rem; }
+.question-help { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.question-help summary { cursor: pointer; color: var(--blue-dark); font-size: .75rem; font-weight: 680; }
+.question-help p { margin: 8px 0 0; }
 .automatic-note { background: rgba(8, 124, 255, .055); border-color: rgba(8, 124, 255, .16); }
 .automatic-note strong { display: block; margin-bottom: 6px; color: var(--blue-dark); font-size: .82rem; }
 .automatic-note p { margin-bottom: 0; }
@@ -200,7 +206,20 @@ header p {
 .comparison-guide .secondary-action { margin: 0; width: auto; }
 .comparison-guide [hidden] { display: none !important; }
 .adaptive-questions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.focused-questions { display: block; max-width: 760px; }
+.focused-questions > .question-item + .question-item { margin-top: 12px; }
 .adaptive-questions:empty { display: none; }
+.question-focus { display: flex; align-items: center; justify-content: space-between; gap: 18px; max-width: 760px; margin: 18px 0 0; padding: 14px 16px; background: rgba(8, 124, 255, .055); border: 1px solid rgba(8, 124, 255, .16); border-radius: 14px; }
+.question-focus[hidden] { display: none; }
+.question-focus p { margin: 0; }
+.question-focus-eyebrow { color: var(--muted); font-size: .64rem; font-weight: 760; letter-spacing: .07em; text-transform: uppercase; }
+.question-focus-status { margin-top: 3px !important; font-size: .83rem; font-weight: 680; }
+.question-focus-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.question-focus-actions button { width: auto; margin: 0; }
+.text-action { padding: 7px 5px; color: var(--blue-dark); background: transparent; border: 0; cursor: pointer; font-size: .72rem; font-weight: 680; }
+.plan-characteristic-details { margin: 16px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.plan-characteristic-details summary { cursor: pointer; font-size: .78rem; font-weight: 700; }
+.plan-characteristic-details .data-table-wrap { margin-top: 12px; }
 .grouping-wrap { margin-top: 24px; }
 .grouping-heading { display: flex; justify-content: space-between; align-items: end; gap: 18px; margin-bottom: 10px; }
 .grouping-heading h4 { margin: 0 0 4px; }
@@ -654,6 +673,8 @@ footer { padding: 0 0 36px; color: var(--muted); font-size: 0.78rem; }
   .rank-order-row { grid-template-columns: 1fr; }
   .question-grid-two,
   .adaptive-questions { grid-template-columns: 1fr; }
+  .question-focus { align-items: stretch; flex-direction: column; }
+  .question-focus-actions { justify-content: flex-start; }
   .comparison-guide .secondary-action { width: 100%; }
   .grouping-heading { align-items: stretch; flex-direction: column; }
   .grouping-heading .secondary-action { width: 100%; }

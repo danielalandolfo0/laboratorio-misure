@@ -188,7 +188,7 @@
 
           <p id="phase-preprocessing-help" role="status"></p>
           <div class="questionnaire-phase-action">
-            <button type="button" class="secondary-action" id="back-to-semantics">Rivedi il significato delle colonne</button>
+            <button type="button" class="secondary-action" id="back-to-semantics">Indietro: significato delle colonne</button>
             <button type="button" class="action" id="confirm-preprocessing-phase">Continua: seleziona le colonne</button>
           </div>
         </section>
@@ -223,7 +223,7 @@
 
           <div id="numeric-group-proposals"></div>
           <div class="questionnaire-phase-action">
-            <button type="button" class="secondary-action" id="back-to-preprocessing">Rivedi preprocessing</button>
+            <button type="button" class="secondary-action" id="back-to-preprocessing">Indietro: preprocessing</button>
             <button type="button" class="action" id="confirm-selection-phase">Conferma colonne e gruppi</button>
           </div>
         </section>
@@ -240,14 +240,25 @@
             <p><strong>Testi:</strong> coincidenza esatta, Hamming per posizioni allineate, Levenshtein per inserimenti e cancellazioni, Damerau–Levenshtein anche per scambi di lettere vicine. <strong>Distribuzioni:</strong> Hellinger o Jensen–Shannon. <strong>Composizioni:</strong> Aitchison quando applicabile.</p>
             <p><strong>Serie temporali:</strong> confronto sincronizzato sui valori o sulle pendenze; DTW per riallineare eventi; LCSS per trovare eventi simili entro tolleranze. Non vengono inventati timestamp o ricampionamenti.</p>
           </details>
-          <button type="button" class="secondary-action" id="back-to-selection">Rivedi colonne e gruppi</button>
+          <button type="button" class="secondary-action" id="back-to-selection">Indietro: colonne e gruppi</button>
                 <section class="comparison-guide" id="comparison-guide" aria-labelledby="comparison-guide-heading">
         <h4 id="comparison-guide-heading">Indicazione per proseguire</h4>
         <p id="comparison-guide-phase" class="comparison-guide-phase" aria-live="polite"></p>
         <p id="comparison-guide-explanation"></p>
         <button class="secondary-action" id="comparison-guide-next" type="button">Vai alla prossima scelta</button>
       </section>
-      <div class="adaptive-questions" id="adaptive-questions"></div>
+      <section class="question-focus" id="question-focus" aria-label="Navigazione tra le decisioni" hidden>
+        <div>
+          <p class="question-focus-eyebrow">Decisione corrente</p>
+          <p id="question-focus-status" class="question-focus-status" aria-live="polite"></p>
+        </div>
+        <div class="question-focus-actions">
+          <button class="secondary-action" id="question-focus-previous" type="button">Indietro</button>
+          <button class="secondary-action" id="question-focus-next" type="button">Continua</button>
+          <button class="text-action" id="question-focus-all" type="button" aria-pressed="false">Mostra tutte le domande e i dettagli</button>
+        </div>
+      </section>
+      <div class="adaptive-questions focused-questions" id="adaptive-questions"></div>
 
 
         <div class="comparison-plan-actions">
@@ -264,13 +275,15 @@
           <p id="comparison-plan-intro"></p>
           <div class="comparison-diagnosis" id="comparison-diagnosis"></div>
           <div class="plan-paths" id="comparison-plan-paths"></div>
-          <h5 class="plan-detail-title">Dettaglio delle caratteristiche</h5>
-          <div class="data-table-wrap">
-            <table class="data-table comparison-plan-table">
-              <thead><tr><th>Dati utilizzati</th><th>Interpretazione</th><th>Confronto proposto</th><th>Perché</th></tr></thead>
-              <tbody id="comparison-plan-body"></tbody>
-            </table>
-          </div>
+          <details class="plan-characteristic-details">
+            <summary>Mostra il dettaglio di tutte le caratteristiche</summary>
+            <div class="data-table-wrap">
+              <table class="data-table comparison-plan-table">
+                <thead><tr><th>Dati utilizzati</th><th>Interpretazione</th><th>Confronto proposto</th><th>Perché</th></tr></thead>
+                <tbody id="comparison-plan-body"></tbody>
+              </table>
+            </div>
+          </details>
           <div class="plan-warnings" id="comparison-plan-warnings"></div>
           <section class="plan-warnings" id="comparison-calculation-problems" aria-label="Problemi riscontrati nel calcolo" hidden>
             <div id="comparison-calculation-problems-body"></div>
