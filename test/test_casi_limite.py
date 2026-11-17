@@ -120,6 +120,35 @@ assert math.isclose(p._distanza_numerica(
 assert math.isclose(p._distanza_numerica(
     [1e308], [0], "chi_square", {}
 ), 1e154, rel_tol=1e-12)
+
+# La scala teorica dei profili dipende dal dominio effettivo. Per vettori
+# non negativi il coseno non può essere negativo e due versori distano al
+# massimo sqrt(2); usare sempre il limite 2 comprimerebbe il peso del blocco.
+assert p._limite_teorico_percorso({
+    "tipo": "gruppo", "metodo": "Dissimilarità coseno",
+    "dominioNonNegativo": True,
+}) == 1.0
+vicino(p._limite_teorico_percorso({
+    "tipo": "gruppo", "metodo": "Distanza della corda",
+    "dominioNonNegativo": True,
+}), math.sqrt(2))
+assert p._limite_teorico_percorso({
+    "tipo": "gruppo", "metodo": "Dissimilarità coseno",
+    "dominioNonNegativo": False,
+}) == 2.0
+assert p._limite_teorico_percorso({
+    "tipo": "gruppo", "metodo": "Distanza della corda",
+    "dominioNonNegativo": False,
+}) == 2.0
+for scale_non_valide in ([1.0], [1.0, 0.0], [1.0, math.inf]):
+    try:
+        p._distanza_numerica(
+            [0.0, 0.0], [1.0, 1.0], "standardized_euclidean",
+            {"scale": scale_non_valide},
+        )
+        assert False, "Ogni coordinata richiede una scala positiva e finita."
+    except ValueError:
+        pass
 assert math.isclose(p._distanza_coordinate_comuni(
     [0, 0], [1e-308, 1e308], "euclidean", {}
 ), 1e308 / math.sqrt(2), rel_tol=1e-12)
@@ -410,5 +439,34 @@ assert any("conferma esplicita" in avviso for percorso in proposta_numerica["per
 opzioni_numeri["confermaMisuraNumericaProposta"] = "si"
 approvato_numerico = p.crea_piano_confronto(dati_numeri, opzioni_numeri)
 assert approvato_numerico["completo"], approvato_numerico
+
+# Il dominio non negativo viene propagato dal gruppo al piano e alla matrice:
+# due profili ortogonali devono raggiungere 1, non essere compressi a 0.5.
+dati_profili_non_negativi = p.prepara_tabella(p.leggi_csv(
+    "a,b,c\n1,0,0\n0,1,0\n1,1,0"
+), [
+    {"tipo": "numerica", "metodo": "nessuno"},
+    {"tipo": "numerica", "metodo": "nessuno"},
+    {"tipo": "numerica", "metodo": "nessuno"},
+])
+opzioni_profili_non_negativi = {
+    "riga": "oggetto",
+    "colonne": {
+        nome: {"ruolo": "quantita", "usa": True} for nome in ("a", "b", "c")
+    },
+    "gruppi": [{"id": "profilo", "nome": "Profilo", "tipo": "ripetute"}],
+    "assegnazioni": {nome: "profilo" for nome in ("a", "b", "c")},
+    "somiglianza-profilo": "proporzioni",
+}
+piano_profili_non_negativi = p.crea_piano_confronto(
+    dati_profili_non_negativi, opzioni_profili_non_negativi
+)
+assert piano_profili_non_negativi["completo"], piano_profili_non_negativi
+assert piano_profili_non_negativi["percorsi"][0]["dominioNonNegativo"] is True
+assert piano_profili_non_negativi["percorsi"][0]["normalizzazione"]["limiteTeorico"] == 1.0
+matrice_profili_non_negativi = p.calcola_matrice(
+    dati_profili_non_negativi, opzioni_profili_non_negativi
+)
+vicino(matrice_profili_non_negativi["matrice"][0][1], 1.0)
 
 print("Collaudo trasversale dei casi limite superato.")

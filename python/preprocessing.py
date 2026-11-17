@@ -1494,9 +1494,15 @@ def _blocco_gruppo(gruppo: dict[str, Any], membri: list[str], analisi_per_nome: 
                 avvisi.append("Le pendenze richiedono timestamp numerici reali, non indici presunti.")
                 stato = "da_completare"
 
+    dominio_non_negativo = bool(colonne_nell_ordine) and all(
+        analisi_per_nome[colonna].get("statistiche", {}).get("minimo") is not None
+        and analisi_per_nome[colonna]["statistiche"]["minimo"] >= 0
+        for colonna in colonne_nell_ordine
+    )
     return {"nome": nome, "colonne": colonne_nell_ordine, "interpretazione": etichetta,
             "misura": misura, "motivo": motivo, "stato": stato, "avvisi": avvisi,
             "idMisura": id_misura, "parametri": parametri,
+            "dominioNonNegativo": dominio_non_negativo,
             "ordineTemporale": colonne_nell_ordine if tipo_gruppo == "tempo" else None,
             "campionamentoTemporale": campionamento_temporale}
 
@@ -2506,6 +2512,21 @@ def _specifica_misura_numerica(
         except ValueError as errore:
             avvisi.append(str(errore))
             stato = "da_completare"
+    elif id_misura == "standardized_euclidean":
+        scale_standardizzate = [
+            analisi_per_nome[nome].get("statistiche", {}).get("deviazione")
+            for nome in nomi
+        ]
+        if any(
+            scala is None or not math.isfinite(float(scala)) or float(scala) <= 0
+            for scala in scale_standardizzate
+        ):
+            avvisi.append(
+                "L'euclidea standardizzata richiede una scala positiva per ogni "
+                "coordinata. Escludi le colonne costanti oppure usa una "
+                "trasformazione che assegni loro contributo nullo."
+            )
+            stato = "da_completare"
 
     # Una trasformazione richiesta manualmente non puo' essere ignorata
     # dalla politica diagnostica predefinita. Le misure che dipendono dal
@@ -3320,6 +3341,7 @@ def _crea_percorsi(
             "idGruppo": gruppo.get("id"), "tipoGruppo": gruppo.get("tipo", "altro"),
             "metodo": blocco["misura"],
             "idMisura": blocco.get("idMisura"), "parametri": blocco.get("parametri", {}),
+            "dominioNonNegativo": blocco.get("dominioNonNegativo", False),
             "ordineTemporale": blocco.get("ordineTemporale"),
             "campionamentoTemporale": blocco.get("campionamentoTemporale"),
             "motivo": blocco["motivo"], "stato": blocco["stato"],
@@ -3358,10 +3380,11 @@ def _limite_teorico_percorso(percorso: dict[str, Any]) -> float | None:
             return 1.0
     if percorso.get("tipoGruppo") == "vettore_binario":
         return 1.0
-    if misura in {
-        "Dissimilarità coseno", "Distanza della corda", "Dissimilarità di Pearson",
-        "Dissimilarità di Spearman",
-    }:
+    if misura == "Dissimilarità coseno":
+        return 1.0 if percorso.get("dominioNonNegativo") else 2.0
+    if misura == "Distanza della corda":
+        return math.sqrt(2.0) if percorso.get("dominioNonNegativo") else 2.0
+    if misura in {"Dissimilarità di Pearson", "Dissimilarità di Spearman"}:
         return 2.0
     if misura in {
         "Dissimilarità di Kendall τ-b",
@@ -5305,6 +5328,13 @@ def _distanza_numerica(
         return risultato
     if id_misura == "standardized_euclidean":
         scale = [float(scala) for scala in parametri["scale"]]
+        if len(scale) != len(scarti) or any(
+            not math.isfinite(scala) or scala <= 0 for scala in scale
+        ):
+            raise ValueError(
+                "L'euclidea standardizzata richiede una scala finita e "
+                "strettamente positiva per ogni coordinata."
+            )
         return math.sqrt(sum((scarto / scala) ** 2 for scarto, scala in zip(scarti, scale)))
     if id_misura == "mahalanobis_pinv":
         if autodirezioni is None:
@@ -6233,8 +6263,11 @@ def _calcola_matrice_specializzata(
                 matrice[i][k] = distanza
                 matrice[k][i] = distanza
         limite = (
+            (1.0 if percorso.get("dominioNonNegativo") else 2.0)
+            if metodo == "Dissimilarità coseno" else
+            (math.sqrt(2.0) if percorso.get("dominioNonNegativo") else 2.0)
+            if metodo == "Distanza della corda" else
             2.0 if metodo in {
-                "Dissimilarità coseno", "Distanza della corda",
                 "Dissimilarità di Pearson", "Dissimilarità di Spearman"
             } else 1.0 if metodo in {
                 "Dissimilarità di Kendall τ-b", "Distanza di Hellinger",
