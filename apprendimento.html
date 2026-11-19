@@ -6,7 +6,7 @@
   <meta name="description" content="Prototipo per raccogliere giudizi di similarità sul dataset Linnerud.">
   <title>Impara dalle tue scelte · Laboratorio delle misure</title>
   <link rel="stylesheet" href="css/stile.css?v=20261119-apprendimento1">
-  <link rel="stylesheet" href="css/apprendimento.css?v=20261119-7">
+  <link rel="stylesheet" href="css/apprendimento.css?v=20261119-8">
 </head>
 <body>
   <header class="shell learning-header">
@@ -28,30 +28,11 @@
       <h2 id="block-title">Conferma i blocchi proposti</h2>
       <p class="stage-intro">Il sito propone di leggere insieme le colonne che descrivono lo stesso aspetto. Controlla l’assegnazione: puoi spostare una colonna o lasciarla indipendente.</p>
       <div class="grouping-wrap compact-grouping">
-        <div class="grouping-heading">
-          <div>
-            <h3>Ci sono colonne da leggere insieme?</h3>
-            <p>Le misure degli esercizi formano un profilo di prestazione; peso, vita e frequenza cardiaca formano un profilo fisiologico.</p>
-          </div>
-        </div>
         <div class="data-table-wrap">
           <table class="data-table grouping-table">
             <thead><tr><th>Colonna inclusa</th><th>Come deve essere letta?</th></tr></thead>
             <tbody id="learning-group-assignment-body"></tbody>
           </table>
-        </div>
-        <div class="hint" id="learning-group-summary" aria-live="polite"></div>
-        <div class="group-config-list learning-group-configs">
-          <div class="group-config">
-            <label>Nome del gruppo<input value="Esercizi" readonly></label>
-            <label>Che cosa formano insieme?<select disabled><option selected>Misurazioni dello stesso profilo</option></select></label>
-            <p>Trazioni, addominali e salti descrivono congiuntamente la prestazione negli esercizi.</p>
-          </div>
-          <div class="group-config">
-            <label>Nome del gruppo<input value="Misure fisiologiche" readonly></label>
-            <label>Che cosa formano insieme?<select disabled><option selected>Misurazioni dello stesso profilo</option></select></label>
-            <p>Peso, circonferenza della vita e frequenza cardiaca descrivono congiuntamente il profilo fisiologico.</p>
-          </div>
         </div>
       </div>
       <div class="stage-actions">
@@ -63,13 +44,10 @@
       <p class="section-label">Fase 2 · Riscalamento</p>
       <h2 id="scaling-title">Conferma il riscalamento proposto</h2>
       <div class="scaling-wrap learning-scaling-wrap">
-        <h3>Riscalamento delle variabili numeriche</h3>
-        <p>Controlla la trasformazione proposta per ogni colonna quantitativa. Puoi lasciare le scelte suggerite oppure cambiarle; i dati originali non vengono modificati.</p>
         <details class="scaling-explanation">
           <summary>Vuoi sapere come funzionano i diversi riscalamenti?</summary>
           <p><strong>Z-score:</strong> confronta i valori rispetto alla media e alla variabilità della colonna. <strong>Robusto:</strong> usa mediana e intervallo tra i quartili. <strong>Min–max:</strong> porta il minimo osservato a 0 e il massimo a 1. <strong>Max-abs:</strong> divide per il valore assoluto più grande e conserva lo zero.</p>
         </details>
-        <p id="learning-scaling-status" role="status">Il sito propone lo z-score per tutte le colonne, che hanno unità e dispersioni differenti.</p>
         <div class="data-table-wrap">
           <table class="data-table scaling-table">
             <thead><tr><th>Feature</th><th>Tipo di dato</th><th>Trasformazione candidata</th><th>Parametri</th><th>Mancanti</th></tr></thead>
@@ -77,7 +55,6 @@
           </table>
         </div>
       </div>
-      <p class="data-note">Il riscalamento sarà usato soltanto nei calcoli. Nelle schede vedrai sempre i valori originali.</p>
       <div class="stage-actions">
         <button class="action" id="confirm-scaling" type="button">Conferma il riscalamento</button>
       </div>
@@ -91,7 +68,6 @@
         </div>
         <div class="progress-track" aria-hidden="true"><span id="comparison-progress"></span></div>
       </div>
-      <p class="original-values-note">I valori mostrati sono quelli originali, non riscalati.</p>
       <div class="candidate-grid" id="candidate-grid" aria-live="polite"></div>
       <div class="comparison-actions">
         <button class="action" id="next-comparison" type="button" disabled>Conferma e continua</button>
@@ -116,6 +92,6 @@
     </section>
   </main>
 
-  <script src="js/apprendimento.js?v=20261119-6"></script>
+  <script src="js/apprendimento.js?v=20261119-7"></script>
 </body>
 </html>

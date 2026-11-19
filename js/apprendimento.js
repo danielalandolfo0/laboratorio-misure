@@ -101,18 +101,6 @@
       '<option value="physiological"' + (state.assignments[feature.key] === "physiological" ? " selected" : "") + '>Misure fisiologiche</option>' +
       '</select></td></tr>'
     ).join("");
-    renderGroupSummary();
-  }
-
-  function renderGroupSummary() {
-    const labels = assignment => FEATURES.filter(feature => state.assignments[feature.key] === assignment).map(feature => feature.label);
-    const exercise = labels("exercise");
-    const physiological = labels("physiological");
-    const independent = labels("independent");
-    $("learning-group-summary").innerHTML =
-      '<p><strong>Gruppo Esercizi (' + exercise.length + '):</strong> ' + (exercise.join(", ") || "nessuna colonna") + '.</p>' +
-      '<p><strong>Gruppo Misure fisiologiche (' + physiological.length + '):</strong> ' + (physiological.join(", ") || "nessuna colonna") + '.</p>' +
-      '<p><strong>Caratteristiche indipendenti (' + independent.length + '):</strong> ' + (independent.join(", ") || "nessuna") + '.</p>';
   }
 
   function renderScalingTable() {
@@ -190,7 +178,6 @@
     const select = event.target.closest(".learning-group-assignment");
     if (!select) return;
     state.assignments[select.dataset.feature] = select.value;
-    renderGroupSummary();
   });
 
   $("learning-scaling-body").addEventListener("change", event => {
@@ -198,10 +185,6 @@
     if (!select) return;
     state.scaling[select.dataset.feature] = select.value;
     renderScalingTable();
-    const changed = Object.values(state.scaling).filter(method => method !== "zscore").length;
-    $("learning-scaling-status").textContent = changed
-      ? "Hai modificato " + changed + (changed === 1 ? " proposta." : " proposte.")
-      : "Il sito propone lo z-score per tutte le colonne, che hanno unità e dispersioni differenti.";
   });
 
   $("confirm-scaling").addEventListener("click", () => {
