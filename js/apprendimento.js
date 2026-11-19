@@ -62,10 +62,10 @@
 
   function updateSelection() {
     const count = state.selected.size;
-    $("selection-help").textContent = count === 2
-      ? "Hai selezionato due schede. Ora puoi confermare e continuare."
-      : "Hai selezionato " + count + " schede su 2.";
     $("next-comparison").disabled = count !== 2;
+    $("next-comparison").textContent = count === 2
+      ? "Conferma e continua"
+      : "Seleziona due schede per continuare";
     document.querySelectorAll(".candidate-card").forEach(card => {
       const selected = state.selected.has(Number(card.dataset.id));
       card.setAttribute("aria-pressed", selected ? "true" : "false");

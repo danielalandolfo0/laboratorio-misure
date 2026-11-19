@@ -6,7 +6,7 @@
   <meta name="description" content="Prototipo per raccogliere giudizi di similarità tra istanze del dataset Iris.">
   <title>Impara dalle tue scelte · Laboratorio delle misure</title>
   <link rel="stylesheet" href="css/stile.css?v=20261119-apprendimento1">
-  <link rel="stylesheet" href="css/apprendimento.css?v=20261119-2">
+  <link rel="stylesheet" href="css/apprendimento.css?v=20261119-3">
 </head>
 <body>
   <header class="shell learning-header">
@@ -28,7 +28,6 @@
         <div>
           <p class="section-label" id="comparison-counter">Confronto 1 · 1 di 10</p>
           <h2 id="comparison-title">Seleziona le due schede più simili</h2>
-          <p id="selection-help">Hai selezionato 0 schede su 2.</p>
         </div>
         <div class="progress-track" aria-hidden="true"><span id="comparison-progress"></span></div>
       </div>
@@ -36,9 +35,8 @@
       <div class="candidate-grid" id="candidate-grid" aria-live="polite"></div>
 
       <div class="comparison-actions">
-        <button class="action" id="next-comparison" type="button" disabled>Conferma e continua</button>
+        <button class="action" id="next-comparison" type="button" disabled>Seleziona due schede per continuare</button>
       </div>
-      <p class="keyboard-note">Per cambiare scelta, clicca di nuovo una scheda selezionata. Puoi usare anche Tab e Invio.</p>
     </section>
 
     <section class="card batch-card" id="batch-card" hidden aria-labelledby="batch-title">
@@ -59,7 +57,7 @@
     </section>
   </main>
 
-  <script src="js/apprendimento.js?v=20261119-2"></script>
+  <script src="js/apprendimento.js?v=20261119-3"></script>
 </body>
 </html>
 
