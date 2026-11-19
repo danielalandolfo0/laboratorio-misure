@@ -18,21 +18,15 @@
 
   <main class="shell learning-main">
     <section class="card learning-intro" aria-labelledby="learning-title">
-      <div>
-        <p class="section-label">Dataset di esempio</p>
-        <h2 id="learning-title">Iris di scikit-learn</h2>
-        <p>Il dataset contiene 150 osservazioni e quattro misure in centimetri.</p>
-      </div>
-      <dl class="dataset-facts">
-        <div><dt>Istanze</dt><dd>150</dd></div>
-        <div><dt>Caratteristiche</dt><dd>4</dd></div>
-      </dl>
+      <p class="section-label">Dataset di esempio</p>
+      <h2 id="learning-title">Iris di scikit-learn</h2>
+      <p>150 fiori, descritti da quattro misure in centimetri. La specie è nascosta.</p>
     </section>
 
     <section class="card comparison-stage" id="comparison-stage" aria-labelledby="comparison-title">
       <div class="comparison-heading">
         <div>
-          <p class="section-label" id="comparison-counter">Confronto 1 di 12</p>
+          <p class="section-label" id="comparison-counter">Confronto 1 · 1 di 10</p>
           <h2 id="comparison-title">Seleziona le due schede più simili</h2>
           <p id="selection-help">Hai selezionato 0 schede su 2.</p>
         </div>
@@ -42,15 +36,24 @@
       <div class="candidate-grid" id="candidate-grid" aria-live="polite"></div>
 
       <div class="comparison-actions">
-        <button class="secondary-action" id="clear-selection" type="button" disabled>Deseleziona</button>
         <button class="action" id="next-comparison" type="button" disabled>Conferma e continua</button>
       </div>
-      <p class="keyboard-note">Puoi usare anche Tab e Invio. Una terza scheda non può essere selezionata finché non ne deselezioni una.</p>
+      <p class="keyboard-note">Per cambiare scelta, clicca di nuovo una scheda selezionata. Puoi usare anche Tab e Invio.</p>
+    </section>
+
+    <section class="card batch-card" id="batch-card" hidden aria-labelledby="batch-title">
+      <p class="section-label">Blocco completato</p>
+      <h2 id="batch-title">Hai effettuato 10 scelte</h2>
+      <p>Puoi fermarti oppure continuare con un nuovo blocco di 10 confronti.</p>
+      <div class="batch-actions">
+        <button class="secondary-action" id="stop-comparisons" type="button">Fermati qui</button>
+        <button class="action" id="continue-comparisons" type="button">Continua con altri 10</button>
+      </div>
     </section>
 
     <section class="card completion-card" id="completion-card" hidden aria-labelledby="completion-title">
       <p class="section-label">Prima raccolta completata</p>
-      <h2 id="completion-title">Hai espresso 12 preferenze</h2>
+      <h2 id="completion-title">Raccolta conclusa</h2>
       <p>Le risposte sono conservate soltanto in questa pagina. Il prossimo passo sarà trasformare ogni scelta in due disuguaglianze e confrontare le misure candidate dei diversi blocchi.</p>
       <button class="action" id="restart-comparisons" type="button">Ricomincia</button>
     </section>
