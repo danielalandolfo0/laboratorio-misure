@@ -37,7 +37,7 @@
   gap: 16px; margin-top: 24px;
 }
 .candidate-card {
-  position: relative; min-height: 390px; padding: 0; overflow: hidden;
+  position: relative; min-height: 0; padding: 0; overflow: hidden;
   color: var(--ink); text-align: left; cursor: pointer;
   border: 2px solid rgba(111,124,148,.16); border-radius: 20px;
   background: rgba(255,255,255,.58);
@@ -58,16 +58,7 @@
   border-radius: 50%; font-weight: 850;
 }
 .candidate-card[aria-pressed="true"] .selection-mark { background: var(--blue); }
-.flower-visual {
-  display: grid; place-items: center; min-height: 205px; padding: 22px;
-  background: linear-gradient(150deg, rgba(85,215,255,.16), rgba(118,87,255,.13));
-  border-bottom: 1px solid rgba(111,124,148,.13);
-}
-.flower-visual svg { width: 178px; height: 178px; overflow: visible; }
-.flower-visual .sepal { fill: rgba(49,160,105,.28); stroke: rgba(32,120,78,.65); stroke-width: 2; }
-.flower-visual .petal { fill: rgba(118,87,255,.30); stroke: rgba(101,72,220,.72); stroke-width: 2; }
-.flower-visual .center { fill: #ffbd3e; stroke: #b97800; stroke-width: 2; }
-.candidate-content { padding: 18px; }
+.candidate-content { display: block; padding: 22px 18px 18px; }
 .candidate-title { margin: 0 0 13px; font-size: 1rem; }
 .measure-list { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin: 0; }
 .measure-list div { padding: 9px 10px; background: rgba(8,124,255,.045); border-radius: 10px; }
@@ -98,13 +89,11 @@
   .comparison-heading { align-items: stretch; flex-direction: column; }
   .progress-track { flex: none; width: 100%; }
   .candidate-grid { grid-template-columns: 1fr; }
-  .candidate-card { min-height: 0; display: grid; grid-template-columns: minmax(150px,.75fr) 1fr; }
-  .flower-visual { min-height: 260px; border-bottom: 0; border-right: 1px solid rgba(111,124,148,.13); }
+  .candidate-card { min-height: 0; }
 }
 @media (max-width: 560px) {
   .learning-intro, .comparison-stage { padding: 20px; }
   .candidate-card { display: block; }
-  .flower-visual { min-height: 190px; border-right: 0; border-bottom: 1px solid rgba(111,124,148,.13); }
   .comparison-actions { flex-direction: column-reverse; }
   .comparison-actions button { width: 100%; }
   .batch-actions { flex-direction: column-reverse; }

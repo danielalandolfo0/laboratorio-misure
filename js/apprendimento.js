@@ -25,31 +25,12 @@
     return [...IRIS].sort(() => random() - .5).slice(0, 3);
   }
 
-  function flowerSvg(values) {
-    const [sepalLength, sepalWidth, petalLength, petalWidth] = values;
-    const sepalRx = 18 + sepalLength * 3.2;
-    const sepalRy = 8 + sepalWidth * 3.4;
-    const petalRx = 11 + petalLength * 4.7;
-    const petalRy = 5 + petalWidth * 9.2;
-    const petals = [0, 60, 120, 180, 240, 300].map(angle =>
-      '<ellipse class="petal" cx="90" cy="39" rx="' + petalRy.toFixed(1) +
-      '" ry="' + petalRx.toFixed(1) + '" transform="rotate(' + angle + ' 90 90)"/>'
-    ).join("");
-    const sepals = [30, 150, 270].map(angle =>
-      '<ellipse class="sepal" cx="90" cy="47" rx="' + sepalRy.toFixed(1) +
-      '" ry="' + sepalRx.toFixed(1) + '" transform="rotate(' + angle + ' 90 90)"/>'
-    ).join("");
-    return '<svg viewBox="0 0 180 180" aria-hidden="true">' + sepals + petals +
-      '<circle class="center" cx="90" cy="90" r="13"/></svg>';
-  }
-
   function cardHtml(item, position) {
     const v = item.v;
     return '<button class="candidate-card" type="button" data-id="' + item.id +
       '" aria-pressed="false" aria-label="Candidato ' + (position + 1) +
       ', seleziona come parte della coppia più simile">' +
       '<span class="selection-mark" aria-hidden="true">✓</span>' +
-      '<span class="flower-visual">' + flowerSvg(v) + '</span>' +
       '<span class="candidate-content">' +
       '<span class="candidate-title">Candidato ' + (position + 1) + '</span>' +
       '<dl class="measure-list">' +
@@ -63,9 +44,6 @@
   function updateSelection() {
     const count = state.selected.size;
     $("next-comparison").disabled = count !== 2;
-    $("next-comparison").textContent = count === 2
-      ? "Conferma e continua"
-      : "Seleziona due schede per continuare";
     document.querySelectorAll(".candidate-card").forEach(card => {
       const selected = state.selected.has(Number(card.dataset.id));
       card.setAttribute("aria-pressed", selected ? "true" : "false");
