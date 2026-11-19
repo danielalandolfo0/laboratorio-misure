@@ -2,7 +2,7 @@
 .learning-header h1 { max-width: 980px; font-size: clamp(2.4rem, 5.5vw, 4.8rem); }
 .back-link { display:inline-flex; margin-bottom:28px; color:var(--blue-dark); font-weight:750; text-decoration:none; }
 .back-link:hover { text-decoration:underline; }
-.learning-main { padding-bottom:72px; min-width:0; }
+.learning-main { display:block; padding-bottom:72px; min-width:0; }
 .learning-main > .card { min-width:0; max-width:100%; }
 .learning-main > .card[hidden] { display:none; }
 .learning-intro { display:inline-block; width:fit-content; max-width:100%; height:fit-content; align-self:start; margin-bottom:18px; padding:12px 16px; }
