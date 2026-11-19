@@ -6,7 +6,7 @@
   <meta name="description" content="Prototipo per raccogliere giudizi di similarità sul dataset Linnerud.">
   <title>Impara dalle tue scelte · Laboratorio delle misure</title>
   <link rel="stylesheet" href="css/stile.css?v=20261119-apprendimento1">
-  <link rel="stylesheet" href="css/apprendimento.css?v=20261119-6">
+  <link rel="stylesheet" href="css/apprendimento.css?v=20261119-7">
 </head>
 <body>
   <header class="shell learning-header">
@@ -26,18 +26,33 @@
     <section class="card setup-card" id="block-stage" aria-labelledby="block-title">
       <p class="section-label">Fase 1 · Divisione in blocchi</p>
       <h2 id="block-title">Conferma i blocchi proposti</h2>
-      <p class="stage-intro">Le variabili descrivono due aspetti diversi della stessa persona. Il sito propone di trattarli separatamente.</p>
-      <div class="block-grid">
-        <article class="data-block">
-          <p class="block-kicker">Blocco 1</p>
-          <h3>Esercizi</h3>
-          <ul><li>Trazioni</li><li>Addominali</li><li>Salti</li></ul>
-        </article>
-        <article class="data-block">
-          <p class="block-kicker">Blocco 2</p>
-          <h3>Misure fisiologiche</h3>
-          <ul><li>Peso</li><li>Circonferenza vita</li><li>Frequenza cardiaca</li></ul>
-        </article>
+      <p class="stage-intro">Il sito propone di leggere insieme le colonne che descrivono lo stesso aspetto. Controlla l’assegnazione: puoi spostare una colonna o lasciarla indipendente.</p>
+      <div class="grouping-wrap compact-grouping">
+        <div class="grouping-heading">
+          <div>
+            <h3>Ci sono colonne da leggere insieme?</h3>
+            <p>Le misure degli esercizi formano un profilo di prestazione; peso, vita e frequenza cardiaca formano un profilo fisiologico.</p>
+          </div>
+        </div>
+        <div class="data-table-wrap">
+          <table class="data-table grouping-table">
+            <thead><tr><th>Colonna inclusa</th><th>Come deve essere letta?</th></tr></thead>
+            <tbody id="learning-group-assignment-body"></tbody>
+          </table>
+        </div>
+        <div class="hint" id="learning-group-summary" aria-live="polite"></div>
+        <div class="group-config-list learning-group-configs">
+          <div class="group-config">
+            <label>Nome del gruppo<input value="Esercizi" readonly></label>
+            <label>Che cosa formano insieme?<select disabled><option selected>Misurazioni dello stesso profilo</option></select></label>
+            <p>Trazioni, addominali e salti descrivono congiuntamente la prestazione negli esercizi.</p>
+          </div>
+          <div class="group-config">
+            <label>Nome del gruppo<input value="Misure fisiologiche" readonly></label>
+            <label>Che cosa formano insieme?<select disabled><option selected>Misurazioni dello stesso profilo</option></select></label>
+            <p>Peso, circonferenza della vita e frequenza cardiaca descrivono congiuntamente il profilo fisiologico.</p>
+          </div>
+        </div>
       </div>
       <div class="stage-actions">
         <button class="action" id="confirm-blocks" type="button">Conferma i blocchi</button>
@@ -47,13 +62,20 @@
     <section class="card setup-card" id="scaling-stage" hidden aria-labelledby="scaling-title">
       <p class="section-label">Fase 2 · Riscalamento</p>
       <h2 id="scaling-title">Conferma il riscalamento proposto</h2>
-      <div class="scaling-proposal">
-        <div>
-          <p class="block-kicker">Proposta</p>
-          <h3>Standardizzazione z-score</h3>
+      <div class="scaling-wrap learning-scaling-wrap">
+        <h3>Riscalamento delle variabili numeriche</h3>
+        <p>Controlla la trasformazione proposta per ogni colonna quantitativa. Puoi lasciare le scelte suggerite oppure cambiarle; i dati originali non vengono modificati.</p>
+        <details class="scaling-explanation">
+          <summary>Vuoi sapere come funzionano i diversi riscalamenti?</summary>
+          <p><strong>Z-score:</strong> confronta i valori rispetto alla media e alla variabilità della colonna. <strong>Robusto:</strong> usa mediana e intervallo tra i quartili. <strong>Min–max:</strong> porta il minimo osservato a 0 e il massimo a 1. <strong>Max-abs:</strong> divide per il valore assoluto più grande e conserva lo zero.</p>
+        </details>
+        <p id="learning-scaling-status" role="status">Il sito propone lo z-score per tutte le colonne, che hanno unità e dispersioni differenti.</p>
+        <div class="data-table-wrap">
+          <table class="data-table scaling-table">
+            <thead><tr><th>Feature</th><th>Tipo di dato</th><th>Trasformazione candidata</th><th>Parametri</th><th>Mancanti</th></tr></thead>
+            <tbody id="learning-scaling-body"></tbody>
+          </table>
         </div>
-        <p>Ogni variabile viene centrata sulla propria media e divisa per la propria deviazione standard. In questo modo le diverse unità di misura non determinano da sole la distanza.</p>
-        <div class="formula" aria-label="z uguale x meno media, diviso deviazione standard">z = (x − media) / deviazione standard</div>
       </div>
       <p class="data-note">Il riscalamento sarà usato soltanto nei calcoli. Nelle schede vedrai sempre i valori originali.</p>
       <div class="stage-actions">
@@ -94,6 +116,6 @@
     </section>
   </main>
 
-  <script src="js/apprendimento.js?v=20261119-5"></script>
+  <script src="js/apprendimento.js?v=20261119-6"></script>
 </body>
 </html>

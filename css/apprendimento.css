@@ -8,18 +8,20 @@
 .learning-intro p:not(.section-label) { margin:4px 0 0; color:var(--muted); }
 .setup-card { margin-bottom:18px; padding:28px; }
 .stage-intro { max-width:760px; margin:8px 0 20px; color:var(--muted); }
-.block-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
-.data-block, .scaling-proposal { padding:20px; border:1px solid rgba(8,124,255,.16); border-radius:16px; background:rgba(8,124,255,.045); }
-.block-kicker { margin:0 0 3px; color:var(--blue-dark); font-size:.78rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
-.data-block h3, .scaling-proposal h3 { margin:0; }
-.data-block ul { display:flex; flex-wrap:wrap; gap:8px; margin:15px 0 0; padding:0; list-style:none; }
-.data-block li { padding:7px 10px; border-radius:999px; background:white; color:var(--ink); font-size:.9rem; font-weight:700; }
+.compact-grouping { margin-top:18px; }
+.compact-grouping .grouping-heading { margin-bottom:14px; }
+.compact-grouping .grouping-heading h3 { margin:0; }
+.compact-grouping .grouping-heading p { margin:5px 0 0; color:var(--muted); }
+.learning-group-configs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.learning-group-configs .group-config { margin:0; }
+.learning-group-configs input[readonly], .learning-group-configs select:disabled { opacity:1; color:var(--ink); background:white; }
 .stage-actions { display:flex; justify-content:flex-end; margin-top:20px; }
 .stage-actions .action { width:auto; margin:0; }
 .stage-actions .action:disabled { opacity:1; color:var(--blue-dark); background:rgba(8,124,255,.12); box-shadow:none; cursor:default; }
-.scaling-proposal { display:grid; grid-template-columns:minmax(190px,.7fr) minmax(260px,1.5fr) auto; align-items:center; gap:24px; margin-top:18px; }
-.scaling-proposal > p { margin:0; color:var(--muted); }
-.formula { padding:11px 14px; border-radius:10px; background:white; color:var(--blue-dark); font-weight:800; white-space:nowrap; }
+.learning-scaling-wrap { display:block; margin-top:18px; }
+.learning-scaling-wrap h3 { margin:0; }
+.learning-scaling-wrap > p { color:var(--muted); }
+.learning-scaling-wrap .scaling-table select { min-width:280px; }
 .data-note, .original-values-note { color:var(--muted); font-size:.92rem; }
 .data-note { margin:14px 0 0; }
 .comparison-stage { padding:28px; }
@@ -54,15 +56,13 @@
 .batch-actions { display:flex; justify-content:center; gap:10px; }
 .batch-actions button, .completion-card .action { width:auto; margin:0; }
 @media (max-width:900px) {
-  .scaling-proposal { grid-template-columns:1fr; gap:12px; }
-  .formula { justify-self:start; }
   .comparison-heading { align-items:stretch; flex-direction:column; }
   .progress-track { flex:none; width:100%; }
   .candidate-grid { grid-template-columns:1fr; }
 }
 @media (max-width:620px) {
   .learning-intro, .setup-card, .comparison-stage { padding:20px; }
-  .block-grid { grid-template-columns:1fr; }
+  .learning-group-configs { grid-template-columns:1fr; }
   .measure-list { grid-template-columns:1fr 1fr 1fr; }
   .comparison-actions { flex-direction:column-reverse; }
   .comparison-actions button { width:100%; }
