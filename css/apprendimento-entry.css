@@ -1,0 +1,36 @@
+.learning-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  margin-bottom: 24px;
+  padding: 24px 28px;
+  border-color: rgba(118, 87, 255, .22);
+  background:
+    linear-gradient(135deg, rgba(8, 124, 255, .06), rgba(118, 87, 255, .09)),
+    rgba(255, 255, 255, .56);
+}
+.learning-entry h2 {
+  margin: 0;
+  font-size: clamp(1.35rem, 2.6vw, 2rem);
+  letter-spacing: -.03em;
+}
+.learning-entry p:not(.section-label) {
+  max-width: 740px;
+  margin: 7px 0 0;
+  color: var(--muted);
+}
+.learning-entry-link {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+  text-decoration: none;
+  text-align: center;
+}
+@media (max-width: 760px) {
+  .learning-entry {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .learning-entry-link { width: 100%; }
+}

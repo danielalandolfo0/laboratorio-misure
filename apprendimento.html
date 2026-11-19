@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Prototipo per raccogliere giudizi di similarità tra istanze del dataset Iris.">
+  <title>Impara dalle tue scelte · Laboratorio delle misure</title>
+  <link rel="stylesheet" href="css/stile.css?v=20261119-apprendimento1">
+  <link rel="stylesheet" href="css/apprendimento.css?v=20261119-1">
+</head>
+<body>
+  <header class="shell learning-header">
+    <a class="back-link" href="index.html">Torna al laboratorio</a>
+    <p class="section-label">Nuova funzione · prototipo</p>
+    <h1>Quali istanze ti sembrano più simili?</h1>
+    <p>Osserva tre fiori del dataset Iris e seleziona i due che, secondo te, si assomigliano maggiormente. In questa prima versione raccogliamo soltanto le scelte: la distanza non viene ancora appresa.</p>
+  </header>
+
+  <main class="shell learning-main">
+    <section class="card learning-intro" aria-labelledby="learning-title">
+      <div>
+        <p class="section-label">Dataset di esempio</p>
+        <h2 id="learning-title">Iris di scikit-learn</h2>
+        <p>Il dataset contiene 150 osservazioni e quattro misure in centimetri. La specie non è mostrata, così il giudizio dipende esclusivamente dalle caratteristiche visibili.</p>
+      </div>
+      <dl class="dataset-facts">
+        <div><dt>Istanze</dt><dd>150</dd></div>
+        <div><dt>Caratteristiche</dt><dd>4</dd></div>
+        <div><dt>Confronti</dt><dd>12</dd></div>
+      </dl>
+    </section>
+
+    <section class="card comparison-stage" id="comparison-stage" aria-labelledby="comparison-title">
+      <div class="comparison-heading">
+        <div>
+          <p class="section-label" id="comparison-counter">Confronto 1 di 12</p>
+          <h2 id="comparison-title">Seleziona le due schede più simili</h2>
+          <p id="selection-help">Hai selezionato 0 schede su 2.</p>
+        </div>
+        <div class="progress-track" aria-hidden="true"><span id="comparison-progress"></span></div>
+      </div>
+
+      <div class="candidate-grid" id="candidate-grid" aria-live="polite"></div>
+
+      <div class="comparison-actions">
+        <button class="secondary-action" id="clear-selection" type="button" disabled>Deseleziona</button>
+        <button class="action" id="next-comparison" type="button" disabled>Conferma e continua</button>
+      </div>
+      <p class="keyboard-note">Puoi usare anche Tab e Invio. Una terza scheda non può essere selezionata finché non ne deselezioni una.</p>
+    </section>
+
+    <section class="card completion-card" id="completion-card" hidden aria-labelledby="completion-title">
+      <p class="section-label">Prima raccolta completata</p>
+      <h2 id="completion-title">Hai espresso 12 preferenze</h2>
+      <p>Le risposte sono conservate soltanto in questa pagina. Il prossimo passo sarà trasformare ogni scelta in due disuguaglianze e confrontare le misure candidate dei diversi blocchi.</p>
+      <button class="action" id="restart-comparisons" type="button">Ricomincia</button>
+    </section>
+  </main>
+
+  <script src="js/apprendimento.js?v=20261119-1"></script>
+</body>
+</html>
+

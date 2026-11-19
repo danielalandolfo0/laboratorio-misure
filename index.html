@@ -6,6 +6,7 @@
   <meta name="description" content="Laboratorio interattivo per preparare dati tabellari e comprendere misure tra vettori, dati binari e stringhe.">
   <title>Laboratorio delle misure</title>
   <link rel="stylesheet" href="css/stile.css?v=20261114-fase7-problemi2">
+  <link rel="stylesheet" href="css/apprendimento-entry.css?v=20261119-1">
   <script>
     if ("scrollRestoration" in history) history.scrollRestoration = "manual";
     window.addEventListener("pageshow", () => {
@@ -27,6 +28,15 @@
     <h1>Laboratorio delle misure</h1>
     <p>Prepara una tabella di dati oppure confronta direttamente due elementi e osserva come viene costruita la misura.</p>
   </header>
+
+  <aside class="shell card learning-entry" aria-labelledby="learning-entry-title">
+    <div>
+      <p class="section-label">Nuova funzione sperimentale</p>
+      <h2 id="learning-entry-title">Insegna al sito che cosa consideri simile</h2>
+      <p>Confronta tre istanze del dataset Iris e seleziona le due che ti sembrano più vicine. Per ora raccogliamo le preferenze; nelle fasi successive serviranno a scegliere misure e pesi.</p>
+    </div>
+    <a class="action learning-entry-link" href="apprendimento.html">Prova il confronto tra tre istanze</a>
+  </aside>
 
   <section class="shell card data-prep" aria-labelledby="prep-title">
     <div class="prep-heading">
@@ -444,4 +454,5 @@
   <script src="js/interfaccia.js?v=20261016-2"></script>
 </body>
 </html>
+
 
