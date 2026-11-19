@@ -3,37 +3,74 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Prototipo per raccogliere giudizi di similarità tra istanze del dataset Iris.">
+  <meta name="description" content="Prototipo per raccogliere giudizi di similarità sul dataset Linnerud.">
   <title>Impara dalle tue scelte · Laboratorio delle misure</title>
   <link rel="stylesheet" href="css/stile.css?v=20261119-apprendimento1">
-  <link rel="stylesheet" href="css/apprendimento.css?v=20261119-5">
+  <link rel="stylesheet" href="css/apprendimento.css?v=20261119-6">
 </head>
 <body>
   <header class="shell learning-header">
     <a class="back-link" href="index.html">Torna al laboratorio</a>
     <p class="section-label">Impara dalle tue scelte</p>
-    <h1>Quali istanze ti sembrano più simili?</h1>
-    <p>Osserva tre fiori del dataset Iris e seleziona i due che, secondo te, si assomigliano maggiormente.</p>
+    <h1>Costruiamo una distanza dalle tue scelte</h1>
+    <p>Prima conferma come organizzare e riscalare i dati. Poi seleziona, a ogni confronto, le due persone che ti sembrano più simili.</p>
   </header>
 
   <main class="shell learning-main">
     <section class="card learning-intro" aria-labelledby="learning-title">
       <p class="section-label">Dataset di esempio</p>
-      <h2 id="learning-title">Iris di scikit-learn</h2>
-      <p>150 fiori, descritti da quattro misure in centimetri. La specie è nascosta.</p>
+      <h2 id="learning-title">Linnerud di scikit-learn</h2>
+      <p>20 persone, descritte da tre esercizi e tre misure fisiologiche.</p>
     </section>
 
-    <section class="card comparison-stage" id="comparison-stage" aria-labelledby="comparison-title">
+    <section class="card setup-card" id="block-stage" aria-labelledby="block-title">
+      <p class="section-label">Fase 1 · Divisione in blocchi</p>
+      <h2 id="block-title">Conferma i blocchi proposti</h2>
+      <p class="stage-intro">Le variabili descrivono due aspetti diversi della stessa persona. Il sito propone di trattarli separatamente.</p>
+      <div class="block-grid">
+        <article class="data-block">
+          <p class="block-kicker">Blocco 1</p>
+          <h3>Esercizi</h3>
+          <ul><li>Trazioni</li><li>Addominali</li><li>Salti</li></ul>
+        </article>
+        <article class="data-block">
+          <p class="block-kicker">Blocco 2</p>
+          <h3>Misure fisiologiche</h3>
+          <ul><li>Peso</li><li>Circonferenza vita</li><li>Frequenza cardiaca</li></ul>
+        </article>
+      </div>
+      <div class="stage-actions">
+        <button class="action" id="confirm-blocks" type="button">Conferma i blocchi</button>
+      </div>
+    </section>
+
+    <section class="card setup-card" id="scaling-stage" hidden aria-labelledby="scaling-title">
+      <p class="section-label">Fase 2 · Riscalamento</p>
+      <h2 id="scaling-title">Conferma il riscalamento proposto</h2>
+      <div class="scaling-proposal">
+        <div>
+          <p class="block-kicker">Proposta</p>
+          <h3>Standardizzazione z-score</h3>
+        </div>
+        <p>Ogni variabile viene centrata sulla propria media e divisa per la propria deviazione standard. In questo modo le diverse unità di misura non determinano da sole la distanza.</p>
+        <div class="formula" aria-label="z uguale x meno media, diviso deviazione standard">z = (x − media) / deviazione standard</div>
+      </div>
+      <p class="data-note">Il riscalamento sarà usato soltanto nei calcoli. Nelle schede vedrai sempre i valori originali.</p>
+      <div class="stage-actions">
+        <button class="action" id="confirm-scaling" type="button">Conferma il riscalamento</button>
+      </div>
+    </section>
+
+    <section class="card comparison-stage" id="comparison-stage" hidden aria-labelledby="comparison-title">
       <div class="comparison-heading">
         <div>
           <p class="section-label" id="comparison-counter">Confronto 1 · 1 di 10</p>
-          <h2 id="comparison-title">Seleziona le due schede più simili</h2>
+          <h2 id="comparison-title">Seleziona le due persone più simili</h2>
         </div>
         <div class="progress-track" aria-hidden="true"><span id="comparison-progress"></span></div>
       </div>
-
+      <p class="original-values-note">I valori mostrati sono quelli originali, non riscalati.</p>
       <div class="candidate-grid" id="candidate-grid" aria-live="polite"></div>
-
       <div class="comparison-actions">
         <button class="action" id="next-comparison" type="button" disabled>Conferma e continua</button>
       </div>
@@ -52,12 +89,11 @@
     <section class="card completion-card" id="completion-card" hidden aria-labelledby="completion-title">
       <p class="section-label">Prima raccolta completata</p>
       <h2 id="completion-title">Raccolta conclusa</h2>
-      <p>Le risposte sono conservate soltanto in questa pagina. Il prossimo passo sarà trasformare ogni scelta in due disuguaglianze e confrontare le misure candidate dei diversi blocchi.</p>
+      <p>Ogni scelta determina due confronti di distanza. Le risposte saranno usate per confrontare le misure compatibili con i due blocchi e imparare il loro peso relativo.</p>
       <button class="action" id="restart-comparisons" type="button">Ricomincia</button>
     </section>
   </main>
 
-  <script src="js/apprendimento.js?v=20261119-4"></script>
+  <script src="js/apprendimento.js?v=20261119-5"></script>
 </body>
 </html>
-
