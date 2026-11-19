@@ -6,7 +6,7 @@
   <meta name="description" content="Prototipo per raccogliere giudizi di similarità sul dataset Linnerud.">
   <title>Impara dalle tue scelte · Laboratorio delle misure</title>
   <link rel="stylesheet" href="css/stile.css?v=20261119-apprendimento1">
-  <link rel="stylesheet" href="css/apprendimento.css?v=20261119-9">
+  <link rel="stylesheet" href="css/apprendimento.css?v=20261119-10">
 </head>
 <body>
   <header class="shell learning-header">
@@ -44,16 +44,19 @@
       <p class="section-label">Fase 2 · Riscalamento</p>
       <h2 id="scaling-title">Conferma il riscalamento proposto</h2>
       <div class="scaling-wrap learning-scaling-wrap">
+        <p>Scegli un metodo per ciascun blocco. Lo stesso metodo si applica alle sue colonne, usando per ognuna i propri parametri.</p>
         <details class="scaling-explanation">
           <summary>Vuoi sapere come funzionano i diversi riscalamenti?</summary>
           <p><strong>Z-score:</strong> confronta i valori rispetto alla media e alla variabilità della colonna. <strong>Robusto:</strong> usa mediana e intervallo tra i quartili. <strong>Min–max:</strong> porta il minimo osservato a 0 e il massimo a 1. <strong>Max-abs:</strong> divide per il valore assoluto più grande e conserva lo zero.</p>
         </details>
+        <div class="block-scaling-controls" id="block-scaling-controls"></div>
         <div class="data-table-wrap">
           <table class="data-table scaling-table">
-            <thead><tr><th>Feature</th><th>Tipo di dato</th><th>Trasformazione candidata</th><th>Parametri</th><th>Mancanti</th></tr></thead>
+            <thead><tr><th>Blocco</th><th>Feature</th><th>Metodo</th><th>Parametri della colonna</th></tr></thead>
             <tbody id="learning-scaling-body"></tbody>
           </table>
         </div>
+        <p class="scaling-after-note">Dopo aver calcolato una distanza per ciascun blocco, le distanze saranno normalizzate su una scala comune prima di combinare i blocchi con i pesi.</p>
       </div>
       <div class="stage-actions">
         <button class="action" id="confirm-scaling" type="button">Conferma il riscalamento</button>
@@ -92,6 +95,6 @@
     </section>
   </main>
 
-  <script src="js/apprendimento.js?v=20261119-7"></script>
+  <script src="js/apprendimento.js?v=20261119-8"></script>
 </body>
 </html>

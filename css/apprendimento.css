@@ -21,9 +21,11 @@
 .learning-scaling-wrap { display:block; margin-top:18px; }
 .learning-scaling-wrap h3 { margin:0; }
 .learning-scaling-wrap > p { color:var(--muted); }
-.learning-scaling-wrap .scaling-table { min-width:860px; }
-.learning-scaling-wrap .scaling-table select { min-width:0; width:100%; }
-.learning-scaling-wrap .scaling-table td:nth-child(3) { min-width:320px; }
+.block-scaling-controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr)); gap:12px; margin:18px 0; }
+.block-scaling-choice { min-width:0; margin:0; padding:14px; border:1px solid rgba(8,124,255,.16); border-radius:14px; background:rgba(8,124,255,.045); }
+.block-scaling-choice select { min-width:0; margin-top:8px; }
+.learning-scaling-wrap .scaling-table { min-width:620px; }
+.scaling-after-note { margin:14px 0 0; }
 .comparison-stage { padding:28px; }
 .comparison-heading { display:flex; justify-content:space-between; align-items:end; gap:24px; }
 .progress-track { flex:0 0 min(260px,34vw); height:8px; overflow:hidden; border-radius:999px; background:rgba(111,124,148,.14); }

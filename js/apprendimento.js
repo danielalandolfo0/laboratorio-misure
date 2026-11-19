@@ -34,7 +34,7 @@
   ];
   const state = {step: 0, selected: new Set(), answers: [], current: [], usedTriples: new Set(), seed: 1947};
   state.assignments = Object.fromEntries(FEATURES.map(feature => [feature.key, feature.proposedGroup]));
-  state.scaling = Object.fromEntries(FEATURES.map(feature => [feature.key, "zscore"]));
+  state.scaling = {exercise:"zscore", physiological:"zscore"};
   const $ = id => document.getElementById(id);
 
   function random() {
@@ -104,16 +104,36 @@
   }
 
   function renderScalingTable() {
+    const groups = activeGroups();
+    $("block-scaling-controls").innerHTML = groups.map(group =>
+      '<label class="block-scaling-choice">' + group.label +
+      '<select class="column-choice" data-group="' + group.key + '" aria-label="Riscalamento del blocco ' + group.label + '">' +
+      '<option value="zscore"' + (state.scaling[group.key] === "zscore" ? " selected" : "") + '>Z-score (suggerito)</option>' +
+      '<option value="robust"' + (state.scaling[group.key] === "robust" ? " selected" : "") + '>Robusto: mediana e IQR</option>' +
+      '<option value="minmax"' + (state.scaling[group.key] === "minmax" ? " selected" : "") + '>Min–max</option>' +
+      '<option value="maxabs"' + (state.scaling[group.key] === "maxabs" ? " selected" : "") + '>Max-abs</option>' +
+      '<option value="none"' + (state.scaling[group.key] === "none" ? " selected" : "") + '>Valori originali</option>' +
+      '</select></label>'
+    ).join("");
     $("learning-scaling-body").innerHTML = FEATURES.map(feature => {
-      const method = state.scaling[feature.key];
-      return '<tr><th scope="row">' + feature.label + '</th><td>Numerica</td><td><select class="column-choice learning-scaling-choice" data-feature="' + feature.key + '" aria-label="Metodo per la feature ' + feature.label + '">' +
-        '<option value="zscore"' + (method === "zscore" ? " selected" : "") + '>Confronta gli scarti dalla media (z-score) — suggerito</option>' +
-        '<option value="robust"' + (method === "robust" ? " selected" : "") + '>Usa mediana e IQR (robusto)</option>' +
-        '<option value="minmax"' + (method === "minmax" ? " selected" : "") + '>Porta i valori tra 0 e 1 (min–max)</option>' +
-        '<option value="maxabs"' + (method === "maxabs" ? " selected" : "") + '>Dividi per il valore massimo assoluto (max-abs)</option>' +
-        '<option value="none"' + (method === "none" ? " selected" : "") + '>Mantieni i valori originali</option>' +
-        '</select></td><td><span class="method-params">' + scalingParameters(feature, method) + '</span></td><td>0</td></tr>';
+      const group = groups.find(candidate => candidate.features.includes(feature));
+      const method = state.scaling[group.key];
+      const names = {zscore:"Z-score", robust:"Robusto", minmax:"Min–max", maxabs:"Max-abs", none:"Originale"};
+      return '<tr><td>' + group.label + '</td><th scope="row">' + feature.label + '</th><td>' + names[method] +
+        '</td><td><span class="method-params">' + scalingParameters(feature, method) + '</span></td></tr>';
     }).join("");
+  }
+
+  function activeGroups() {
+    const groups = [
+      {key:"exercise", label:"Esercizi", features:FEATURES.filter(f => state.assignments[f.key] === "exercise")},
+      {key:"physiological", label:"Misure fisiologiche", features:FEATURES.filter(f => state.assignments[f.key] === "physiological")}
+    ].filter(group => group.features.length);
+    for (const feature of FEATURES.filter(f => state.assignments[f.key] === "independent")) {
+      groups.push({key:feature.key, label:feature.label + " (indipendente)", features:[feature]});
+    }
+    for (const group of groups) state.scaling[group.key] ??= "zscore";
+    return groups;
   }
 
   function measureGroupHtml(title, features, item) {
@@ -178,12 +198,13 @@
     const select = event.target.closest(".learning-group-assignment");
     if (!select) return;
     state.assignments[select.dataset.feature] = select.value;
+    renderScalingTable();
   });
 
-  $("learning-scaling-body").addEventListener("change", event => {
-    const select = event.target.closest(".learning-scaling-choice");
+  $("block-scaling-controls").addEventListener("change", event => {
+    const select = event.target.closest("select[data-group]");
     if (!select) return;
-    state.scaling[select.dataset.feature] = select.value;
+    state.scaling[select.dataset.group] = select.value;
     renderScalingTable();
   });
 
