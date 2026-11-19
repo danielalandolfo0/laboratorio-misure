@@ -35,6 +35,10 @@
   const state = {step: 0, selected: new Set(), answers: [], current: [], usedTriples: new Set(), seed: 1947};
   state.assignments = Object.fromEntries(FEATURES.map(feature => [feature.key, feature.proposedGroup]));
   state.scaling = {exercise:"zscore", physiological:"zscore"};
+  state.meaning = {};
+  state.qualifiers = {};
+  state.candidateMeasures = [];
+  const MEASURE_CATALOG = window.LearningMeasureCatalog;
   const $ = id => document.getElementById(id);
 
   function random() {
@@ -136,6 +140,102 @@
     return groups;
   }
 
+  function renderMeaningControls() {
+    const choices = Object.entries(MEASURE_CATALOG).map(([key, item]) =>
+      '<option value="' + key + '">' + item.label + '</option>').join("");
+    $("meaning-controls").innerHTML = activeGroups().map(group => {
+      state.meaning[group.key] ??= "numeric";
+      const selected = state.meaning[group.key];
+      return '<div class="meaning-item" data-meaning-group="' + group.key + '">' +
+        '<label for="meaning-' + group.key + '">' + group.label + '</label>' +
+        '<p>' + group.features.map(feature => feature.label).join(", ") + '</p>' +
+        '<select id="meaning-' + group.key + '" class="column-choice meaning-choice" data-group="' + group.key + '">' +
+        choices.replace('value="' + selected + '"', 'value="' + selected + '" selected') + '</select>' +
+        (selected === "binary" || selected === "presence"
+          ? '<label for="binary-' + group.key + '">Che cosa significano 0 e 1?</label>' +
+            '<select id="binary-' + group.key + '" class="column-choice binary-choice" data-group="' + group.key + '">' +
+            '<option value="">Scegli una risposta</option>' +
+            '<option value="symmetric"' + (state.qualifiers[group.key] === "symmetric" ? " selected" : "") + '>Due stati equivalenti</option>' +
+            '<option value="presence"' + (state.qualifiers[group.key] === "presence" ? " selected" : "") + '>1 = presenza, 0 = assenza</option></select>'
+          : selected === "temporal"
+            ? '<label for="temporal-' + group.key + '">Gli istanti sono gli stessi in tutte le righe?</label>' +
+              '<select id="temporal-' + group.key + '" class="column-choice temporal-choice" data-group="' + group.key + '">' +
+              '<option value="">Scegli una risposta</option><option value="aligned"' + (state.qualifiers[group.key] === "aligned" ? " selected" : "") + '>Sì</option>' +
+              '<option value="unaligned"' + (state.qualifiers[group.key] === "unaligned" ? " selected" : "") + '>No</option></select>'
+            : selected === "ordinal"
+              ? '<p>Per colonne con livelli non numerici, l’ordine dei livelli andrà specificato prima del calcolo.</p>'
+              : selected === "mixed"
+                ? '<p>Per Gower occorrerà specificare il tipo delle singole colonne prima del calcolo.</p>'
+                : '') + '</div>';
+    }).join("");
+  }
+
+  function hasFullRank(group) {
+    const rows = LINNERUD.map(row => group.features.map(feature => row[feature.field][feature.index]));
+    const averages = group.features.map((_, column) => mean(rows.map(row => row[column])));
+    const matrix = group.features.map((_, i) => group.features.map((__, j) =>
+      rows.reduce((sum, row) => sum + (row[i] - averages[i]) * (row[j] - averages[j]), 0)));
+    let rank = 0;
+    for (let col = 0; col < group.features.length; col++) {
+      let pivot = rank;
+      for (let row = rank + 1; row < group.features.length; row++)
+        if (Math.abs(matrix[row][col]) > Math.abs(matrix[pivot][col])) pivot = row;
+      if (Math.abs(matrix[pivot][col]) < 1e-8) continue;
+      [matrix[rank], matrix[pivot]] = [matrix[pivot], matrix[rank]];
+      const value = matrix[rank][col];
+      for (let j = col; j < group.features.length; j++) matrix[rank][j] /= value;
+      for (let row = rank + 1; row < group.features.length; row++) {
+        const factor = matrix[row][col];
+        for (let j = col; j < group.features.length; j++) matrix[row][j] -= factor * matrix[rank][j];
+      }
+      rank++;
+    }
+    return rank === group.features.length;
+  }
+
+  function candidatesFor(group, kind, qualifier) {
+    const effectiveKind = kind === "binary" || kind === "presence"
+      ? (qualifier === "presence" ? "presence" : "binary") : kind;
+    const values = group.features.flatMap(featureValues);
+    let measures = [...MEASURE_CATALOG[effectiveKind].measures];
+    if (group.features.length === 1) measures = measures.filter(id => !["chebyshev","minkowski","mahalanobis"].includes(id));
+    if (values.some(value => value < 0)) measures = measures.filter(id => !["canberra","braycurtis","hellinger","jensen_shannon","aitchison"].includes(id));
+    if (values.some(value => value <= 0)) measures = measures.filter(id => id !== "aitchison");
+    if (group.features.length > 1 && (LINNERUD.length <= group.features.length || !hasFullRank(group)))
+      measures = measures.filter(id => id !== "mahalanobis");
+    if (effectiveKind === "temporal" && qualifier !== "aligned")
+      measures = measures.filter(id => id !== "pointwise");
+    return measures;
+  }
+
+  function confirmMeaning() {
+    const entries = [];
+    for (const group of activeGroups()) {
+      const kind = state.meaning[group.key];
+      const qualifier = state.qualifiers[group.key] || null;
+      if (["binary","presence"].includes(kind)) {
+        if (!qualifier) return 'Indica il significato di 0 e 1 nel blocco “' + group.label + '”.';
+        if (!group.features.every(feature => featureValues(feature).every(value => value === 0 || value === 1)))
+          return 'Il blocco “' + group.label + '” contiene valori diversi da 0 e 1: controlla il tipo scelto.';
+      }
+      if (kind === "temporal" && !qualifier)
+        return 'Indica se gli istanti sono allineati nel blocco “' + group.label + '”.';
+      if (kind === "parts" && group.features.some(feature => featureValues(feature).some(value => value < 0)))
+        return 'Il blocco “' + group.label + '” contiene valori negativi: non può rappresentare parti di un totale.';
+      if (kind === "abundance" && group.features.some(feature => featureValues(feature).some(value => value < 0)))
+        return 'Il blocco “' + group.label + '” contiene valori negativi: non è un blocco di quantità non negative.';
+      const measures = candidatesFor(group, kind, qualifier);
+      if (!measures.length) return 'Nessuna misura candidata per il blocco “' + group.label + '”.';
+      entries.push({id:group.key, label:group.label, columns:group.features.map(feature => feature.key),
+        meaning:kind, qualifier, scaling:state.scaling[group.key], candidateMeasures:measures});
+    }
+    state.candidateMeasures = entries;
+    try {
+      sessionStorage.setItem("laboratorio-misure:apprendimento-config:v1", JSON.stringify({dataset:"linnerud", blocks:entries}));
+    } catch (_) { /* La sessione può non consentire la memorizzazione. */ }
+    return null;
+  }
+
   function measureGroupHtml(title, features, item) {
     if (!features.length) return "";
     return '<span class="measure-group"><span class="measure-group-title">' + title + '</span><dl class="measure-list">' +
@@ -211,6 +311,31 @@
   $("confirm-scaling").addEventListener("click", () => {
     $("confirm-scaling").disabled = true;
     $("confirm-scaling").textContent = "Riscalamento confermato";
+    renderMeaningControls();
+    showStage("meaning-stage");
+  });
+
+  $("meaning-controls").addEventListener("change", event => {
+    const select = event.target;
+    if (select.matches(".meaning-choice")) {
+      state.meaning[select.dataset.group] = select.value;
+      delete state.qualifiers[select.dataset.group];
+      renderMeaningControls();
+    } else if (select.matches(".binary-choice, .temporal-choice")) {
+      state.qualifiers[select.dataset.group] = select.value;
+    }
+    $("meaning-error").hidden = true;
+  });
+
+  $("confirm-meaning").addEventListener("click", () => {
+    const error = confirmMeaning();
+    if (error) {
+      $("meaning-error").textContent = error;
+      $("meaning-error").hidden = false;
+      return;
+    }
+    $("confirm-meaning").disabled = true;
+    $("confirm-meaning").textContent = "Significato confermato";
     renderStep();
     showStage("comparison-stage");
   });
