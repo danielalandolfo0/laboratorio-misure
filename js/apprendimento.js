@@ -176,21 +176,14 @@
               ]);
           }
           if (answers.temporal === "no" || answers.temporal === "unsure") {
-            questions += answerChoices(group.key, "profile",
-              "Vuoi considerare anche la forma del profilo tra le colonne?", YES_NO_UNSURE);
-            if (answers.profile === "yes" || answers.profile === "unsure") {
-              questions += answerChoices(group.key, "profileKind",
-                "Quando due profili ti sembrano simili?", [
-                  {value:"values", label:"Quando hanno valori vicini"},
-                  {value:"ratio", label:"Quando mantengono proporzioni simili"},
-                  {value:"trend", label:"Quando salgono e scendono nello stesso modo"},
-                  {value:"unsure", label:"Non sono sicuro"}
-                ]);
-            }
-            if (answers.profile === "no" || answers.profile === "unsure") {
-              questions += answerChoices(group.key, "abundance",
-                "In queste colonne, lo zero significa che quella caratteristica è assente?", YES_NO_UNSURE);
-            }
+            questions += answerChoices(group.key, "comparisonFocus",
+              "Nel confrontare due persone, che cosa dovrebbe essere simile in questo gruppo di caratteristiche?", [
+                {value:"values", label:"I valori delle singole caratteristiche"},
+                {value:"ratio", label:"Le proporzioni tra le caratteristiche"},
+                {value:"unsure", label:"Non sono sicuro"}
+              ]);
+            if (answers.comparisonFocus) questions += answerChoices(group.key, "abundance",
+              "In queste colonne, lo zero significa che quella caratteristica è assente?", YES_NO_UNSURE);
           }
         }
       }
@@ -243,15 +236,10 @@
     }
     if (answers.temporal === "yes") return measures;
 
-    if (answers.profile === "yes" || answers.profile === "unsure") {
-      if (answers.profileKind === "values" || answers.profileKind === "unsure") addMeasures(measures, "numeric");
-      if (answers.profileKind === "ratio" || answers.profileKind === "unsure") addMeasures(measures, "profile_ratio");
-      if (answers.profileKind === "trend" || answers.profileKind === "unsure") addMeasures(measures, "profile_trend");
-    }
-    if (answers.profile === "no" || answers.profile === "unsure") {
-      addMeasures(measures, "numeric");
-      if (answers.abundance === "yes" || answers.abundance === "unsure") addMeasures(measures, "abundance");
-    }
+    addMeasures(measures, "profile_trend");
+    if (answers.comparisonFocus === "values" || answers.comparisonFocus === "unsure") addMeasures(measures, "numeric");
+    if (answers.comparisonFocus === "ratio" || answers.comparisonFocus === "unsure") addMeasures(measures, "profile_ratio");
+    if (answers.abundance === "yes" || answers.abundance === "unsure") addMeasures(measures, "abundance");
     return measures;
   }
 
@@ -276,9 +264,8 @@
     if (!answers.temporal) return "la domanda sui momenti successivi";
     if (["yes","unsure"].includes(answers.temporal) && !answers.alignment) return "la domanda sullo spostamento nel tempo";
     if (answers.temporal === "yes") return null;
-    if (!answers.profile) return "la domanda sulla forma del profilo";
-    if (["yes","unsure"].includes(answers.profile) && !answers.profileKind) return "la domanda sulla somiglianza tra profili";
-    if (["no","unsure"].includes(answers.profile) && !answers.abundance) return "la domanda sul significato dello zero";
+    if (!answers.comparisonFocus) return "la domanda su che cosa dovrebbe essere simile";
+    if (!answers.abundance) return "la domanda sul significato dello zero";
     return null;
   }
 
@@ -391,9 +378,9 @@
     const answers = state.semanticAnswers[input.dataset.group];
     answers[input.dataset.question] = input.value;
     const dependants = {
-      parts:["temporal","alignment","profile","profileKind","abundance"],
-      temporal:["alignment","profile","profileKind","abundance"],
-      profile:["profileKind","abundance"]
+      parts:["temporal","alignment","comparisonFocus","abundance"],
+      temporal:["alignment","comparisonFocus","abundance"],
+      comparisonFocus:["abundance"]
     };
     for (const key of dependants[input.dataset.question] || []) delete answers[key];
     renderMeaningControls();
