@@ -35,8 +35,7 @@
   const state = {step: 0, selected: new Set(), answers: [], current: [], usedTriples: new Set(), seed: 1947};
   state.assignments = Object.fromEntries(FEATURES.map(feature => [feature.key, feature.proposedGroup]));
   state.scaling = {exercise:"zscore", physiological:"zscore"};
-  state.meaning = {};
-  state.qualifiers = {};
+  state.semanticAnswers = {};
   state.candidateMeasures = [];
   const MEASURE_CATALOG = window.LearningMeasureCatalog;
   const $ = id => document.getElementById(id);
@@ -140,34 +139,66 @@
     return groups;
   }
 
+  function answerChoices(groupKey, questionKey, question, choices) {
+    const selected = state.semanticAnswers[groupKey]?.[questionKey] || "";
+    return '<fieldset class="meaning-question"><legend>' + question + '</legend><div class="meaning-options">' +
+      choices.map(choice => '<label><input type="radio" name="' + groupKey + '-' + questionKey + '" data-group="' +
+        groupKey + '" data-question="' + questionKey + '" value="' + choice.value + '"' +
+        (selected === choice.value ? " checked" : "") + '><span>' + choice.label + '</span></label>').join("") +
+      '</div></fieldset>';
+  }
+
+  const YES_NO_UNSURE = [
+    {value:"yes", label:"Sì"},
+    {value:"no", label:"No"},
+    {value:"unsure", label:"Non sono sicuro"}
+  ];
+
   function renderMeaningControls() {
-    const choices = Object.entries(MEASURE_CATALOG).map(([key, item]) =>
-      '<option value="' + key + '">' + item.label + '</option>').join("");
     $("meaning-controls").innerHTML = activeGroups().map(group => {
-      state.meaning[group.key] ??= "numeric";
-      const selected = state.meaning[group.key];
-      return '<div class="meaning-item" data-meaning-group="' + group.key + '">' +
-        '<label for="meaning-' + group.key + '">' + group.label + '</label>' +
-        '<p>' + group.features.map(feature => feature.label).join(", ") + '</p>' +
-        '<select id="meaning-' + group.key + '" class="column-choice meaning-choice" data-group="' + group.key + '">' +
-        choices.replace('value="' + selected + '"', 'value="' + selected + '" selected') + '</select>' +
-        (selected === "binary" || selected === "presence"
-          ? '<label for="binary-' + group.key + '">Che cosa significano 0 e 1?</label>' +
-            '<select id="binary-' + group.key + '" class="column-choice binary-choice" data-group="' + group.key + '">' +
-            '<option value="">Scegli una risposta</option>' +
-            '<option value="symmetric"' + (state.qualifiers[group.key] === "symmetric" ? " selected" : "") + '>Due stati equivalenti</option>' +
-            '<option value="presence"' + (state.qualifiers[group.key] === "presence" ? " selected" : "") + '>1 = presenza, 0 = assenza</option></select>'
-          : selected === "temporal"
-            ? '<label for="temporal-' + group.key + '">Gli istanti sono gli stessi in tutte le righe?</label>' +
-              '<select id="temporal-' + group.key + '" class="column-choice temporal-choice" data-group="' + group.key + '">' +
-              '<option value="">Scegli una risposta</option><option value="aligned"' + (state.qualifiers[group.key] === "aligned" ? " selected" : "") + '>Sì</option>' +
-              '<option value="unaligned"' + (state.qualifiers[group.key] === "unaligned" ? " selected" : "") + '>No</option></select>'
-            : selected === "ordinal"
-              ? '<p>Per colonne con livelli non numerici, l’ordine dei livelli andrà specificato prima del calcolo.</p>'
-              : selected === "mixed"
-                ? '<p>Per Gower occorrerà specificare il tipo delle singole colonne prima del calcolo.</p>'
-                : '') + '</div>';
+      state.semanticAnswers[group.key] ??= {};
+      const answers = state.semanticAnswers[group.key];
+      let questions = "";
+      if (group.features.length === 1) {
+        questions = '<p class="single-column-note">Questo blocco contiene una sola colonna: non servono altre domande.</p>';
+      } else {
+        questions += answerChoices(group.key, "parts",
+          "Queste colonne sono parti o percentuali di uno stesso totale?", YES_NO_UNSURE);
+        if (answers.parts === "no" || answers.parts === "unsure") {
+          questions += answerChoices(group.key, "temporal",
+            "Sono la stessa misura osservata in momenti successivi?", YES_NO_UNSURE);
+          if (answers.temporal === "yes" || answers.temporal === "unsure") {
+            questions += answerChoices(group.key, "alignment",
+              "Due andamenti possono essere simili anche se uno avviene un po’ prima o dopo?", [
+                {value:"flexible", label:"Sì"},
+                {value:"aligned", label:"No, contano gli stessi momenti"},
+                {value:"unsure", label:"Non sono sicuro"}
+              ]);
+          }
+          if (answers.temporal === "no" || answers.temporal === "unsure") {
+            questions += answerChoices(group.key, "profile",
+              "Vuoi considerare anche la forma del profilo tra le colonne?", YES_NO_UNSURE);
+            if (answers.profile === "yes" || answers.profile === "unsure") {
+              questions += answerChoices(group.key, "profileKind",
+                "Quando due profili ti sembrano simili?", [
+                  {value:"values", label:"Quando hanno valori vicini"},
+                  {value:"ratio", label:"Quando mantengono proporzioni simili"},
+                  {value:"trend", label:"Quando salgono e scendono nello stesso modo"},
+                  {value:"unsure", label:"Non sono sicuro"}
+                ]);
+            }
+            if (answers.profile === "no" || answers.profile === "unsure") {
+              questions += answerChoices(group.key, "abundance",
+                "In queste colonne, lo zero significa che quella caratteristica è assente?", YES_NO_UNSURE);
+            }
+          }
+        }
+      }
+      return '<section class="meaning-item" data-meaning-group="' + group.key + '">' +
+        '<h3>' + group.label + '</h3><p class="meaning-columns">' +
+        group.features.map(feature => feature.label).join(", ") + '</p>' + questions + '</section>';
     }).join("");
+    updateMeaningConfirm();
   }
 
   function hasFullRank(group) {
@@ -193,41 +224,79 @@
     return rank === group.features.length;
   }
 
-  function candidatesFor(group, kind, qualifier) {
-    const effectiveKind = kind === "binary" || kind === "presence"
-      ? (qualifier === "presence" ? "presence" : "binary") : kind;
+  function addMeasures(target, catalogKey) {
+    for (const measure of MEASURE_CATALOG[catalogKey].measures) target.add(measure);
+  }
+
+  function semanticCandidates(group, answers) {
+    const measures = new Set();
+    if (group.features.length === 1) {
+      addMeasures(measures, "numeric");
+      return measures;
+    }
+    if (answers.parts === "yes" || answers.parts === "unsure") addMeasures(measures, "parts");
+    if (answers.parts === "yes") return measures;
+
+    if (answers.temporal === "yes" || answers.temporal === "unsure") {
+      if (answers.alignment === "aligned" || answers.alignment === "unsure") addMeasures(measures, "temporal_aligned");
+      if (answers.alignment === "flexible" || answers.alignment === "unsure") addMeasures(measures, "temporal_flexible");
+    }
+    if (answers.temporal === "yes") return measures;
+
+    if (answers.profile === "yes" || answers.profile === "unsure") {
+      if (answers.profileKind === "values" || answers.profileKind === "unsure") addMeasures(measures, "numeric");
+      if (answers.profileKind === "ratio" || answers.profileKind === "unsure") addMeasures(measures, "profile_ratio");
+      if (answers.profileKind === "trend" || answers.profileKind === "unsure") addMeasures(measures, "profile_trend");
+    }
+    if (answers.profile === "no" || answers.profile === "unsure") {
+      addMeasures(measures, "numeric");
+      if (answers.abundance === "yes" || answers.abundance === "unsure") addMeasures(measures, "abundance");
+    }
+    return measures;
+  }
+
+  function candidatesFor(group, answers) {
     const values = group.features.flatMap(featureValues);
-    let measures = [...MEASURE_CATALOG[effectiveKind].measures];
+    let measures = [...semanticCandidates(group, answers)];
     if (group.features.length === 1) measures = measures.filter(id => !["chebyshev","minkowski","mahalanobis"].includes(id));
     if (values.some(value => value < 0)) measures = measures.filter(id => !["canberra","braycurtis","hellinger","jensen_shannon","aitchison"].includes(id));
     if (values.some(value => value <= 0)) measures = measures.filter(id => id !== "aitchison");
     if (group.features.length > 1 && (LINNERUD.length <= group.features.length || !hasFullRank(group)))
       measures = measures.filter(id => id !== "mahalanobis");
-    if (effectiveKind === "temporal" && qualifier !== "aligned")
-      measures = measures.filter(id => id !== "pointwise");
+    const rows = LINNERUD.map(row => group.features.map(feature => row[feature.field][feature.index]));
+    if (rows.some(row => row.every(value => value === 0))) measures = measures.filter(id => id !== "cosine");
+    if (rows.some(row => row.every(value => value === row[0]))) measures = measures.filter(id => id !== "correlation");
     return measures;
+  }
+
+  function missingAnswer(group, answers) {
+    if (group.features.length === 1) return null;
+    if (!answers.parts) return "la prima domanda";
+    if (answers.parts === "yes") return null;
+    if (!answers.temporal) return "la domanda sui momenti successivi";
+    if (["yes","unsure"].includes(answers.temporal) && !answers.alignment) return "la domanda sullo spostamento nel tempo";
+    if (answers.temporal === "yes") return null;
+    if (!answers.profile) return "la domanda sulla forma del profilo";
+    if (["yes","unsure"].includes(answers.profile) && !answers.profileKind) return "la domanda sulla somiglianza tra profili";
+    if (["no","unsure"].includes(answers.profile) && !answers.abundance) return "la domanda sul significato dello zero";
+    return null;
+  }
+
+  function updateMeaningConfirm() {
+    $("confirm-meaning").disabled = activeGroups().some(group =>
+      missingAnswer(group, state.semanticAnswers[group.key] || {}));
   }
 
   function confirmMeaning() {
     const entries = [];
     for (const group of activeGroups()) {
-      const kind = state.meaning[group.key];
-      const qualifier = state.qualifiers[group.key] || null;
-      if (["binary","presence"].includes(kind)) {
-        if (!qualifier) return 'Indica il significato di 0 e 1 nel blocco “' + group.label + '”.';
-        if (!group.features.every(feature => featureValues(feature).every(value => value === 0 || value === 1)))
-          return 'Il blocco “' + group.label + '” contiene valori diversi da 0 e 1: controlla il tipo scelto.';
-      }
-      if (kind === "temporal" && !qualifier)
-        return 'Indica se gli istanti sono allineati nel blocco “' + group.label + '”.';
-      if (kind === "parts" && group.features.some(feature => featureValues(feature).some(value => value < 0)))
-        return 'Il blocco “' + group.label + '” contiene valori negativi: non può rappresentare parti di un totale.';
-      if (kind === "abundance" && group.features.some(feature => featureValues(feature).some(value => value < 0)))
-        return 'Il blocco “' + group.label + '” contiene valori negativi: non è un blocco di quantità non negative.';
-      const measures = candidatesFor(group, kind, qualifier);
+      const answers = state.semanticAnswers[group.key] || {};
+      const missing = missingAnswer(group, answers);
+      if (missing) return 'Completa ' + missing + ' nel blocco “' + group.label + '”.';
+      const measures = candidatesFor(group, answers);
       if (!measures.length) return 'Nessuna misura candidata per il blocco “' + group.label + '”.';
       entries.push({id:group.key, label:group.label, columns:group.features.map(feature => feature.key),
-        meaning:kind, qualifier, scaling:state.scaling[group.key], candidateMeasures:measures});
+        semanticAnswers:{...answers}, scaling:state.scaling[group.key], candidateMeasures:measures});
     }
     state.candidateMeasures = entries;
     try {
@@ -316,14 +385,18 @@
   });
 
   $("meaning-controls").addEventListener("change", event => {
-    const select = event.target;
-    if (select.matches(".meaning-choice")) {
-      state.meaning[select.dataset.group] = select.value;
-      delete state.qualifiers[select.dataset.group];
-      renderMeaningControls();
-    } else if (select.matches(".binary-choice, .temporal-choice")) {
-      state.qualifiers[select.dataset.group] = select.value;
-    }
+    const input = event.target.closest('input[type="radio"][data-question]');
+    if (!input) return;
+    state.semanticAnswers[input.dataset.group] ??= {};
+    const answers = state.semanticAnswers[input.dataset.group];
+    answers[input.dataset.question] = input.value;
+    const dependants = {
+      parts:["temporal","alignment","profile","profileKind","abundance"],
+      temporal:["alignment","profile","profileKind","abundance"],
+      profile:["profileKind","abundance"]
+    };
+    for (const key of dependants[input.dataset.question] || []) delete answers[key];
+    renderMeaningControls();
     $("meaning-error").hidden = true;
   });
 

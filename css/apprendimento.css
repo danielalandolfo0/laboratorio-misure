@@ -26,12 +26,20 @@
 .block-scaling-choice select { min-width:0; margin-top:8px; }
 .learning-scaling-wrap .scaling-table { min-width:620px; }
 .scaling-after-note { margin:14px 0 0; }
-.meaning-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:14px; }
-.meaning-item { min-width:0; padding:16px; border:1px solid rgba(8,124,255,.16); border-radius:16px; background:rgba(8,124,255,.045); }
-.meaning-item label { margin:0 0 8px; font-size:1rem; }
-.meaning-item label:not(:first-child) { margin-top:18px; }
-.meaning-item p { margin:0 0 12px; color:var(--muted); }
-.meaning-item select { min-width:0; }
+.meaning-grid { display:grid; gap:16px; }
+.meaning-item { min-width:0; padding:20px; border:1px solid rgba(8,124,255,.16); border-radius:16px; background:rgba(8,124,255,.045); }
+.meaning-item h3 { margin:0; font-size:1.18rem; }
+.meaning-columns { margin:4px 0 0; color:var(--muted); }
+.meaning-question { min-width:0; margin:20px 0 0; padding:0; border:0; }
+.meaning-question legend { width:100%; padding:0; font-size:1rem; font-weight:760; line-height:1.45; }
+.meaning-options { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.meaning-options label { position:relative; margin:0; cursor:pointer; }
+.meaning-options input { position:absolute; opacity:0; pointer-events:none; }
+.meaning-options span { display:block; padding:9px 13px; border:1px solid rgba(8,124,255,.22); border-radius:11px; background:white; color:var(--ink); font-size:.94rem; font-weight:680; line-height:1.3; transition:border-color .15s ease,background .15s ease,box-shadow .15s ease; }
+.meaning-options label:hover span { border-color:rgba(8,124,255,.52); }
+.meaning-options input:checked + span { border-color:var(--blue); background:rgba(8,124,255,.1); box-shadow:inset 0 0 0 1px var(--blue); color:var(--blue-dark); }
+.meaning-options input:focus-visible + span { outline:3px solid rgba(8,124,255,.23); outline-offset:2px; }
+.single-column-note { margin:16px 0 0; color:var(--muted); }
 #meaning-error { margin-top:14px; }
 .comparison-stage { padding:28px; }
 .comparison-heading { display:flex; justify-content:space-between; align-items:end; gap:24px; }
@@ -76,4 +84,6 @@
   .comparison-actions button { width:100%; }
   .batch-actions { flex-direction:column-reverse; }
   .batch-actions button { width:100%; }
+  .meaning-options { display:grid; grid-template-columns:1fr; }
+  .meaning-options span { width:100%; }
 }

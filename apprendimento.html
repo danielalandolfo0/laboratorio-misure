@@ -6,7 +6,7 @@
   <meta name="description" content="Prototipo per raccogliere giudizi di similarità sul dataset Linnerud.">
   <title>Impara dalle tue scelte · Laboratorio delle misure</title>
   <link rel="stylesheet" href="css/stile.css?v=20261119-apprendimento1">
-  <link rel="stylesheet" href="css/apprendimento.css?v=20261120-1">
+  <link rel="stylesheet" href="css/apprendimento.css?v=20261120-2">
 </head>
 <body>
   <header class="shell learning-header">
@@ -65,11 +65,11 @@
 
     <section class="card setup-card" id="meaning-stage" hidden aria-labelledby="meaning-title">
       <p class="section-label">Fase 3 · Significato dei blocchi</p>
-      <h2 id="meaning-title">Che cosa rappresentano insieme le colonne?</h2>
-      <p class="stage-intro">Controlla la proposta per ogni blocco. Le tue scelte nelle tre schede aiuteranno poi a distinguere le misure candidate.</p>
+      <h2 id="meaning-title">Aiutaci a capire che cosa descrivono i dati</h2>
+      <p class="stage-intro">Rispondi pensando al significato delle colonne. Se non conosci una risposta, scegli “Non sono sicuro”: il sito conserverà tutte le possibilità compatibili.</p>
       <div class="meaning-grid" id="meaning-controls"></div>
       <p class="error" id="meaning-error" role="alert" hidden></p>
-      <div class="stage-actions"><button class="action" id="confirm-meaning" type="button">Conferma e inizia i confronti</button></div>
+      <div class="stage-actions"><button class="action" id="confirm-meaning" type="button" disabled>Conferma e inizia i confronti</button></div>
     </section>
 
     <section class="card comparison-stage" id="comparison-stage" hidden aria-labelledby="comparison-title">
@@ -104,7 +104,7 @@
     </section>
   </main>
 
-  <script src="js/candidate-measures.js?v=20261120-1"></script>
-  <script src="js/apprendimento.js?v=20261120-1"></script>
+  <script src="js/candidate-measures.js?v=20261120-2"></script>
+  <script src="js/apprendimento.js?v=20261120-2"></script>
 </body>
 </html>
