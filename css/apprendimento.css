@@ -71,6 +71,16 @@
 .batch-card p:not(.section-label), .completion-card p:not(.section-label) { max-width:680px; margin:10px auto 20px; color:var(--muted); }
 .batch-actions { display:flex; justify-content:center; gap:10px; }
 .batch-actions button, .completion-card .action { width:auto; margin:0; }
+.result-status { margin:18px auto; color:var(--muted); }
+.learning-result { max-width:720px; margin:24px auto; text-align:left; }
+.learning-result[hidden] { display:none; }
+.result-score { display:flex; align-items:baseline; justify-content:center; gap:12px; margin-bottom:20px; text-align:center; }
+.result-score strong { color:var(--blue-dark); font-size:clamp(2.3rem,6vw,4rem); line-height:1; letter-spacing:-.05em; }
+.result-score span { color:var(--muted); font-weight:700; }
+.result-table-wrap { overflow-x:auto; border:1px solid rgba(8,124,255,.14); border-radius:15px; }
+.result-table { min-width:520px; margin:0; }
+.result-table th:last-child, .result-table td:last-child { width:110px; text-align:right; font-variant-numeric:tabular-nums; }
+#training-error { max-width:680px; margin:18px auto; }
 @media (max-width:900px) {
   .comparison-heading { align-items:stretch; flex-direction:column; }
   .progress-track { flex:none; width:100%; }
@@ -86,4 +96,5 @@
   .batch-actions button { width:100%; }
   .meaning-options { display:grid; grid-template-columns:1fr; }
   .meaning-options span { width:100%; }
+  .result-score { align-items:center; flex-direction:column; gap:5px; }
 }

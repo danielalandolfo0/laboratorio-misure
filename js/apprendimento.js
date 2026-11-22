@@ -96,6 +96,29 @@
     return "—";
   }
 
+  function scaledFeatureValues(feature, method) {
+    const values = featureValues(feature);
+    if (method === "zscore") {
+      const average = mean(values);
+      const deviation = Math.sqrt(values.reduce((total,value) => total + (value - average) ** 2, 0) / values.length);
+      return values.map(value => deviation ? (value - average) / deviation : 0);
+    }
+    if (method === "robust") {
+      const median = percentile(values,.5);
+      const range = percentile(values,.75) - percentile(values,.25);
+      return values.map(value => range ? (value - median) / range : 0);
+    }
+    if (method === "minmax") {
+      const minimum = Math.min(...values), range = Math.max(...values) - minimum;
+      return values.map(value => range ? (value - minimum) / range : 0);
+    }
+    if (method === "maxabs") {
+      const maximum = Math.max(...values.map(Math.abs));
+      return values.map(value => maximum ? value / maximum : 0);
+    }
+    return [...values];
+  }
+
   function renderGroupAssignments() {
     $("learning-group-assignment-body").innerHTML = FEATURES.map(feature =>
       '<tr><th scope="row">' + feature.label + '</th><td><select class="column-choice learning-group-assignment" data-feature="' + feature.key + '" aria-label="Gruppo della colonna ' + feature.label + '">' +
@@ -292,6 +315,51 @@
     return null;
   }
 
+  function trainingBlocks() {
+    const groups = activeGroups();
+    return state.candidateMeasures.map(block => {
+      const group = groups.find(candidate => candidate.key === block.id);
+      const columns = group.features.map(feature => scaledFeatureValues(feature,block.scaling));
+      return {
+        id:block.id,
+        label:block.label,
+        candidateMeasures:block.candidateMeasures,
+        vectors:LINNERUD.map((_,row) => columns.map(column => column[row]))
+      };
+    });
+  }
+
+  function renderLearningResult() {
+    $("training-status").hidden = false;
+    $("training-status").textContent = "Calcolo del risultato…";
+    $("training-error").hidden = true;
+    $("learning-result").hidden = true;
+    try {
+      const result = window.LearningTrainer.train({
+        rowIds:LINNERUD.map(row => row.id),
+        blocks:trainingBlocks(),
+        answers:state.answers,
+        gamma:.05,
+        lambda:.01
+      });
+      $("result-rate").textContent = new Intl.NumberFormat("it-IT", {style:"percent",maximumFractionDigits:0}).format(result.rate);
+      $("result-respected").textContent = result.respected + " su " + result.total + " scelte";
+      $("result-measures-body").innerHTML = result.blocks.map(block =>
+        '<tr><th scope="row">' + block.label + '</th><td>' + block.measureLabel + '</td><td>' +
+        new Intl.NumberFormat("it-IT", {style:"percent",maximumFractionDigits:1}).format(block.weight) + '</td></tr>'
+      ).join("");
+      $("training-status").hidden = true;
+      $("learning-result").hidden = false;
+      try {
+        sessionStorage.setItem("laboratorio-misure:apprendimento-result:v1", JSON.stringify(result));
+      } catch (_) { /* La sessione può non consentire la memorizzazione. */ }
+    } catch (error) {
+      $("training-status").hidden = true;
+      $("training-error").textContent = error.message || "Non è stato possibile calcolare il risultato.";
+      $("training-error").hidden = false;
+    }
+  }
+
   function measureGroupHtml(title, features, item) {
     if (!features.length) return "";
     return '<span class="measure-group"><span class="measure-group-title">' + title + '</span><dl class="measure-list">' +
@@ -433,8 +501,9 @@
 
   $("stop-comparisons").addEventListener("click", () => {
     $("batch-card").hidden = true;
-    $("completion-title").textContent = "Raccolta conclusa dopo " + state.step + " scelte";
+    $("completion-title").textContent = "Risultato dopo " + state.step + " scelte";
     showStage("completion-card");
+    renderLearningResult();
   });
 
   $("restart-comparisons").addEventListener("click", () => {
@@ -444,6 +513,8 @@
     state.selected.clear();
     state.seed = 1947;
     $("completion-card").hidden = true;
+    $("learning-result").hidden = true;
+    $("training-error").hidden = true;
     renderStep();
     showStage("comparison-stage");
   });

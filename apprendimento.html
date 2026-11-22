@@ -97,14 +97,28 @@
     </section>
 
     <section class="card completion-card" id="completion-card" hidden aria-labelledby="completion-title">
-      <p class="section-label">Prima raccolta completata</p>
-      <h2 id="completion-title">Raccolta conclusa</h2>
-      <p>Ogni scelta determina due confronti di distanza. Le risposte saranno usate per confrontare le misure compatibili con i due blocchi e imparare il loro peso relativo.</p>
+      <p class="section-label">Distanza appresa</p>
+      <h2 id="completion-title">Risultato</h2>
+      <p class="result-status" id="training-status">Calcolo del risultato…</p>
+      <p class="error" id="training-error" role="alert" hidden></p>
+      <div class="learning-result" id="learning-result" hidden>
+        <div class="result-score">
+          <strong id="result-rate">0%</strong>
+          <span id="result-respected">0 su 0 scelte</span>
+        </div>
+        <div class="data-table-wrap result-table-wrap">
+          <table class="data-table result-table">
+            <thead><tr><th>Blocco</th><th>Misura scelta</th><th>Peso</th></tr></thead>
+            <tbody id="result-measures-body"></tbody>
+          </table>
+        </div>
+      </div>
       <button class="action" id="restart-comparisons" type="button">Ricomincia</button>
     </section>
   </main>
 
-  <script src="js/candidate-measures.js?v=20261120-3"></script>
-  <script src="js/apprendimento.js?v=20261120-3"></script>
+  <script src="js/candidate-measures.js?v=20261122-1"></script>
+  <script src="js/metric-learning.js?v=20261122-1"></script>
+  <script src="js/apprendimento.js?v=20261122-1"></script>
 </body>
 </html>
