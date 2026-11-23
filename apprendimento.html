@@ -6,7 +6,7 @@
   <meta name="description" content="Prototipo per raccogliere giudizi di similarità sul dataset Linnerud.">
   <title>Impara dalle tue scelte · Laboratorio delle misure</title>
   <link rel="stylesheet" href="css/stile.css?v=20261119-apprendimento1">
-  <link rel="stylesheet" href="css/apprendimento.css?v=20261123-1">
+  <link rel="stylesheet" href="css/apprendimento.css?v=20261123-2">
 </head>
 <body>
   <header class="shell learning-header">
@@ -113,13 +113,25 @@
             <tbody id="result-measures-body"></tbody>
           </table>
         </div>
+        <div class="rank-result">
+          <div class="rank-result-heading">
+            <h3>Matrice dei ranghi</h3>
+            <button class="secondary-action" id="download-ranks" type="button">Scarica CSV</button>
+          </div>
+          <div class="rank-table-wrap">
+            <table class="rank-table">
+              <thead id="rank-matrix-head"></thead>
+              <tbody id="rank-matrix-body"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
       <button class="action" id="restart-comparisons" type="button">Ricomincia</button>
     </section>
   </main>
 
   <script src="js/candidate-measures.js?v=20261122-1"></script>
-  <script src="js/metric-learning.js?v=20261123-1"></script>
-  <script src="js/apprendimento.js?v=20261123-1"></script>
+  <script src="js/metric-learning.js?v=20261123-2"></script>
+  <script src="js/apprendimento.js?v=20261123-2"></script>
 </body>
 </html>
