@@ -493,6 +493,11 @@
     $("comparison-stage").scrollIntoView({behavior: "smooth", block: "start"});
   });
 
+  $("skip-comparison").addEventListener("click", () => {
+    renderStep();
+    $("comparison-stage").scrollIntoView({behavior: "smooth", block: "start"});
+  });
+
   $("continue-comparisons").addEventListener("click", () => {
     $("batch-card").hidden = true;
     renderStep();
