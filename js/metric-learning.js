@@ -273,14 +273,24 @@
         best = {choice,weights:fitted.weights,objective:fitted.objective};
     }
     let respected = 0;
+    const combined = (i,j) => sum(best.choice.map((option,r) => best.weights[r] * option.matrix[i][j]));
     for (const answer of answers) {
       const a = indexById.get(answer.chosen[0]);
       const b = indexById.get(answer.chosen[1]);
       const c = indexById.get(answer.excluded);
-      const combined = (i,j) => sum(best.choice.map((option,r) => best.weights[r] * option.matrix[i][j]));
       const selected = combined(a,b);
       if (selected <= combined(a,c) + 1e-12 && selected <= combined(b,c) + 1e-12) respected++;
     }
+    const rankMatrix = rowIds.map((_,i) => {
+      const ordered = rowIds.map((id,j) => ({id,j,distance:combined(i,j)})).sort((first,second) => {
+        const difference = first.distance - second.distance;
+        if (Math.abs(difference) > 1e-12) return difference;
+        return String(first.id).localeCompare(String(second.id),undefined,{numeric:true});
+      });
+      const ranks = Array(rowIds.length);
+      ordered.forEach((item,position) => { ranks[item.j] = position + 1; });
+      return ranks;
+    });
     return {
       blocks:prepared.map((block,r) => ({
         id:block.id,
@@ -295,7 +305,9 @@
       objective:best.objective,
       configurations:choices.length,
       constraintsUsed:constraints.retained.length,
-      contradictoryConstraintsRemoved:constraints.removed
+      contradictoryConstraintsRemoved:constraints.removed,
+      rowIds:[...rowIds],
+      rankMatrix
     };
   }
 
