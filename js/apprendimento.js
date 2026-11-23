@@ -348,6 +348,13 @@
         '<tr><th scope="row">' + block.label + '</th><td>' + block.measureLabel + '</td><td>' +
         new Intl.NumberFormat("it-IT", {style:"percent",maximumFractionDigits:1}).format(block.weight) + '</td></tr>'
       ).join("");
+      $("rank-matrix-head").innerHTML = '<tr><th scope="col">Istanza</th>' + result.rowIds.map(id =>
+        '<th scope="col">' + id + '</th>').join("") + '</tr>';
+      $("rank-matrix-body").innerHTML = result.rankMatrix.map((row,index) =>
+        '<tr><th scope="row">' + result.rowIds[index] + '</th>' +
+        row.map(rank => '<td>' + rank + '</td>').join("") + '</tr>'
+      ).join("");
+      $("download-ranks").onclick = () => downloadRankMatrix(result);
       $("training-status").hidden = true;
       $("learning-result").hidden = false;
       try {
@@ -358,6 +365,23 @@
       $("training-error").textContent = error.message || "Non è stato possibile calcolare il risultato.";
       $("training-error").hidden = false;
     }
+  }
+
+  function downloadRankMatrix(result) {
+    const escapeCsv = value => '"' + String(value).replaceAll('"','""') + '"';
+    const rows = [
+      ["Istanza",...result.rowIds],
+      ...result.rankMatrix.map((ranks,index) => [result.rowIds[index],...ranks])
+    ];
+    const csv = rows.map(row => row.map(escapeCsv).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob(["\ufeff" + csv], {type:"text/csv;charset=utf-8"}));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "matrice-ranghi.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   function measureGroupHtml(title, features, item) {
