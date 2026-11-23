@@ -80,6 +80,18 @@
 .result-table-wrap { overflow-x:auto; border:1px solid rgba(8,124,255,.14); border-radius:15px; }
 .result-table { min-width:520px; margin:0; }
 .result-table th:last-child, .result-table td:last-child { width:110px; text-align:right; font-variant-numeric:tabular-nums; }
+.rank-result { margin-top:24px; }
+.rank-result-heading { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:10px; }
+.rank-result-heading h3 { margin:0; font-size:1.18rem; }
+.rank-result-heading button { width:auto; margin:0; }
+.rank-table-wrap { max-width:100%; overflow:auto; border:1px solid rgba(8,124,255,.14); border-radius:15px; }
+.rank-table { width:max-content; min-width:100%; border-collapse:separate; border-spacing:0; background:white; font-variant-numeric:tabular-nums; }
+.rank-table th, .rank-table td { min-width:48px; padding:9px 10px; border-right:1px solid rgba(111,124,148,.12); border-bottom:1px solid rgba(111,124,148,.12); text-align:center; }
+.rank-table thead th { position:sticky; top:0; z-index:2; color:var(--blue-dark); background:#f4f8ff; }
+.rank-table tbody th { position:sticky; left:0; z-index:1; color:var(--blue-dark); background:#f4f8ff; }
+.rank-table thead th:first-child { left:0; z-index:3; }
+.rank-table tr:last-child > * { border-bottom:0; }
+.rank-table tr > *:last-child { border-right:0; }
 #training-error { max-width:680px; margin:18px auto; }
 @media (max-width:900px) {
   .comparison-heading { align-items:stretch; flex-direction:column; }
@@ -97,4 +109,6 @@
   .meaning-options { display:grid; grid-template-columns:1fr; }
   .meaning-options span { width:100%; }
   .result-score { align-items:center; flex-direction:column; gap:5px; }
+  .rank-result-heading { align-items:stretch; flex-direction:column; }
+  .rank-result-heading button { width:100%; }
 }
