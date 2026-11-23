@@ -209,9 +209,48 @@
     return result;
   }
 
+  function pairKey(first,second) {
+    return first < second ? first + ":" + second : second + ":" + first;
+  }
+
+  function consistentConstraints(answers) {
+    const constraints = [];
+    const directions = new Set();
+    for (const answer of answers) {
+      const [a,b] = answer.chosen;
+      const selected = pairKey(a,b);
+      for (const alternative of [pairKey(a,answer.excluded), pairKey(b,answer.excluded)]) {
+        const key = selected + "<" + alternative;
+        constraints.push({left:selected,right:alternative,answer});
+        directions.add(key);
+      }
+    }
+    const contradictory = new Set();
+    for (const constraint of constraints) {
+      const key = constraint.left + "<" + constraint.right;
+      const reverse = constraint.right + "<" + constraint.left;
+      if (directions.has(reverse)) {
+        contradictory.add(key);
+        contradictory.add(reverse);
+      }
+    }
+    return {
+      retained:constraints.filter(constraint => !contradictory.has(constraint.left + "<" + constraint.right)),
+      removed:constraints.filter(constraint => contradictory.has(constraint.left + "<" + constraint.right)).length
+    };
+  }
+
+  function pairIndices(key,indexById) {
+    const [first,second] = key.split(":").map(Number);
+    return [indexById.get(first),indexById.get(second)];
+  }
+
   function train({rowIds,blocks,answers,gamma=.05,lambda=.01}) {
     if (!answers.length) throw new Error("Non ci sono scelte da utilizzare.");
     const indexById = new Map(rowIds.map((id,index) => [id,index]));
+    const constraints = consistentConstraints(answers);
+    if (!constraints.retained.length)
+      throw new Error("Le scelte producono soltanto disuguaglianze contraddittorie.");
     const prepared = blocks.map(block => {
       const options = block.candidateMeasures.map(measure => ({
         measure,
@@ -224,12 +263,10 @@
     let best = null;
     for (const choice of choices) {
       const deltas = [];
-      for (const answer of answers) {
-        const a = indexById.get(answer.chosen[0]);
-        const b = indexById.get(answer.chosen[1]);
-        const c = indexById.get(answer.excluded);
-        deltas.push(choice.map(option => option.matrix[a][b] - option.matrix[a][c]));
-        deltas.push(choice.map(option => option.matrix[a][b] - option.matrix[b][c]));
+      for (const constraint of constraints.retained) {
+        const [a,b] = pairIndices(constraint.left,indexById);
+        const [c,d] = pairIndices(constraint.right,indexById);
+        deltas.push(choice.map(option => option.matrix[a][b] - option.matrix[c][d]));
       }
       const fitted = optimizeWeights(deltas,prepared.length,gamma,lambda);
       if (!best || fitted.objective < best.objective - 1e-12)
@@ -256,9 +293,11 @@
       total:answers.length,
       rate:respected / answers.length,
       objective:best.objective,
-      configurations:choices.length
+      configurations:choices.length,
+      constraintsUsed:constraints.retained.length,
+      contradictoryConstraintsRemoved:constraints.removed
     };
   }
 
-  window.LearningTrainer = Object.freeze({train,labels:LABELS});
+  window.LearningTrainer = Object.freeze({train,labels:LABELS,consistentConstraints});
 })();
