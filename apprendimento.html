@@ -6,7 +6,7 @@
   <meta name="description" content="Prototipo per raccogliere giudizi di similarità sul dataset Linnerud.">
   <title>Impara dalle tue scelte · Laboratorio delle misure</title>
   <link rel="stylesheet" href="css/stile.css?v=20261119-apprendimento1">
-  <link rel="stylesheet" href="css/apprendimento.css?v=20261124-1">
+  <link rel="stylesheet" href="css/apprendimento.css?v=20261124-2">
 </head>
 <body>
   <header class="shell learning-header">
@@ -128,7 +128,7 @@
         <section class="nearest-result" id="nearest-result" hidden aria-labelledby="nearest-title">
           <h3 id="nearest-title"></h3>
           <div class="rank-table-wrap"><table class="rank-table nearest-table">
-            <thead><tr><th>Rango</th><th>Istanza</th><th>Trazioni</th><th>Addominali</th><th>Salti</th><th>Peso (lb)</th><th>Vita (in)</th><th>Frequenza (bpm)</th></tr></thead>
+            <thead><tr><th class="nearest-rank" aria-label="Rango"></th><th>Istanza</th><th>Trazioni</th><th>Addominali</th><th>Salti</th><th>Peso (lb)</th><th>Vita (in)</th><th>Frequenza (bpm)</th></tr></thead>
             <tbody id="nearest-body"></tbody>
           </table></div>
         </section>
@@ -139,6 +139,6 @@
 
   <script src="js/candidate-measures.js?v=20261122-1"></script>
   <script src="js/metric-learning.js?v=20261123-2"></script>
-  <script src="js/apprendimento.js?v=20261124-1"></script>
+  <script src="js/apprendimento.js?v=20261124-2"></script>
 </body>
 </html>
