@@ -97,6 +97,9 @@
 .nearest-result { margin-top:24px; }
 .nearest-result[hidden] { display:none; }
 .nearest-result h3 { margin:0 0 10px; font-size:1.18rem; }
+.nearest-table .nearest-rank { min-width:34px; width:34px; padding:8px 5px; border:0; background:transparent; color:var(--muted); font-size:.78rem; font-weight:600; }
+.nearest-table thead .nearest-rank { background:transparent; }
+.nearest-table tbody th { background:#e9f4ff; }
 #training-error { max-width:680px; margin:18px auto; }
 @media (max-width:900px) {
   .comparison-heading { align-items:stretch; flex-direction:column; }
