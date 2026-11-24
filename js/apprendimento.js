@@ -32,7 +32,7 @@
     {key:"waist", label:"Circonferenza vita", field:"physiological", index:1, unit:"in", proposedGroup:"physiological"},
     {key:"pulse", label:"Frequenza cardiaca", field:"physiological", index:2, unit:"bpm", proposedGroup:"physiological"}
   ];
-  const state = {step: 0, selected: new Set(), answers: [], current: [], usedTriples: new Set(), seed: 1947};
+  const state = {step: 0, selected: new Set(), answers: [], current: [], usedTriples: new Set(), seed: 1947, transitionLocked:false};
   state.assignments = Object.fromEntries(FEATURES.map(feature => [feature.key, feature.proposedGroup]));
   state.scaling = {exercise:"zscore", physiological:"zscore"};
   state.semanticAnswers = {};
@@ -379,6 +379,7 @@
       $("training-status").hidden = true;
       $("training-error").textContent = error.message || "Non è stato possibile calcolare il risultato.";
       $("training-error").hidden = false;
+      $("learning-result").hidden = true;
     }
   }
 
@@ -517,7 +518,9 @@
   });
 
   $("next-comparison").addEventListener("click", () => {
-    if (state.selected.size !== 2) return;
+    if (state.selected.size !== 2 || state.transitionLocked) return;
+    state.transitionLocked = true;
+    $("next-comparison").disabled = true;
     const chosen = [...state.selected];
     const excluded = state.current.find(item => !state.selected.has(item.id)).id;
     state.answers.push({step: state.step + 1, candidates: state.current.map(item => item.id), chosen, excluded});
@@ -525,10 +528,18 @@
     if (state.step % BATCH_SIZE === 0) {
       $("comparison-stage").hidden = true;
       $("batch-title").textContent = "Hai effettuato " + state.step + " scelte";
+      $("stop-comparisons").disabled = true;
+      $("continue-comparisons").disabled = true;
       showStage("batch-card");
+      window.setTimeout(() => {
+        state.transitionLocked = false;
+        $("stop-comparisons").disabled = false;
+        $("continue-comparisons").disabled = false;
+      }, 600);
       return;
     }
     renderStep();
+    state.transitionLocked = false;
     $("comparison-stage").scrollIntoView({behavior: "smooth", block: "start"});
   });
 
@@ -538,16 +549,24 @@
   });
 
   $("continue-comparisons").addEventListener("click", () => {
+    if (state.transitionLocked) return;
     $("batch-card").hidden = true;
     renderStep();
     showStage("comparison-stage");
   });
 
   $("stop-comparisons").addEventListener("click", () => {
+    if (state.transitionLocked) return;
+    state.transitionLocked = true;
     $("batch-card").hidden = true;
     $("completion-title").textContent = "Risultato dopo " + state.step + " scelte";
+    $("training-status").hidden = false;
+    $("training-status").textContent = "Calcolo del risultato…";
+    $("training-error").hidden = true;
+    $("learning-result").hidden = true;
     showStage("completion-card");
     renderLearningResult();
+    state.transitionLocked = false;
   });
 
   $("restart-comparisons").addEventListener("click", () => {
@@ -556,6 +575,7 @@
     state.usedTriples.clear();
     state.selected.clear();
     state.seed = 1947;
+    state.transitionLocked = false;
     $("completion-card").hidden = true;
     $("learning-result").hidden = true;
     $("training-error").hidden = true;
