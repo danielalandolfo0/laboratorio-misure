@@ -92,6 +92,11 @@
 .rank-table thead th:first-child { left:0; z-index:3; }
 .rank-table tr:last-child > * { border-bottom:0; }
 .rank-table tr > *:last-child { border-right:0; }
+.rank-row-button { border:0; background:transparent; color:var(--blue-dark); font:inherit; font-weight:800; text-decoration:underline; cursor:pointer; }
+.rank-row-button:focus-visible { outline:3px solid var(--blue); border-radius:4px; }
+.nearest-result { margin-top:24px; }
+.nearest-result[hidden] { display:none; }
+.nearest-result h3 { margin:0 0 10px; font-size:1.18rem; }
 #training-error { max-width:680px; margin:18px auto; }
 @media (max-width:900px) {
   .comparison-heading { align-items:stretch; flex-direction:column; }
