@@ -349,13 +349,13 @@
         new Intl.NumberFormat("it-IT", {style:"percent",maximumFractionDigits:1}).format(block.weight) + '</td></tr>'
       ).join("");
       $("rank-matrix-head").innerHTML = '<tr><th scope="col">Istanza</th>' + result.rowIds.map(id =>
-        '<th scope="col">' + id + '</th>').join("") + '</tr>';
+        '<th scope="col"><button class="rank-row-button" type="button" data-row="' + result.rowIds.indexOf(id) + '" aria-label="Mostra le istanze vicine alla ' + id + '">' + id + '</button></th>').join("") + '</tr>';
       $("rank-matrix-body").innerHTML = result.rankMatrix.map((row,index) =>
         '<tr><th scope="row"><button class="rank-row-button" type="button" data-row="' + index + '" aria-label="Mostra le istanze vicine alla ' + result.rowIds[index] + '">' + result.rowIds[index] + '</button></th>' +
         row.map(rank => '<td>' + rank + '</td>').join("") + '</tr>'
       ).join("");
       $("nearest-result").hidden = true;
-      $("rank-matrix-body").onclick = event => {
+      $("rank-matrix-head").onclick = $("rank-matrix-body").onclick = event => {
         const button = event.target.closest(".rank-row-button");
         if (!button) return;
         const index = Number(button.dataset.row);
@@ -363,7 +363,7 @@
           .sort((a,b) => a.rank - b.rank);
         $("nearest-title").textContent = "Istanze vicine alla " + result.rowIds[index];
         $("nearest-body").innerHTML = ordered.map(({item,rank}) =>
-          '<tr><td>' + rank + '</td><th scope="row">' + item.id + '</th>' +
+          '<tr><td class="nearest-rank">' + rank + '</td><th scope="row">' + item.id + '</th>' +
           [...item.exercise,...item.physiological].map(value => '<td>' + value + '</td>').join("") + '</tr>'
         ).join("");
         $("nearest-result").hidden = false;
