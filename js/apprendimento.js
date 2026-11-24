@@ -351,9 +351,24 @@
       $("rank-matrix-head").innerHTML = '<tr><th scope="col">Istanza</th>' + result.rowIds.map(id =>
         '<th scope="col">' + id + '</th>').join("") + '</tr>';
       $("rank-matrix-body").innerHTML = result.rankMatrix.map((row,index) =>
-        '<tr><th scope="row">' + result.rowIds[index] + '</th>' +
+        '<tr><th scope="row"><button class="rank-row-button" type="button" data-row="' + index + '" aria-label="Mostra le istanze vicine alla ' + result.rowIds[index] + '">' + result.rowIds[index] + '</button></th>' +
         row.map(rank => '<td>' + rank + '</td>').join("") + '</tr>'
       ).join("");
+      $("nearest-result").hidden = true;
+      $("rank-matrix-body").onclick = event => {
+        const button = event.target.closest(".rank-row-button");
+        if (!button) return;
+        const index = Number(button.dataset.row);
+        const ordered = LINNERUD.map((item,column) => ({item,rank:result.rankMatrix[index][column]}))
+          .sort((a,b) => a.rank - b.rank);
+        $("nearest-title").textContent = "Istanze vicine alla " + result.rowIds[index];
+        $("nearest-body").innerHTML = ordered.map(({item,rank}) =>
+          '<tr><td>' + rank + '</td><th scope="row">' + item.id + '</th>' +
+          [...item.exercise,...item.physiological].map(value => '<td>' + value + '</td>').join("") + '</tr>'
+        ).join("");
+        $("nearest-result").hidden = false;
+        $("nearest-result").scrollIntoView({behavior:"smooth",block:"start"});
+      };
       $("download-ranks").onclick = () => downloadRankMatrix(result);
       $("training-status").hidden = true;
       $("learning-result").hidden = false;
