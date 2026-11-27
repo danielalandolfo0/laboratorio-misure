@@ -153,7 +153,22 @@
       const result = window.LearningTrainer.train({rowIds:rows.map(row => row._learningId),blocks,answers});
       $("papila-result").textContent = "La distanza rispetta " + result.respected + " delle " + result.total + " scelte.";
       $("papila-weights").innerHTML = result.blocks.map(block => '<tr><th scope="row">' + escape(block.label) + ' · ' + escape(block.measureLabel) + '</th><td>' + (100 * block.weight).toFixed(1) + '%</td></tr>').join("");
-    } catch (error) { $("papila-result").textContent = error.message; $("papila-weights").innerHTML = ""; }
+      $("papila-reference").innerHTML = rows.map((row,index) => '<option value="' + index + '">' + escape(row.patient_id) + '</option>').join("");
+      const showRanking = () => {
+        const index = Number($("papila-reference").value);
+        const ordered = rows.map((row,j) => ({row,rank:result.rankMatrix[index][j]}))
+          .filter(item => item.row !== rows[index]).sort((a,b) => a.rank - b.rank).slice(0,10);
+        $("papila-nearest").innerHTML = ordered.map(({row,rank}) => '<li><button type="button" data-patient-index="' + rows.indexOf(row) + '">' + escape(row.patient_id) + '</button> · rango ' + rank + '</li>').join("");
+        $("papila-nearest-card").innerHTML = "";
+      };
+      $("papila-reference").onchange = showRanking;
+      $("papila-ranking").hidden = false;
+      showRanking();
+    } catch (error) { $("papila-result").textContent = error.message; $("papila-weights").innerHTML = ""; $("papila-ranking").hidden = true; }
   });
   $("papila-restart").addEventListener("click", () => { $("papila-setup").hidden = false; $("papila-completion").hidden = true; setup(); });
+  $("papila-nearest").addEventListener("click", event => {
+    const button = event.target.closest("button[data-patient-index]");
+    if (button) $("papila-nearest-card").innerHTML = card(rows[Number(button.dataset.patientIndex)]);
+  });
 })();
