@@ -5,8 +5,14 @@
   <title>PAPILA · Impara dalle tue scelte</title>
   <link rel="stylesheet" href="css/stile.css"><link rel="stylesheet" href="css/apprendimento.css">
   <style>
-    .papila-options {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
-    .papila-options label {display:block;padding:12px;border:1px solid #ccd8e8;border-radius:12px}
+    .papila-options {display:grid;gap:14px}
+    .papila-options label {display:block}
+    .papila-table {width:100%;border-collapse:collapse}
+    .papila-table th,.papila-table td {padding:11px 13px;border-bottom:1px solid #dce4f0;text-align:left;vertical-align:middle}
+    .papila-table th:nth-child(n+3),.papila-table td:nth-child(n+3) {text-align:center}
+    .papila-table input[type=checkbox] {width:20px;height:20px;accent-color:var(--blue)}
+    .papila-table small {color:var(--muted)}
+    .papila-table select {min-width:170px;max-width:100%}
     .papila-images {display:flex;gap:8px;flex-wrap:wrap}
     .papila-images figure {width:calc(50% - 4px);min-width:110px;margin:0}
     .papila-images img {max-width:100%;height:130px;object-fit:contain}
@@ -18,11 +24,14 @@
   <header class="shell learning-header"><a class="back-link" href="index.html">Torna alla scelta del dataset</a><p class="section-label">Dataset PAPILA</p><h1>Confronta pazienti con le fotografie dei due occhi</h1></header>
   <main class="shell learning-main">
     <section class="card setup-card" id="papila-setup">
-      <h2>Dataset PAPILA</h2>
-      <p>I dati clinici e le fotografie dei due occhi sono già collegati ai pazienti. Le diagnosi OD e OS non vengono mostrate durante le scelte.</p>
+      <p class="section-label">Fase 1 · Caratteristiche disponibili</p><h2>Scegli che cosa usare e mostrare</h2>
+      <p>La tabella contiene tutti i dati PAPILA. Puoi cambiare le proposte del sito: «Usa nella distanza» decide il calcolo, «Mostra nella scheda» decide cosa vedrai nei confronti. Identificativo, diagnosi e immagini hanno vincoli indicati nella tabella.</p>
       <p id="papila-count" aria-live="polite"></p><p class="error" id="papila-error" role="alert" hidden></p>
-      <div id="papila-options" hidden><h3>Scegli le informazioni</h3><p>Il sito propone le misure numeriche. Per ciascuna puoi decidere separatamente se usarla nella distanza e se mostrarla nella scheda. Le fotografie possono essere mostrate, ma non entrano nel calcolo.</p><div class="papila-options" id="papila-features"></div><p><label><input id="papila-show-images" type="checkbox" checked> Mostra le fotografie OD e OS</label></p><h3>Come confrontare ciascuna caratteristica</h3><p>Le colonne OD e OS della stessa caratteristica formano un blocco. I valori sono riscalati separatamente tra 0 e 1; scegli come combinare i due scarti.</p><div class="papila-options" id="papila-measures"></div><button class="action" id="papila-start" type="button">Inizia i confronti</button></div>
+      <div id="papila-options" hidden><div class="data-table-wrap"><table class="papila-table"><thead><tr><th>Dato</th><th>Disponibilità</th><th>Usa nella distanza</th><th>Mostra nella scheda</th></tr></thead><tbody id="papila-features"></tbody></table></div><div class="stage-actions"><button class="action" id="papila-confirm-selection" type="button">Conferma le caratteristiche</button></div></div>
     </section>
+    <section class="card setup-card" id="papila-block-stage" hidden><p class="section-label">Fase 2 · Blocchi</p><h2>Conferma i blocchi proposti</h2><p>Le misure OD e OS dello stesso aspetto sono riunite. Puoi spostare ogni colonna in un altro blocco o lasciarla indipendente.</p><div class="data-table-wrap"><table class="papila-table"><thead><tr><th>Colonna usata</th><th>Blocco</th></tr></thead><tbody id="papila-blocks"></tbody></table></div><div class="stage-actions"><button class="secondary-action" data-back="papila-setup" type="button">Indietro: caratteristiche</button><button class="action" id="papila-confirm-blocks" type="button">Conferma i blocchi</button></div></section>
+    <section class="card setup-card" id="papila-scaling-stage" hidden><p class="section-label">Fase 3 · Riscalamento</p><h2>Conferma il riscalamento</h2><p>Ogni colonna è riscalata con i propri parametri. La scelta si applica alle colonne del blocco.</p><div class="papila-options" id="papila-scaling"></div><div class="stage-actions"><button class="secondary-action" data-back="papila-block-stage" type="button">Indietro: blocchi</button><button class="action" id="papila-confirm-scaling" type="button">Conferma il riscalamento</button></div></section>
+    <section class="card setup-card" id="papila-meaning-stage" hidden><p class="section-label">Fase 4 · Significato dei blocchi</p><h2>Come devono essere confrontati?</h2><p>Le risposte eliminano le misure incompatibili con ciò che intendi per somiglianza. «Non sono sicuro» conserva più possibilità, fra le quali il sito sceglierà usando i tuoi confronti.</p><div class="papila-options" id="papila-measures"></div><p class="error" id="papila-meaning-error" role="alert" hidden></p><div class="stage-actions"><button class="secondary-action" data-back="papila-scaling-stage" type="button">Indietro: riscalamento</button><button class="action" id="papila-start" type="button">Conferma e inizia i confronti</button></div></section>
     <section class="card comparison-stage" id="papila-comparison" hidden><h2>Seleziona i due pazienti più simili</h2><p id="papila-progress"></p><div class="candidate-grid" id="papila-candidates"></div><div class="comparison-actions"><button class="secondary-action" id="papila-skip" type="button">Salta</button><button class="action" id="papila-next" type="button" disabled>Conferma e continua</button></div></section>
     <section class="card completion-card" id="papila-completion" hidden><h2>Risultato delle scelte</h2><p id="papila-result"></p><div class="data-table-wrap"><table class="data-table"><thead><tr><th>Caratteristica e misura</th><th>Peso appreso</th></tr></thead><tbody id="papila-weights"></tbody></table></div><p>Le immagini sono state mostrate solo per il giudizio umano; il calcolo usa le misure numeriche selezionate.</p><div id="papila-ranking" hidden><h3>Casi ordinati per vicinanza</h3><label>Paziente di riferimento <select id="papila-reference"></select></label><ol id="papila-nearest"></ol><div id="papila-nearest-card"></div></div><button class="action" id="papila-restart" type="button">Ricomincia</button></section>
   </main>
