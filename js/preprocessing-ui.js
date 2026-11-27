@@ -4,6 +4,7 @@
   const $ = id => document.getElementById(id);
   const P = window.Preprocessing;
   let risultato = null;
+  const immaginiLocali = new Map();
   let tabellaOriginale = null;
   let testoOriginale = "";
   let scelte = [];
@@ -1360,8 +1361,12 @@
       const valore = String(valori[indice] ?? "");
       if (scelta.ruolo === "immagine") {
         let indirizzo;
-        try { indirizzo = new URL(valore); } catch (_) { return ""; }
-        if (indirizzo.protocol !== "https:") return "";
+        const locale = immaginiLocali.get(valore);
+        if (locale) indirizzo = {href: locale};
+        else {
+          try { indirizzo = new URL(valore); } catch (_) { return ""; }
+          if (indirizzo.protocol !== "https:") return "";
+        }
         return '<figure><img loading="lazy" style="max-width:260px;max-height:220px" src="' +
           escapeHtml(indirizzo.href) + '" alt="' + escapeHtml(nome) + '"><figcaption>' + escapeHtml(nome) + '</figcaption></figure>';
       }
@@ -2870,6 +2875,15 @@
 80,103,0,beta`;
 
   $("csv-file").addEventListener("change", evento => elaboraFile(evento.target.files[0]));
+  $("instance-images").addEventListener("change", evento => {
+    for (const indirizzo of immaginiLocali.values()) URL.revokeObjectURL(indirizzo);
+    immaginiLocali.clear();
+    for (const file of evento.target.files) {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) continue;
+      immaginiLocali.set(file.name, URL.createObjectURL(file));
+    }
+    if (matriceCorrente) $("nearest-ranking").hidden = true;
+  });
   $("load-example-csv").addEventListener("click", () => elaboraTesto(esempio, "esempio.csv"));
   $("confirm-csv-import").addEventListener("click", confermaImportazione);
   $("edit-csv-import").addEventListener("click", modificaImportazione);
