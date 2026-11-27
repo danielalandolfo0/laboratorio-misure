@@ -670,7 +670,7 @@ def prepara_questionario(tabella: dict[str, Any], colonne: list[dict[str, Any]])
         nome_data = bool(parole & PAROLE_DATA)
         quota_date = sum(_sembra_data(v) for v in osservati) / len(osservati) if osservati else 0
         nome_minuscolo = colonna["nome"].casefold()
-        if nome_minuscolo in {"diagnosis", "diagnostic", "diagnosi", "glaucoma_diagnosis"}:
+        if nome_minuscolo in {"diagnosis", "diagnostic", "diagnosi", "glaucoma_diagnosis", "diagnosis_od", "diagnosis_os"}:
             ruolo, motivo = "risultato", "La colonna contiene la diagnosi da valutare alla fine."
         elif ("image" in nome_minuscolo or "immagine" in nome_minuscolo or "foto" in nome_minuscolo or "fundus" in nome_minuscolo) and osservati and all(v.startswith("https://") or v.casefold().endswith((".jpg", ".jpeg", ".png", ".webp")) for v in osservati):
             ruolo, motivo = "immagine", "La colonna indica il file o l'indirizzo HTTPS di un'immagine."
