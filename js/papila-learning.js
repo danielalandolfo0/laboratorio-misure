@@ -5,7 +5,8 @@
   const escape = value => String(value ?? "").replace(/[&<>"']/g, character =>
     ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[character]);
   let rows = [], numeric = [], selected = new Set(), current = [], answers = [], step = 0;
-  let images = new Map(), seed = 1937, used = new Set();
+  const IMAGE_BASE = "https://raw.githubusercontent.com/JuanitoOrtega/papila_db/main/DB_PAPILA/FundusImages/";
+  let seed = 1937, used = new Set();
   let chosenGroups = [];
 
   function groupsFor(keys) {
@@ -55,9 +56,11 @@
 
   function report(error) { $("papila-error").textContent = error || ""; $("papila-error").hidden = !error; }
   function setup() {
-    const file = $("papila-csv").files[0];
-    if (!file) return;
-    file.text().then(text => {
+    $("papila-count").textContent = "Caricamento dei dati PAPILA…";
+    fetch("examples/papila.csv").then(response => {
+      if (!response.ok) throw new Error("Il dataset PAPILA non è disponibile sul sito.");
+      return response.text();
+    }).then(text => {
       const parsed = parseCsv(text);
       const required = ["patient_id","Diagnosis_OD","Diagnosis_OS","image_OD","image_OS"];
       if (!parsed.length || required.some(key => !(key in parsed[0]))) throw new Error("Usa il CSV paziente creato dall'importatore PAPILA.");
@@ -75,20 +78,10 @@
       renderMeasureChoices();
       $("papila-count").textContent = rows.length + " pazienti, " + numeric.length + " colonne numeriche disponibili.";
       report("");
-    }).catch(error => { rows = []; $("papila-options").hidden = true; report(error.message); });
+    }).catch(error => { rows = []; $("papila-options").hidden = true; $("papila-count").textContent = ""; report(error.message); });
   }
-  $("papila-csv").addEventListener("change", setup);
   $("papila-features").addEventListener("change", event => {
     if (event.target.matches(".papila-use")) renderMeasureChoices();
-  });
-  $("papila-images").addEventListener("change", event => {
-    for (const url of images.values()) URL.revokeObjectURL(url);
-    images = new Map();
-    for (const file of event.target.files) if (["image/jpeg","image/png"].includes(file.type)) {
-      if (images.has(file.name)) { report("Due fotografie hanno lo stesso nome: " + file.name); return; }
-      images.set(file.name,URL.createObjectURL(file));
-    }
-    $("papila-count").textContent = rows.length + " pazienti; " + images.size + " fotografie selezionate.";
   });
 
   function random() { seed = (1664525 * seed + 1013904223) >>> 0; return seed / 4294967296; }
@@ -104,8 +97,8 @@
   function card(row) {
     const shown = [...$("papila-features").querySelectorAll(".papila-show:checked")].map(input => input.dataset.key);
     const pictures = $("papila-show-images").checked ? ["OD","OS"].map(eye => {
-      const filename = row["image_" + eye], url = images.get(filename);
-      return '<figure>' + (url ? '<img src="' + escape(url) + '" alt="Fondo oculare ' + eye + '">' : '<span>Fotografia ' + eye + ' non caricata</span>') + '<figcaption>Occhio ' + eye + '</figcaption></figure>';
+      const filename = row["image_" + eye];
+      return '<figure><img loading="lazy" src="' + escape(IMAGE_BASE + encodeURIComponent(filename)) + '" alt="Fondo oculare ' + eye + '"><figcaption>Occhio ' + eye + '</figcaption></figure>';
     }).join("") : "";
     return '<button type="button" class="candidate-card papila-card" data-id="' + row._learningId + '" aria-pressed="false"><span class="candidate-content"><strong>' + escape(row.patient_id) + '</strong><span class="papila-images">' + pictures + '</span>' + shown.map(key => '<span class="measure-group"><strong>' + escape(key) + ':</strong> ' + escape(row[key] || "—") + '</span>').join("") + '</span></button>';
   }
@@ -171,4 +164,5 @@
     const button = event.target.closest("button[data-patient-index]");
     if (button) $("papila-nearest-card").innerHTML = card(rows[Number(button.dataset.patientIndex)]);
   });
+  setup();
 })();

@@ -18,16 +18,15 @@
   <header class="shell learning-header"><a class="back-link" href="index.html">Torna alla scelta del dataset</a><p class="section-label">Dataset PAPILA</p><h1>Confronta pazienti con le fotografie dei due occhi</h1></header>
   <main class="shell learning-main">
     <section class="card setup-card" id="papila-setup">
-      <h2>Carica i dati</h2>
-      <p>Usa il CSV creato con <code>python/prepara_papila.py</code>. Seleziona anche le fotografie della cartella FundusImages: restano nel tuo browser. Le diagnosi OD e OS non vengono mostrate durante le scelte.</p>
-      <p><label>CSV PAPILA <input id="papila-csv" type="file" accept=".csv,text/csv"></label></p>
-      <p><label>Fotografie JPEG o PNG <input id="papila-images" type="file" accept="image/jpeg,image/png" multiple></label></p>
+      <h2>Dataset PAPILA</h2>
+      <p>I dati clinici e le fotografie dei due occhi sono già collegati ai pazienti. Le diagnosi OD e OS non vengono mostrate durante le scelte.</p>
       <p id="papila-count" aria-live="polite"></p><p class="error" id="papila-error" role="alert" hidden></p>
       <div id="papila-options" hidden><h3>Scegli le informazioni</h3><p>Il sito propone le misure numeriche. Per ciascuna puoi decidere separatamente se usarla nella distanza e se mostrarla nella scheda. Le fotografie possono essere mostrate, ma non entrano nel calcolo.</p><div class="papila-options" id="papila-features"></div><p><label><input id="papila-show-images" type="checkbox" checked> Mostra le fotografie OD e OS</label></p><h3>Come confrontare ciascuna caratteristica</h3><p>Le colonne OD e OS della stessa caratteristica formano un blocco. I valori sono riscalati separatamente tra 0 e 1; scegli come combinare i due scarti.</p><div class="papila-options" id="papila-measures"></div><button class="action" id="papila-start" type="button">Inizia i confronti</button></div>
     </section>
     <section class="card comparison-stage" id="papila-comparison" hidden><h2>Seleziona i due pazienti più simili</h2><p id="papila-progress"></p><div class="candidate-grid" id="papila-candidates"></div><div class="comparison-actions"><button class="secondary-action" id="papila-skip" type="button">Salta</button><button class="action" id="papila-next" type="button" disabled>Conferma e continua</button></div></section>
     <section class="card completion-card" id="papila-completion" hidden><h2>Risultato delle scelte</h2><p id="papila-result"></p><div class="data-table-wrap"><table class="data-table"><thead><tr><th>Caratteristica e misura</th><th>Peso appreso</th></tr></thead><tbody id="papila-weights"></tbody></table></div><p>Le immagini sono state mostrate solo per il giudizio umano; il calcolo usa le misure numeriche selezionate.</p><div id="papila-ranking" hidden><h3>Casi ordinati per vicinanza</h3><label>Paziente di riferimento <select id="papila-reference"></select></label><ol id="papila-nearest"></ol><div id="papila-nearest-card"></div></div><button class="action" id="papila-restart" type="button">Ricomincia</button></section>
   </main>
+  <footer class="shell"><p>Dati: Kovalyk et al., <a href="https://doi.org/10.1038/s41597-022-01388-1">PAPILA</a> (2022), <a href="https://doi.org/10.6084/m9.figshare.14798004.v2">raccolta originale</a>, licenza GPL 3.0+. Le fotografie provengono dalla copia pubblica del dataset su GitHub.</p></footer>
   <script src="js/metric-learning.js"></script><script src="js/papila-learning.js"></script>
 </body>
 </html>
