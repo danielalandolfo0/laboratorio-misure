@@ -79,7 +79,7 @@
       const filename = row["image_" + eye], url = images.get(filename);
       return '<figure>' + (url ? '<img src="' + escape(url) + '" alt="Fondo oculare ' + eye + '">' : '<span>Fotografia ' + eye + ' non caricata</span>') + '<figcaption>Occhio ' + eye + '</figcaption></figure>';
     }).join("") : "";
-    return '<button type="button" class="candidate-card papila-card" data-id="' + escape(row.patient_id) + '" aria-pressed="false"><span class="candidate-content"><strong>' + escape(row.patient_id) + '</strong><span class="papila-images">' + pictures + '</span>' + shown.map(key => '<span class="measure-group"><strong>' + escape(key) + ':</strong> ' + escape(row[key] || "—") + '</span>').join("") + '</span></button>';
+    return '<button type="button" class="candidate-card papila-card" data-id="' + row._learningId + '" aria-pressed="false"><span class="candidate-content"><strong>' + escape(row.patient_id) + '</strong><span class="papila-images">' + pictures + '</span>' + shown.map(key => '<span class="measure-group"><strong>' + escape(key) + ':</strong> ' + escape(row[key] || "—") + '</span>').join("") + '</span></button>';
   }
   function render() {
     current = triple(); selected = new Set();
@@ -92,7 +92,8 @@
     if (!keys.length) return report("Seleziona almeno una misura per la distanza.");
     const complete = rows.filter(row => keys.every(key => row[key] !== "" && Number.isFinite(Number(row[key]))));
     if (complete.length < 3) return report("Con queste colonne restano meno di tre pazienti con dati completi.");
-    rows = complete; numeric = keys; answers = []; step = 0; used.clear(); report("");
+    rows = complete; rows.forEach((row,index) => { row._learningId = index + 1; });
+    numeric = keys; answers = []; step = 0; used.clear(); report("");
     $("papila-setup").hidden = true; $("papila-completion").hidden = true;
     $("papila-comparison").hidden = false; render();
   });
@@ -106,7 +107,7 @@
   $("papila-skip").addEventListener("click", render);
   $("papila-next").addEventListener("click", () => {
     if (selected.size !== 2) return;
-    answers.push({step:step+1,candidates:current.map(row => row.patient_id),chosen:[...selected],excluded:current.find(row => !selected.has(row.patient_id)).patient_id});
+    answers.push({step:step+1,candidates:current.map(row => row._learningId),chosen:[...selected].map(Number),excluded:current.find(row => !selected.has(String(row._learningId)))._learningId});
     step++;
     if (step < 10) return render();
     $("papila-comparison").hidden = true; $("papila-completion").hidden = false;
@@ -116,7 +117,7 @@
         const low = Math.min(...values), span = Math.max(...values) - low;
         return {id:key,label:key,candidateMeasures:["manhattan"],vectors:values.map(value => [span ? (value - low) / span : 0])};
       });
-      const result = window.LearningTrainer.train({rowIds:rows.map(row => row.patient_id),blocks,answers});
+      const result = window.LearningTrainer.train({rowIds:rows.map(row => row._learningId),blocks,answers});
       $("papila-result").textContent = "La distanza rispetta " + result.respected + " delle " + result.total + " scelte.";
       $("papila-weights").innerHTML = result.blocks.map(block => '<tr><th scope="row">' + escape(block.label) + '</th><td>' + (100 * block.weight).toFixed(1) + '%</td></tr>').join("");
     } catch (error) { $("papila-result").textContent = error.message; $("papila-weights").innerHTML = ""; }
