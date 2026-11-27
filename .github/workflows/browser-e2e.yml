@@ -25,9 +25,9 @@ jobs:
           echo $! > /tmp/laboratorio-http.pid
       - name: Esegui le interazioni in Chromium
         run: |
+          node test/test-browser-papila.cjs
           node test/test-browser-e2e.cjs
           node test/test-browser-e2e-integrated.cjs
-          node test/test-browser-papila.cjs
       - name: Salva schermate e diagnostica
         if: always()
         uses: actions/upload-artifact@v4
