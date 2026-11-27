@@ -27,6 +27,9 @@
   text-decoration: none;
   text-align: center;
 }
+.learning-dataset-choice {display:grid;gap:8px;min-width:min(100%,320px)}
+.learning-dataset-choice label {font-weight:700}
+.learning-dataset-choice select {width:100%;max-width:100%;min-width:0}
 @media (max-width: 760px) {
   .learning-entry {
     align-items: stretch;
