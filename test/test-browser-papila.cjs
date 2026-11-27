@@ -22,6 +22,7 @@ const {chromium} = require("playwright");
     await page.locator("#papila-start").click();
     assert.equal(await page.locator(".candidate-card").count(),3);
     assert.equal(await page.locator(".candidate-card img").count(),6);
+    await page.waitForFunction(() => [...document.querySelectorAll('.candidate-card img')].some(img => img.complete && img.naturalWidth > 0),null,{timeout:30000});
     assert.equal(await page.locator(".candidate-card").first().innerText().then(t => /Diagnos/i.test(t)),false);
     for (let i=0;i<10;i++) {
       await page.locator(".candidate-card").nth(0).click();
