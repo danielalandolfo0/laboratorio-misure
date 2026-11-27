@@ -35,10 +35,15 @@
       <h2 id="learning-entry-title">Insegna al sito che cosa consideri simile</h2>
       <p>Scegli Linnerud oppure PAPILA. Confronta tre istanze per volta e seleziona le due che ti sembrano più vicine.</p>
     </div>
-    <div class="upload-actions">
-      <a class="action learning-entry-link" href="apprendimento.html">Linnerud · confronto attuale</a>
-      <a class="secondary-action" href="papila.html">PAPILA · schede con immagini</a>
-    </div>
+    <form class="learning-dataset-choice" id="learning-dataset-choice">
+      <label for="learning-dataset">Scegli il dataset</label>
+      <select id="learning-dataset" name="dataset">
+        <option value="apprendimento.html">Linnerud · esercizi e misure fisiologiche</option>
+        <option value="papila.html">PAPILA · schede con fotografie dei due occhi</option>
+      </select>
+      <button class="action learning-entry-link" type="submit">Continua</button>
+    </form>
+    <script>document.getElementById("learning-dataset-choice").addEventListener("submit", function(event) { event.preventDefault(); location.href = document.getElementById("learning-dataset").value; });</script>
   </aside>
 
   <section class="shell card data-prep" aria-labelledby="prep-title">
