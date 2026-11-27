@@ -381,7 +381,7 @@ async function mobile(browser){
     assert.equal(await page.locator("#prepare-comparison-plan").isVisible(),true);
     const answer=async(id,value)=>{
       const input=page.locator('[data-answer="'+id+'"]');
-      if(await input.count() && await input.isVisible())await input.selectOption(value);
+      if(await input.count())await input.selectOption(value);
     };
     await answer("confrontoQuantitativo","assoluto");
     await answer("dipendenzaCoordinate","no");
