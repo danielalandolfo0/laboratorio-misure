@@ -669,7 +669,12 @@ def prepara_questionario(tabella: dict[str, Any], colonne: list[dict[str, Any]])
         nome_identificativo = bool(parole & PAROLE_IDENTIFICATIVO)
         nome_data = bool(parole & PAROLE_DATA)
         quota_date = sum(_sembra_data(v) for v in osservati) / len(osservati) if osservati else 0
-        if nome_identificativo:
+        nome_minuscolo = colonna["nome"].casefold()
+        if nome_minuscolo in {"diagnosis", "diagnostic", "diagnosi", "glaucoma_diagnosis"}:
+            ruolo, motivo = "risultato", "La colonna contiene la diagnosi da valutare alla fine."
+        elif ("image" in nome_minuscolo or "immagine" in nome_minuscolo or "foto" in nome_minuscolo) and osservati and all(v.startswith("https://") for v in osservati):
+            ruolo, motivo = "immagine", "La colonna contiene indirizzi HTTPS delle immagini."
+        elif nome_identificativo:
             ruolo, motivo = "identificativo", "Il titolo della colonna fa pensare a un codice identificativo."
         elif nome_data or quota_date >= 0.8:
             ruolo, motivo = "data", "Il titolo o i valori fanno pensare a date o orari."
@@ -698,7 +703,7 @@ def prepara_questionario(tabella: dict[str, Any], colonne: list[dict[str, Any]])
         else:
             ruolo, motivo = "quantita", "La colonna contiene valori numerici."
 
-        esclusa = ruolo in {"identificativo", "data", "testo"}
+        esclusa = ruolo in {"identificativo", "data", "testo", "immagine", "risultato"}
         profili.append({
             "nome": colonna["nome"],
             "ruoloSuggerito": ruolo,
@@ -4024,6 +4029,8 @@ def crea_piano_confronto(risultato: dict[str, Any], interpretazione: dict[str, A
     ruoli: dict[str, str] = {}
     for profilo in profili:
         risposta = risposte_colonne.get(profilo["nome"], {})
+        if risposta.get("ruolo", profilo["ruoloSuggerito"]) in {"risultato", "immagine"} and risposta.get("usa", profilo["usaNelConfronto"]):
+            raise ValueError("Output e immagini non possono contribuire alla distanza.")
         if risposta.get("usa", profilo["usaNelConfronto"]):
             incluse.append(profilo["nome"])
         ruoli[profilo["nome"]] = risposta.get("ruolo", profilo["ruoloSuggerito"])
