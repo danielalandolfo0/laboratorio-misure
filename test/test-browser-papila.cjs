@@ -26,13 +26,20 @@ const {chromium} = require("playwright");
     assert.equal(await page.locator("input[type=file]").count(),0);
     await page.locator("#papila-confirm-selection").click();
     assert.ok(await page.locator("#papila-blocks tr").count()>=8);
+    await page.locator('.papila-assignment[data-key="Age_OS"]').selectOption("Age_OS");
     await page.locator("#papila-confirm-blocks").click();
     assert.ok(await page.locator("#papila-scaling select").count()>=4);
+    await page.locator('[data-back="papila-block-stage"]').click();
+    assert.equal(await page.locator('.papila-assignment[data-key="Age_OS"]').inputValue(),"Age_OS");
+    await page.locator('.papila-assignment[data-key="Age_OS"]').selectOption("Age");
+    await page.locator("#papila-confirm-blocks").click();
     await page.locator("#papila-confirm-scaling").click();
     assert.ok(await page.locator("#papila-measures .papila-answer").count()>=4);
+    let numericAnswers=0;
     for (const answer of await page.locator(".papila-answer").all()) {
       const values=await answer.locator("option").evaluateAll(options=>options.map(option=>option.value));
-      await answer.selectOption(values.includes("euclidean") ? "euclidean" : "hamming");
+      if (values.includes("euclidean")) await answer.selectOption(numericAnswers++===0 ? "manhattan" : "euclidean");
+      else await answer.selectOption("hamming");
     }
     await page.locator("#papila-start").click();
     assert.equal(await page.locator(".candidate-card").count(),3);
@@ -46,6 +53,7 @@ const {chromium} = require("playwright");
     }
     assert.equal(await page.locator("#papila-completion").isVisible(),true);
     assert.ok(await page.locator("#papila-weights tr").count()>=4);
+    assert.match(await page.locator("#papila-weights").innerText(),/Manhattan|Euclidea/);
     assert.equal(await page.locator("#papila-nearest li").count(),10);
     await page.locator("#papila-nearest li button").first().click();
     assert.equal(await page.locator("#papila-nearest-card .candidate-card").count(),1);
