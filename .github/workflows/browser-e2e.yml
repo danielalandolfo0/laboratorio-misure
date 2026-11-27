@@ -23,9 +23,10 @@ jobs:
         run: |
           python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/laboratorio-http.log 2>&1 &
           echo $! > /tmp/laboratorio-http.pid
-      - name: Esegui le interazioni in Chromium
+      - name: Verifica PAPILA e Linnerud in Chromium
+        run: node test/test-browser-papila.cjs
+      - name: Esegui le interazioni generali in Chromium
         run: |
-          node test/test-browser-papila.cjs
           node test/test-browser-e2e.cjs
           node test/test-browser-e2e-integrated.cjs
       - name: Salva schermate e diagnostica
