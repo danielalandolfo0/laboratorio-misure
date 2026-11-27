@@ -672,8 +672,8 @@ def prepara_questionario(tabella: dict[str, Any], colonne: list[dict[str, Any]])
         nome_minuscolo = colonna["nome"].casefold()
         if nome_minuscolo in {"diagnosis", "diagnostic", "diagnosi", "glaucoma_diagnosis"}:
             ruolo, motivo = "risultato", "La colonna contiene la diagnosi da valutare alla fine."
-        elif ("image" in nome_minuscolo or "immagine" in nome_minuscolo or "foto" in nome_minuscolo) and osservati and all(v.startswith("https://") for v in osservati):
-            ruolo, motivo = "immagine", "La colonna contiene indirizzi HTTPS delle immagini."
+        elif ("image" in nome_minuscolo or "immagine" in nome_minuscolo or "foto" in nome_minuscolo or "fundus" in nome_minuscolo) and osservati and all(v.startswith("https://") or v.casefold().endswith((".jpg", ".jpeg", ".png", ".webp")) for v in osservati):
+            ruolo, motivo = "immagine", "La colonna indica il file o l'indirizzo HTTPS di un'immagine."
         elif nome_identificativo:
             ruolo, motivo = "identificativo", "Il titolo della colonna fa pensare a un codice identificativo."
         elif nome_data or quota_date >= 0.8:
