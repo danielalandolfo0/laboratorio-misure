@@ -4,6 +4,7 @@
   const $ = id => document.getElementById(id);
   const P = window.Preprocessing;
   let risultato = null;
+  const immaginiLocali = new Map();
   let tabellaOriginale = null;
   let testoOriginale = "";
   let scelte = [];
@@ -335,13 +336,14 @@
       insieme: "Un insieme di etichette nella stessa cella",
       ciclica: "Una quantità ciclica con periodo noto",
       risultato: "Un risultato da spiegare o prevedere",
+      immagine: "Un'immagine da mostrare",
       altro: "Qualcos’altro",
       ignoto: "Non lo so"
     })[ruolo] || ruolo;
   }
 
   function opzioniRuolo(selezionato) {
-    const ruoli = ["quantita", "livello", "presenza", "binaria", "categoria", "insieme", "ciclica", "identificativo", "data", "testo", "risultato", "altro", "ignoto"];
+    const ruoli = ["quantita", "livello", "presenza", "binaria", "categoria", "insieme", "ciclica", "identificativo", "data", "testo", "immagine", "risultato", "altro", "ignoto"];
     return ruoli.map(ruolo => `<option value="${ruolo}"${ruolo === selezionato ? " selected" : ""}>${etichettaRuolo(ruolo)}</option>`).join("");
   }
 
@@ -1352,6 +1354,24 @@
     const etichette = matriceCorrente.etichette || [];
     const riga = matriceCorrente.matrice?.[indiceSelezionato];
     if (!riga || indiceSelezionato < 0 || indiceSelezionato >= etichette.length) return;
+    const valori = risultato.originale.righe[indiceSelezionato];
+    $("selected-instance-card").innerHTML = risultato.originale.intestazioni.map((nome, indice) => {
+      const scelta = interpretazione.colonne[nome];
+      if (!scelta?.mostra || scelta.ruolo === "risultato") return "";
+      const valore = String(valori[indice] ?? "");
+      if (scelta.ruolo === "immagine") {
+        let indirizzo;
+        const locale = immaginiLocali.get(valore);
+        if (locale) indirizzo = {href: locale};
+        else {
+          try { indirizzo = new URL(valore); } catch (_) { return ""; }
+          if (indirizzo.protocol !== "https:") return "";
+        }
+        return '<figure><img loading="lazy" style="max-width:260px;max-height:220px" src="' +
+          escapeHtml(indirizzo.href) + '" alt="' + escapeHtml(nome) + '"><figcaption>' + escapeHtml(nome) + '</figcaption></figure>';
+      }
+      return '<p><strong>' + escapeHtml(nome) + ':</strong> ' + escapeHtml(valore) + '</p>';
+    }).join("");
     const graduatoria = etichette.map((etichetta, indice) => ({
       etichetta, indice, valore: riga[indice]
     })).filter(voce => voce.indice !== indiceSelezionato);
@@ -1367,8 +1387,8 @@
     $("nearest-ranking-list").innerHTML = graduatoria.map(voce => {
       const definita = Number.isFinite(voce.valore);
       return '<li' + (definita ? '' : ' class="nearest-ranking-unavailable"') + '>' +
-        '<span class="nearest-ranking-entry"><span>' + escapeHtml(voce.etichetta) +
-        '</span><strong class="nearest-ranking-value">' +
+        '<span class="nearest-ranking-entry"><button type="button" class="ranked-instance" data-instance-index="' + voce.indice + '">' + escapeHtml(voce.etichetta) +
+        '</button><strong class="nearest-ranking-value">' +
         (definita ? escapeHtml(formatoNumero(voce.valore)) : 'Non confrontabile') +
         '</strong></span></li>';
     }).join("");
@@ -1816,7 +1836,8 @@
       if (!interpretazione.colonne[profilo.nome]) {
         interpretazione.colonne[profilo.nome] = {
           ruolo: profilo.ruoloSuggerito,
-          usa: profilo.usaNelConfronto
+          usa: profilo.usaNelConfronto,
+          mostra: profilo.ruoloSuggerito !== "risultato"
         };
       }
     });
@@ -1824,15 +1845,17 @@
       const risposta = interpretazione.colonne[profilo.nome];
       return `<tr>
         <th scope="row">${escapeHtml(profilo.nome)}</th>
-        <td><select class="column-choice semantic-role" data-semantic-column="${indice}" aria-label="Significato della colonna ${escapeHtml(profilo.nome)}">${opzioniRuolo(risposta.ruolo)}</select></td>
+        <td><select class="column-choice semantic-role" data-semantic-column="${indice}" aria-label="Significato della colonna ${escapeHtml(profilo.nome)}"${profilo.ruoloSuggerito === "risultato" ? " disabled" : ""}>${opzioniRuolo(risposta.ruolo)}</select></td>
       </tr>`;
     }).join("");
     $("selection-body").innerHTML = profili.map((profilo, indice) => {
       const risposta = interpretazione.colonne[profilo.nome];
+      const bloccata = risposta.ruolo === "risultato" || risposta.ruolo === "immagine";
       return `<tr>
         <th scope="row">${escapeHtml(profilo.nome)}</th>
         <td>${escapeHtml(etichettaRuolo(risposta.ruolo))}</td>
-        <td><label class="comparison-toggle"><input class="semantic-use" type="checkbox" data-semantic-column="${indice}"${risposta.usa ? " checked" : ""}><span>${risposta.usa ? "Sì" : "No"}</span></label></td>
+        <td><label class="comparison-toggle"><input class="semantic-use" type="checkbox" data-semantic-column="${indice}"${risposta.usa && !bloccata ? " checked" : ""}${bloccata ? " disabled" : ""}><span>${bloccata ? "Non disponibile" : risposta.usa ? "Sì" : "No"}</span></label></td>
+        <td><label class="comparison-toggle"><input class="semantic-show" type="checkbox" data-semantic-column="${indice}"${risposta.mostra && risposta.ruolo !== "risultato" ? " checked" : ""}${risposta.ruolo === "risultato" ? " disabled" : ""}><span>${risposta.ruolo === "risultato" ? "Output riservato" : risposta.mostra ? "Sì" : "No"}</span></label></td>
       </tr>`;
     }).join("");
     disegnaGruppi();
@@ -2852,6 +2875,15 @@
 80,103,0,beta`;
 
   $("csv-file").addEventListener("change", evento => elaboraFile(evento.target.files[0]));
+  $("instance-images").addEventListener("change", evento => {
+    for (const indirizzo of immaginiLocali.values()) URL.revokeObjectURL(indirizzo);
+    immaginiLocali.clear();
+    for (const file of evento.target.files) {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) continue;
+      immaginiLocali.set(file.name, URL.createObjectURL(file));
+    }
+    if (matriceCorrente) $("nearest-ranking").hidden = true;
+  });
   $("load-example-csv").addEventListener("click", () => elaboraTesto(esempio, "esempio.csv"));
   $("confirm-csv-import").addEventListener("click", confermaImportazione);
   $("edit-csv-import").addEventListener("click", modificaImportazione);
@@ -2951,6 +2983,10 @@
     const riga = evento.target.closest?.("tr[data-matrix-row]");
     if (!riga) return;
     mostraGraduatoriaRiga(Number(riga.dataset.matrixRow));
+  });
+  $("nearest-ranking-list").addEventListener("click", evento => {
+    const pulsante = evento.target.closest(".ranked-instance");
+    if (pulsante) mostraGraduatoriaRiga(Number(pulsante.dataset.instanceIndex));
   });
   $("comparison-plan-paths").addEventListener("change", evento => {
     if (evento.target.matches(".global-weights-mode")) {
@@ -3054,9 +3090,10 @@
     if (!Number.isInteger(indice) || !risultato?.questionario?.colonne[indice]) return;
     const profilo = risultato.questionario.colonne[indice];
     interpretazione.colonne[profilo.nome].ruolo = evento.target.value;
-    if (["identificativo", "data", "testo", "risultato"].includes(evento.target.value)) {
+    if (["identificativo", "data", "testo", "immagine", "risultato"].includes(evento.target.value)) {
       interpretazione.colonne[profilo.nome].usa = false;
     }
+    if (evento.target.value === "risultato") interpretazione.colonne[profilo.nome].mostra = false;
     annullaScelteNormalizzazione();
     annullaConfermeCompatibilita();
     invalidaPesiPerStruttura();
@@ -3066,6 +3103,14 @@
     disegnaQuestionario();
   });
   $("selection-body").addEventListener("change", evento => {
+    if (evento.target.matches(".semantic-show")) {
+      const profilo = risultato?.questionario?.colonne[Number(evento.target.dataset.semanticColumn)];
+      if (!profilo) return;
+      const scelta = interpretazione.colonne[profilo.nome];
+      scelta.mostra = scelta.ruolo !== "risultato" && evento.target.checked;
+      disegnaQuestionario();
+      return;
+    }
     if (!evento.target.matches(".semantic-use")) return;
     const indice = Number(evento.target.dataset.semanticColumn);
     if (!Number.isInteger(indice) || !risultato?.questionario?.colonne[indice]) return;

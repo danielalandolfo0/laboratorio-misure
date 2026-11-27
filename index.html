@@ -33,9 +33,12 @@
     <div>
       <p class="section-label">Impara la misura</p>
       <h2 id="learning-entry-title">Insegna al sito che cosa consideri simile</h2>
-      <p>Confronta tre istanze del dataset Iris e seleziona le due che ti sembrano più vicine.</p>
+      <p>Scegli Linnerud oppure PAPILA. Confronta tre istanze per volta e seleziona le due che ti sembrano più vicine.</p>
     </div>
-    <a class="action learning-entry-link" href="apprendimento.html">Prova il confronto tra tre istanze</a>
+    <div class="upload-actions">
+      <a class="action learning-entry-link" href="apprendimento.html">Linnerud · confronto attuale</a>
+      <a class="secondary-action" href="papila.html">PAPILA · schede con immagini</a>
+    </div>
   </aside>
 
   <section class="shell card data-prep" aria-labelledby="prep-title">
@@ -57,6 +60,11 @@
       <div class="upload-actions">
         <span>Non hai un file a disposizione?</span>
         <button class="chip" id="load-example-csv" type="button">Carica un esempio</button>
+      </div>
+      <div class="upload-actions">
+        <label for="instance-images">Fotografie associate alle righe (facoltative):</label>
+        <input id="instance-images" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+        <small>Nel CSV indica il nome esatto del file nelle colonne delle immagini, ad esempio RET047OD.jpg e RET047OS.jpg.</small>
       </div>
     </div>
     <div class="error" id="csv-error" role="alert"></div>
@@ -208,7 +216,7 @@
           <p>Ora decidi quali caratteristiche usare. Se alcune descrivono un unico profilo, una serie o una composizione, riuniscile in un gruppo. Nessuna colonna verrà conteggiata in due gruppi.</p>
           <div class="data-table-wrap">
             <table class="data-table">
-              <thead><tr><th>Colonna</th><th>Significato confermato</th><th>Utilizzarla nel confronto?</th></tr></thead>
+              <thead><tr><th>Colonna</th><th>Significato confermato</th><th>Usa nella distanza?</th><th>Mostra nella scheda?</th></tr></thead>
               <tbody id="selection-body"></tbody>
             </table>
           </div>
@@ -314,6 +322,7 @@
             </div>
             <section class="nearest-ranking" id="nearest-ranking" aria-labelledby="nearest-ranking-title" hidden>
               <h6 id="nearest-ranking-title"></h6>
+              <div id="selected-instance-card"></div>
               <p>Valori più piccoli indicano righe più vicine. La riga selezionata non è inclusa nella graduatoria.</p>
               <ol id="nearest-ranking-list"></ol>
             </section>
