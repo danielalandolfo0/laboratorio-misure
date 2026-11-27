@@ -6,6 +6,30 @@
     ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[character]);
   let rows = [], numeric = [], selected = new Set(), current = [], answers = [], step = 0;
   let images = new Map(), seed = 1937, used = new Set();
+  let chosenGroups = [];
+
+  function groupsFor(keys) {
+    const groups = new Map();
+    for (const key of keys) {
+      const match = key.match(/^(.*)_(OD|OS)$/);
+      const name = match ? match[1] : key;
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name).push(key);
+    }
+    return [...groups].map(([name,columns]) => ({name,columns}));
+  }
+  function renderMeasureChoices() {
+    const keys = [...$("papila-features").querySelectorAll(".papila-use:checked")].map(input => input.dataset.key);
+    const previous = new Map([...$("papila-measures").querySelectorAll("select")].map(select => [select.dataset.group,select.value]));
+    $("papila-measures").innerHTML = groupsFor(keys).map(({name,columns}) => {
+      const binary = columns.every(key => rows.every(row => row[key] === "" || row[key] === "0" || row[key] === "1"));
+      const choices = binary ? [["hamming","Stati uguali o diversi (Hamming)"]] : columns.length === 1
+        ? [["manhattan","Scarto assoluto"]]
+        : [["euclidean","Scarti combinati (Euclidea)"],["manhattan","Somma degli scarti (Manhattan)"],["chebyshev","Scarto maggiore (Chebyshev)"]];
+      const selected = choices.some(([id]) => id === previous.get(name)) ? previous.get(name) : choices[0][0];
+      return '<label><strong>' + escape(name) + '</strong><br><small>' + columns.map(escape).join(' · ') + '</small><br><select data-group="' + escape(name) + '">' + choices.map(([id,label]) => '<option value="' + id + '"' + (id === selected ? ' selected' : '') + '>' + label + '</option>').join('') + '</select></label>';
+    }).join("");
+  }
 
   function parseCsv(text) {
     const records = [], row = []; let cell = "", quoted = false;
@@ -48,11 +72,15 @@
         return '<label><strong>' + escape(key) + '</strong> · ' + Math.round(complete * 100) + '% presente<br><input type="checkbox" class="papila-use" data-key="' + escape(key) + '"' + (suggested ? ' checked' : '') + '> Usa nella distanza<br><input type="checkbox" class="papila-show" data-key="' + escape(key) + '"' + (suggested ? ' checked' : '') + '> Mostra nella scheda</label>';
       }).join("");
       $("papila-options").hidden = false;
+      renderMeasureChoices();
       $("papila-count").textContent = rows.length + " pazienti, " + numeric.length + " colonne numeriche disponibili.";
       report("");
     }).catch(error => { rows = []; $("papila-options").hidden = true; report(error.message); });
   }
   $("papila-csv").addEventListener("change", setup);
+  $("papila-features").addEventListener("change", event => {
+    if (event.target.matches(".papila-use")) renderMeasureChoices();
+  });
   $("papila-images").addEventListener("change", event => {
     for (const url of images.values()) URL.revokeObjectURL(url);
     images = new Map();
@@ -93,6 +121,8 @@
     const complete = rows.filter(row => keys.every(key => row[key] !== "" && Number.isFinite(Number(row[key]))));
     if (complete.length < 3) return report("Con queste colonne restano meno di tre pazienti con dati completi.");
     rows = complete; rows.forEach((row,index) => { row._learningId = index + 1; });
+    chosenGroups = groupsFor(keys).map(group => ({...group,measure:$("papila-measures").querySelectorAll("select").length
+      ? [...$("papila-measures").querySelectorAll("select")].find(select => select.dataset.group === group.name)?.value : "manhattan"}));
     numeric = keys; answers = []; step = 0; used.clear(); report("");
     $("papila-setup").hidden = true; $("papila-completion").hidden = true;
     $("papila-comparison").hidden = false; render();
@@ -112,14 +142,17 @@
     if (step < 10) return render();
     $("papila-comparison").hidden = true; $("papila-completion").hidden = false;
     try {
-      const blocks = numeric.map(key => {
-        const values = rows.map(row => Number(row[key]));
-        const low = Math.min(...values), span = Math.max(...values) - low;
-        return {id:key,label:key,candidateMeasures:["manhattan"],vectors:values.map(value => [span ? (value - low) / span : 0])};
+      const blocks = chosenGroups.map(group => {
+        const columns = group.columns.map(key => {
+          const values = rows.map(row => Number(row[key]));
+          const low = Math.min(...values), span = Math.max(...values) - low;
+          return values.map(value => span ? (value - low) / span : 0);
+        });
+        return {id:group.name,label:group.name,candidateMeasures:[group.measure],vectors:rows.map((_,i) => columns.map(column => column[i]))};
       });
       const result = window.LearningTrainer.train({rowIds:rows.map(row => row._learningId),blocks,answers});
       $("papila-result").textContent = "La distanza rispetta " + result.respected + " delle " + result.total + " scelte.";
-      $("papila-weights").innerHTML = result.blocks.map(block => '<tr><th scope="row">' + escape(block.label) + '</th><td>' + (100 * block.weight).toFixed(1) + '%</td></tr>').join("");
+      $("papila-weights").innerHTML = result.blocks.map(block => '<tr><th scope="row">' + escape(block.label) + ' · ' + escape(block.measureLabel) + '</th><td>' + (100 * block.weight).toFixed(1) + '%</td></tr>').join("");
     } catch (error) { $("papila-result").textContent = error.message; $("papila-weights").innerHTML = ""; }
   });
   $("papila-restart").addEventListener("click", () => { $("papila-setup").hidden = false; $("papila-completion").hidden = true; setup(); });
